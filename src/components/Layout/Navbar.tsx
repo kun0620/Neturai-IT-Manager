@@ -1,6 +1,8 @@
 import React from 'react';
-import { Menu, UserCircle } from 'lucide-react'; // Removed LogOut import
+import { Menu, UserCircle, LogOut } from 'lucide-react'; // Added LogOut import back for the new logout button
 import ThemeToggle from '../ThemeToggle';
+import { useAuth } from '../../lib/AuthContext'; // Import useAuth
+import { useNavigate } from 'react-router-dom';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
@@ -8,6 +10,19 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarCollapsed }) => {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    const { error } = await signOut();
+    if (!error) {
+      navigate('/login');
+    } else {
+      console.error('Logout error:', error.message);
+      alert('Failed to log out. Please try again.');
+    }
+  };
+
   return (
     <nav className="bg-card-light dark:bg-card-dark p-4 shadow-lg dark:shadow-2xl-dark flex items-center justify-between sticky top-0 z-30 w-full">
       {/* Mobile Sidebar Toggle & App Name for Mobile */}
@@ -40,7 +55,15 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarCollapsed }) 
           </div>
           <span className="text-text-light dark:text-text-dark font-medium hidden sm:block group-hover:text-primary dark:group-hover:text-primary transition-colors duration-200">Admin</span>
         </div>
-        {/* Logout Button - Removed */}
+        {/* Logout Button */}
+        <button
+          onClick={handleLogout}
+          className="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+          aria-label="Logout"
+          title="Logout"
+        >
+          <LogOut className="h-6 w-6" />
+        </button>
       </div>
     </nav>
   );
