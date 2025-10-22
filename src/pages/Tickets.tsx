@@ -1,40 +1,82 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, PlusCircle, Filter, ChevronDown, Edit, Trash2 } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import { Tables } from '../types/supabase';
 
-const tickets = [
-  { id: '#001', subject: 'Printer not working in HR', status: 'Open', priority: 'High', assignedTo: 'Alice', date: '2023-10-26' },
-  { id: '#002', subject: 'Software installation request', status: 'In Progress', priority: 'Medium', assignedTo: 'Bob', date: '2023-10-25' },
-  { id: '#003', subject: 'New laptop setup for Marketing', status: 'Closed', priority: 'Low', assignedTo: 'Charlie', date: '2023-10-24' },
-  { id: '#004', subject: 'Network issue in Server Room', status: 'Open', priority: 'Critical', assignedTo: 'Alice', date: '2023-10-26' },
-  { id: '#005', subject: 'Email client configuration', status: 'Pending', priority: 'Medium', assignedTo: 'Bob', date: '2023-10-23' },
-  { id: '#006', subject: 'Monitor replacement for Finance', status: 'Closed', priority: 'Low', assignedTo: 'Charlie', date: '2023-10-22' },
-  { id: '#007', subject: 'VPN access request', status: 'Open', priority: 'High', assignedTo: 'Alice', date: '2023-10-21' },
-  { id: '#008', subject: 'Password reset for new employee', status: 'Closed', priority: 'Low', assignedTo: 'Bob', date: '2023-10-20' },
-  { id: '#009', subject: 'Server maintenance schedule', status: 'In Progress', priority: 'Medium', assignedTo: 'Charlie', date: '2023-10-19' },
-  { id: '#010', subject: 'New software license purchase', status: 'Pending', priority: 'High', assignedTo: 'Alice', date: '2023-10-18' },
-];
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'Open': return 'bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-100';
-    case 'In Progress': return 'bg-blue-100 text-blue-800 dark:bg-blue-700 dark:text-blue-100';
-    case 'Closed': return 'bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100';
-    case 'Pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-700 dark:text-yellow-100';
-    default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
-  }
-};
-
-const getPriorityColor = (priority: string) => {
-  switch (priority) {
-    case 'Critical': return 'text-red-600 dark:text-red-400 font-bold';
-    case 'High': return 'text-orange-500 dark:text-orange-300';
-    case 'Medium': return 'text-yellow-500 dark:text-yellow-300';
-    case 'Low': return 'text-green-500 dark:text-green-300';
-    default: return 'text-gray-500 dark:text-gray-400';
-  }
+type TicketWithDetails = Tables<'tickets'> & {
+  profiles: Tables<'profiles'> | null;
+  statuses: Tables<'statuses'> | null;
+  categories: Tables<'categories'> | null;
 };
 
 const Tickets: React.FC = () => {
+  const [tickets, setTickets] = useState<TicketWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchTickets = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error } = await supabase
+          .from('tickets')
+          .select('*, profiles(full_name), statuses(name), categories(name)')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setTickets(data as TicketWithDetails[]);
+      } catch (err: any) {
+        console.error('Error fetching tickets:', err.message);
+        setError('Failed to load tickets.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTickets();
+  }, []);
+
+  const getStatusColor = (statusName: string | undefined) => {
+    switch (statusName) {
+      case 'Open': return 'bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-100';
+      case 'In Progress': return 'bg-blue-100 text-blue-800 dark:bg-blue-700 dark:text-blue-100';
+      case 'Closed': return 'bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100';
+      case 'Pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-700 dark:text-yellow-100';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
+    }
+  };
+
+  const getPriorityColor = (priority: string | undefined) => {
+    // Assuming priority can be derived or is a field in tickets table.
+    // For now, let's use a placeholder logic or assume a 'priority' field exists.
+    // If 'priority' is not directly in tickets, we'd need to add it or derive it.
+    // For this example, let's map status to a 'priority' feel.
+    switch (priority) {
+      case 'Critical': return 'text-red-600 dark:text-red-400 font-bold';
+      case 'High': return 'text-orange-500 dark:text-orange-300';
+      case 'Medium': return 'text-yellow-500 dark:text-yellow-300';
+      case 'Low': return 'text-green-500 dark:text-green-300';
+      default: return 'text-gray-500 dark:text-gray-400';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
+        <p className="text-text-light dark:text-text-dark">Loading tickets...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center text-red-500">
+        <p>Error: {error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold text-text-light dark:text-text-dark">Tickets</h1>
@@ -76,7 +118,7 @@ const Tickets: React.FC = () => {
                   Status
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Priority
+                  Category
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Assigned To
@@ -90,30 +132,42 @@ const Tickets: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-card-light dark:bg-card-dark divide-y divide-gray-200 dark:divide-gray-700">
-              {tickets.map((ticket) => (
-                <tr key={ticket.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary">{ticket.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{ticket.subject}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.status)}`}>
-                      {ticket.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={getPriorityColor(ticket.priority)}>{ticket.priority}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{ticket.assignedTo}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{ticket.date}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3">
-                      <Edit className="h-5 w-5" />
-                    </button>
-                    <button className="text-red-600 hover:text-red-900 dark:hover:text-red-400">
-                      <Trash2 className="h-5 w-5" />
-                    </button>
+              {tickets.length > 0 ? (
+                tickets.map((ticket) => (
+                  <tr key={ticket.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary">{ticket.id?.substring(0, 8)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{ticket.title}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.statuses?.name)}`}>
+                        {ticket.statuses?.name || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">
+                      {ticket.categories?.name || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">
+                      {ticket.profiles?.full_name || 'Unassigned'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(ticket.created_at || '').toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3">
+                        <Edit className="h-5 w-5" />
+                      </button>
+                      <button className="text-red-600 hover:text-red-900 dark:hover:text-red-400">
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No tickets found.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

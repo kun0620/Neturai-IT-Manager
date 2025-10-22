@@ -6,7 +6,6 @@ import Tickets from './pages/Tickets';
 import Assets from './pages/Assets';
 import Users from './pages/Users';
 import Login from './pages/Login';
-import Register from './pages/Register'; // Import Register page
 import { AuthProvider, useAuth } from './lib/AuthContext'; // Import AuthProvider and useAuth
 
 // ProtectedRoute component
@@ -34,10 +33,7 @@ const AppRoutes: React.FC = () => {
       path: '/login',
       element: <Login />,
     },
-    {
-      path: '/register', // Add register route
-      element: <Register />,
-    },
+    // Removed '/register' route as self-signup is disabled
     {
       path: '/',
       element: (

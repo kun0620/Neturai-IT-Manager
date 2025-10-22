@@ -13,6 +13,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  // signUp function removed as self-signup is disabled
   signOut: () => Promise<{ error: Error | null }>;
 }
 
@@ -51,6 +52,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     return { error };
   };
+
+  // signUp function removed as self-signup is disabled
+  // If admin needs to create users, a separate admin-specific function or process would be implemented.
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();

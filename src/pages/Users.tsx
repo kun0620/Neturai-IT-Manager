@@ -1,28 +1,77 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, PlusCircle, Filter, ChevronDown, Edit, Trash2, Mail, Phone } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import { Tables } from '../types/supabase';
+import NewUserModal from '../components/NewUserModal'; // Import the new modal component
 
-const users = [
-  { id: 'USR-001', name: 'Alice Johnson', email: 'alice.j@example.com', role: 'Admin', status: 'Active', phone: '555-1234' },
-  { id: 'USR-002', name: 'Bob Williams', email: 'bob.w@example.com', role: 'IT Support', status: 'Active', phone: '555-5678' },
-  { id: 'USR-003', name: 'Charlie Brown', email: 'charlie.b@example.com', role: 'Employee', status: 'Inactive', phone: '555-9012' },
-  { id: 'USR-004', name: 'David Lee', email: 'david.l@example.com', role: 'Employee', status: 'Active', phone: '555-3456' },
-  { id: 'USR-005', name: 'Eve Davis', email: 'eve.d@example.com', role: 'IT Support', status: 'Active', phone: '555-7890' },
-  { id: 'USR-006', name: 'Frank White', email: 'frank.w@example.com', role: 'Employee', status: 'Active', phone: '555-2345' },
-  { id: 'USR-007', name: 'Grace Taylor', email: 'grace.t@example.com', role: 'Admin', status: 'Active', phone: '555-6789' },
-  { id: 'USR-008', name: 'Henry Miller', email: 'henry.m@example.com', role: 'Employee', status: 'Inactive', phone: '555-0123' },
-  { id: 'USR-009', name: 'Ivy Wilson', email: 'ivy.w@example.com', role: 'IT Support', status: 'Active', phone: '555-4567' },
-  { id: 'USR-010', name: 'Jack Moore', email: 'jack.m@example.com', role: 'Employee', status: 'Active', phone: '555-8901' },
-];
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'Active': return 'bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100';
-    case 'Inactive': return 'bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-100';
-    default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
-  }
-};
+type Profile = Tables<'profiles'>;
 
 const Users: React.FC = () => {
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isNewUserModalOpen, setIsNewUserModalOpen] = useState(false); // State for modal visibility
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUsers(data);
+    } catch (err: any) {
+      console.error('Error fetching users:', err.message);
+      setError('Failed to load users.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const getStatusColor = (status: string | undefined | null) => {
+    switch (status) {
+      case 'Active': return 'bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100';
+      case 'Inactive': return 'bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-100';
+      case 'Pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-700 dark:text-yellow-100';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
+    }
+  };
+
+  const handleNewUserClick = () => {
+    setIsNewUserModalOpen(true);
+  };
+
+  const handleCloseNewUserModal = () => {
+    setIsNewUserModalOpen(false);
+  };
+
+  const handleUserCreated = () => {
+    fetchUsers(); // Re-fetch users after a new one is created
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
+        <p className="text-text-light dark:text-text-dark">Loading users...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center text-red-500">
+        <p>Error: {error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold text-text-light dark:text-text-dark">Users</h1>
@@ -43,7 +92,10 @@ const Users: React.FC = () => {
               Filter
               <ChevronDown className="h-4 w-4 ml-2" />
             </button>
-            <button className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md">
+            <button
+              onClick={handleNewUserClick}
+              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md"
+            >
               <PlusCircle className="h-4 w-4 mr-2" />
               New User
             </button>
@@ -69,42 +121,70 @@ const Users: React.FC = () => {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Phone
+                </th>
                 <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-card-light dark:bg-card-dark divide-y divide-gray-200 dark:divide-gray-700">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary">{user.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{user.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    <a href={`mailto:${user.email}`} className="flex items-center hover:text-primary">
-                      <Mail className="h-4 w-4 mr-2" />
-                      {user.email}
-                    </a>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{user.role}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(user.status)}`}>
-                      {user.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3">
-                      <Edit className="h-5 w-5" />
-                    </button>
-                    <button className="text-red-600 hover:text-red-900 dark:hover:text-red-400">
-                      <Trash2 className="h-5 w-5" />
-                    </button>
+              {users.length > 0 ? (
+                users.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary">{user.id?.substring(0, 8)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{user.full_name || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {user.email ? (
+                        <a href={`mailto:${user.email}`} className="flex items-center hover:text-primary">
+                          <Mail className="h-4 w-4 mr-2" />
+                          {user.email}
+                        </a>
+                      ) : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{user.role || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(user.status)}`}>
+                        {user.status || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {user.phone ? (
+                        <a href={`tel:${user.phone}`} className="flex items-center hover:text-primary">
+                          <Phone className="h-4 w-4 mr-2" />
+                          {user.phone}
+                        </a>
+                      ) : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3">
+                        <Edit className="h-5 w-5" />
+                      </button>
+                      <button className="text-red-600 hover:text-red-900 dark:hover:text-red-400">
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No users found.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* New User Modal */}
+      <NewUserModal
+        isOpen={isNewUserModalOpen}
+        onClose={handleCloseNewUserModal}
+        onUserCreated={handleUserCreated}
+      />
     </div>
   );
 };
