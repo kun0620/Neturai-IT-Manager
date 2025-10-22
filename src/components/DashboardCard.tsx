@@ -8,6 +8,9 @@ interface DashboardCardProps {
 }
 
 const DashboardCard: React.FC<DashboardCardProps> = ({ title, value, icon: Icon, color }) => {
+  // Safely extract the text color class, defaulting to an empty string if color is undefined or null
+  const textColorClass = color ? color.split(' ')[0] : '';
+
   return (
     <div className="bg-card-light dark:bg-card-dark p-6 rounded-xl shadow-subtle dark:shadow-md-dark flex items-center justify-between transition-transform duration-200 hover:scale-[1.02]">
       <div>
@@ -15,7 +18,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ title, value, icon: Icon,
         <p className="mt-1 text-3xl font-semibold text-text-light dark:text-text-dark">{value}</p>
       </div>
       <div className={`p-3 rounded-full ${color} bg-opacity-20`}>
-        <Icon className={`h-7 w-7 ${color.split(' ')[0]}`} /> {/* Extract text color from color prop */}
+        <Icon className={`h-7 w-7 ${textColorClass}`} />
       </div>
     </div>
   );

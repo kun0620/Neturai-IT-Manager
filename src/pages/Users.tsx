@@ -3,6 +3,7 @@ import { Search, PlusCircle, Filter, ChevronDown, Edit, Trash2, Mail, Phone } fr
 import { supabase } from '../lib/supabaseClient';
 import { Tables } from '../types/supabase';
 import NewUserModal from '../components/NewUserModal'; // Import the new modal component
+import LoadingSpinner from '../components/LoadingSpinner'; // Import LoadingSpinner
 
 type Profile = Tables<'profiles'>;
 
@@ -59,7 +60,7 @@ const Users: React.FC = () => {
   if (loading) {
     return (
       <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
-        <p className="text-text-light dark:text-text-dark">Loading users...</p>
+        <LoadingSpinner />
       </div>
     );
   }

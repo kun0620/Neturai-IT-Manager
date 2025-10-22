@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, Users, HardDrive, Ticket, PlusCircle, UserPlus, Package } from 'lucide-react';
 import DashboardCard from '../components/DashboardCard';
-import QuickActionCard from '../components/QuickActionCard'; // Import the new component
+import QuickActionCard from '../components/QuickActionCard';
 import { supabase } from '../lib/supabaseClient';
 import { Tables } from '../types/supabase';
+import LoadingSpinner from '../components/LoadingSpinner';
+import NewTicketModal from '../components/NewTicketModal';
+import NewAssetModal from '../components/NewAssetModal'; // Import NewAssetModal
 
-type TicketType = Tables<'tickets'>; // Renamed to avoid conflict with Lucide icon
+type TicketType = Tables<'tickets'>;
 type Profile = Tables<'profiles'>;
 
 const Dashboard: React.FC = () => {
@@ -17,58 +20,84 @@ const Dashboard: React.FC = () => {
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNewTicketModalOpen, setIsNewTicketModalOpen] = useState(false);
+  const [isNewAssetModalOpen, setIsNewAssetModalOpen] = useState(false); // State for NewAssetModal
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch Total Tickets
+      const { count: ticketsCount, error: ticketsError } = await supabase
+        .from('tickets')
+        .select('*', { count: 'exact', head: true });
+      if (ticketsError) throw ticketsError;
+      setTotalTickets(ticketsCount);
+
+      // Fetch Active Users (using profiles table for now)
+      const { count: profilesCount, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+      if (profilesError) throw profilesError;
+      setActiveUsers(profilesCount);
+
+      // Fetch Total Assets
+      const { count: assetsCount, error: assetsError } = await supabase
+        .from('assets')
+        .select('*', { count: 'exact', head: true });
+      if (assetsError) throw assetsError;
+      setTotalAssets(assetsCount);
+
+      // Fetch Recent Activities (latest 5 tickets)
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from('tickets')
+        .select('*, profiles(full_name), statuses(name)')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (activitiesError) throw activitiesError;
+      setRecentActivities(activitiesData as any); // Type assertion for joined data
+
+    } catch (err: any) {
+      console.error('Error fetching dashboard data:', err.message);
+      setError('Failed to load dashboard data.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        // Fetch Total Tickets
-        const { count: ticketsCount, error: ticketsError } = await supabase
-          .from('tickets')
-          .select('*', { count: 'exact', head: true });
-        if (ticketsError) throw ticketsError;
-        setTotalTickets(ticketsCount);
-
-        // Fetch Active Users (using profiles table for now)
-        const { count: profilesCount, error: profilesError } = await supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true });
-        if (profilesError) throw profilesError;
-        setActiveUsers(profilesCount);
-
-        // Fetch Total Assets
-        const { count: assetsCount, error: assetsError } = await supabase
-          .from('assets')
-          .select('*', { count: 'exact', head: true });
-        if (assetsError) throw assetsError;
-        setTotalAssets(assetsCount);
-
-        // Fetch Recent Activities (latest 5 tickets)
-        const { data: activitiesData, error: activitiesError } = await supabase
-          .from('tickets')
-          .select('*, profiles(full_name), statuses(name)')
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (activitiesError) throw activitiesError;
-        setRecentActivities(activitiesData as any); // Type assertion for joined data
-
-      } catch (err: any) {
-        console.error('Error fetching dashboard data:', err.message);
-        setError('Failed to load dashboard data.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboardData();
   }, []);
+
+  const handleOpenNewTicketModal = () => {
+    setIsNewTicketModalOpen(true);
+  };
+
+  const handleCloseNewTicketModal = () => {
+    setIsNewTicketModalOpen(false);
+  };
+
+  const handleTicketCreated = () => {
+    fetchDashboardData(); // Re-fetch dashboard data after a new ticket is created
+  };
+
+  const handleOpenNewAssetModal = () => {
+    setIsNewAssetModalOpen(true);
+  };
+
+  const handleCloseNewAssetModal = () => {
+    setIsNewAssetModalOpen(false);
+  };
+
+  const handleAssetCreated = () => {
+    fetchDashboardData(); // Re-fetch dashboard data after a new asset is created
+  };
 
   if (loading) {
     return (
       <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
-        <p className="text-text-light dark:text-text-dark">Loading dashboard data...</p>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -125,22 +154,22 @@ const Dashboard: React.FC = () => {
             title="Create New Ticket"
             description="Quickly log a new support ticket."
             icon={Ticket}
-            to="/tickets/new"
-            colorClass="bg-blue-600" // Different color
+            onClick={handleOpenNewTicketModal}
+            colorClass="bg-blue-600"
           />
           <QuickActionCard
             title="View All Users"
             description="Manage and view all system users."
             icon={UserPlus}
             to="/users"
-            colorClass="bg-green-600" // Different color
+            colorClass="bg-green-600"
           />
           <QuickActionCard
             title="Add New Asset"
             description="Register a new IT asset to the inventory."
             icon={Package}
-            to="/assets/new"
-            colorClass="bg-purple-600" // Different color
+            onClick={handleOpenNewAssetModal} // Use onClick instead of to
+            colorClass="bg-purple-600"
           />
         </div>
       </div>
@@ -151,10 +180,10 @@ const Dashboard: React.FC = () => {
         <ul className="space-y-4">
           {recentActivities.length > 0 ? (
             recentActivities.map((activity) => (
-              <li key={activity.id} className="flex items-start space-x-3 flex-1">
+              <li key={activity.id} className="flex items-start space-x-3 flex-1 min-w-0">
                 <div className={`flex-shrink-0 w-2 h-2 mt-2 rounded-full ${getStatusColor(activity.statuses?.name)}`}></div>
-                <div className="flex-1">
-                  <p className="text-text-light dark:text-text-dark">
+                <div className="flex-1 min-w-0">
+                  <p className="text-text-light dark:text-text-dark break-words">
                     <span className="font-medium">{activity.profiles?.full_name || 'Unknown User'}</span>{' '}
                     {activity.title} -{' '}
                     <span className="font-medium text-primary">#{activity.id?.substring(0, 8)}</span>
@@ -170,6 +199,20 @@ const Dashboard: React.FC = () => {
           )}
         </ul>
       </div>
+
+      {/* New Ticket Modal (rendered in Dashboard) */}
+      <NewTicketModal
+        isOpen={isNewTicketModalOpen}
+        onClose={handleCloseNewTicketModal}
+        onTicketCreated={handleTicketCreated}
+      />
+
+      {/* New Asset Modal (rendered in Dashboard) */}
+      <NewAssetModal
+        isOpen={isNewAssetModalOpen}
+        onClose={handleCloseNewAssetModal}
+        onAssetCreated={handleAssetCreated}
+      />
     </div>
   );
 };

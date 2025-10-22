@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, PlusCircle, Filter, ChevronDown, Edit, Trash2, HardDrive } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { Tables } from '../types/supabase';
+import LoadingSpinner from '../components/LoadingSpinner'; // Import LoadingSpinner
+import NewAssetModal from '../components/NewAssetModal'; // Import NewAssetModal
+import EditAssetModal from '../components/EditAssetModal'; // Import EditAssetModal
 
 type AssetWithDetails = Tables<'assets'> & {
   profiles: Tables<'profiles'> | null;
@@ -11,29 +14,32 @@ const Assets: React.FC = () => {
   const [assets, setAssets] = useState<AssetWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNewAssetModalOpen, setIsNewAssetModalOpen] = useState(false);
+  const [isEditAssetModalOpen, setIsEditAssetModalOpen] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<Tables<'assets'> | null>(null);
+
+  const fetchAssets = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from('assets')
+        .select('*, profiles(full_name)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAssets(data as AssetWithDetails[]);
+    } catch (err: any) {
+      console.error('Error fetching assets:', err.message);
+      setError('Failed to load assets.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchAssets = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data, error } = await supabase
-          .from('assets')
-          .select('*, profiles(full_name)')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setAssets(data as AssetWithDetails[]);
-      } catch (err: any) {
-        console.error('Error fetching assets:', err.message);
-        setError('Failed to load assets.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchAssets();
-  }, []);
+  }, [fetchAssets]);
 
   const getStatusColor = (status: string | undefined) => {
     switch (status) {
@@ -44,10 +50,59 @@ const Assets: React.FC = () => {
     }
   };
 
+  const handleNewAssetClick = () => {
+    setIsNewAssetModalOpen(true);
+  };
+
+  const handleCloseNewAssetModal = () => {
+    setIsNewAssetModalOpen(false);
+  };
+
+  const handleAssetCreated = () => {
+    fetchAssets(); // Re-fetch assets after a new one is created
+  };
+
+  const handleEditAssetClick = (asset: Tables<'assets'>) => {
+    setSelectedAsset(asset);
+    setIsEditAssetModalOpen(true);
+  };
+
+  const handleCloseEditAssetModal = () => {
+    setIsEditAssetModalOpen(false);
+    setSelectedAsset(null); // Clear selected asset
+  };
+
+  const handleAssetUpdated = () => {
+    fetchAssets(); // Re-fetch assets after one is updated
+  };
+
+  const handleDeleteAsset = async (assetId: string) => {
+    if (!window.confirm('Are you sure you want to delete this asset? This action cannot be undone.')) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const { error: deleteError } = await supabase
+        .from('assets')
+        .delete()
+        .eq('id', assetId);
+
+      if (deleteError) throw deleteError;
+
+      fetchAssets(); // Re-fetch assets after deletion
+    } catch (err: any) {
+      console.error('Error deleting asset:', err.message);
+      setError(`Failed to delete asset: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
-        <p className="text-text-light dark:text-text-dark">Loading assets...</p>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -80,7 +135,10 @@ const Assets: React.FC = () => {
               Filter
               <ChevronDown className="h-4 w-4 ml-2" />
             </button>
-            <button className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md">
+            <button
+              onClick={handleNewAssetClick}
+              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md"
+            >
               <PlusCircle className="h-4 w-4 mr-2" />
               New Asset
             </button>
@@ -137,10 +195,16 @@ const Assets: React.FC = () => {
                       {asset.purchase_date ? new Date(asset.purchase_date).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3">
+                      <button
+                        onClick={() => handleEditAssetClick(asset)}
+                        className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3"
+                      >
                         <Edit className="h-5 w-5" />
                       </button>
-                      <button className="text-red-600 hover:text-red-900 dark:hover:text-red-400">
+                      <button
+                        onClick={() => handleDeleteAsset(asset.id)}
+                        className="text-red-600 hover:text-red-900 dark:hover:text-red-400"
+                      >
                         <Trash2 className="h-5 w-5" />
                       </button>
                     </td>
@@ -157,6 +221,21 @@ const Assets: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* New Asset Modal */}
+      <NewAssetModal
+        isOpen={isNewAssetModalOpen}
+        onClose={handleCloseNewAssetModal}
+        onAssetCreated={handleAssetCreated}
+      />
+
+      {/* Edit Asset Modal */}
+      <EditAssetModal
+        isOpen={isEditAssetModalOpen}
+        onClose={handleCloseEditAssetModal}
+        onAssetUpdated={handleAssetUpdated}
+        asset={selectedAsset}
+      />
     </div>
   );
 };

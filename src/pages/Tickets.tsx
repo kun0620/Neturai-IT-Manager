@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, PlusCircle, Filter, ChevronDown, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { Tables } from '../types/supabase';
+import LoadingSpinner from '../components/LoadingSpinner'; // Import LoadingSpinner
+import NewTicketModal from '../components/NewTicketModal'; // Import NewTicketModal
+import EditTicketModal from '../components/EditTicketModal'; // Import EditTicketModal
 
 type TicketWithDetails = Tables<'tickets'> & {
   profiles: Tables<'profiles'> | null;
@@ -13,29 +16,32 @@ const Tickets: React.FC = () => {
   const [tickets, setTickets] = useState<TicketWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNewTicketModalOpen, setIsNewTicketModalOpen] = useState(false);
+  const [isEditTicketModalOpen, setIsEditTicketModalOpen] = useState(false); // State for edit modal visibility
+  const [selectedTicket, setSelectedTicket] = useState<Tables<'tickets'> | null>(null); // State for selected ticket to edit
+
+  const fetchTickets = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select('*, profiles(full_name), statuses(name), categories(name)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setTickets(data as TicketWithDetails[]);
+    } catch (err: any) {
+      console.error('Error fetching tickets:', err.message);
+      setError('Failed to load tickets.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchTickets = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data, error } = await supabase
-          .from('tickets')
-          .select('*, profiles(full_name), statuses(name), categories(name)')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setTickets(data as TicketWithDetails[]);
-      } catch (err: any) {
-        console.error('Error fetching tickets:', err.message);
-        setError('Failed to load tickets.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchTickets();
-  }, []);
+  }, [fetchTickets]);
 
   const getStatusColor = (statusName: string | undefined) => {
     switch (statusName) {
@@ -61,10 +67,36 @@ const Tickets: React.FC = () => {
     }
   };
 
+  const handleNewTicketClick = () => {
+    setIsNewTicketModalOpen(true);
+  };
+
+  const handleCloseNewTicketModal = () => {
+    setIsNewTicketModalOpen(false);
+  };
+
+  const handleTicketCreated = () => {
+    fetchTickets(); // Re-fetch tickets after a new one is created
+  };
+
+  const handleEditTicketClick = (ticket: Tables<'tickets'>) => {
+    setSelectedTicket(ticket);
+    setIsEditTicketModalOpen(true);
+  };
+
+  const handleCloseEditTicketModal = () => {
+    setIsEditTicketModalOpen(false);
+    setSelectedTicket(null); // Clear selected ticket
+  };
+
+  const handleTicketUpdated = () => {
+    fetchTickets(); // Re-fetch tickets after one is updated
+  };
+
   if (loading) {
     return (
       <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
-        <p className="text-text-light dark:text-text-dark">Loading tickets...</p>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -97,7 +129,10 @@ const Tickets: React.FC = () => {
               Filter
               <ChevronDown className="h-4 w-4 ml-2" />
             </button>
-            <button className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md">
+            <button
+              onClick={handleNewTicketClick}
+              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md"
+            >
               <PlusCircle className="h-4 w-4 mr-2" />
               New Ticket
             </button>
@@ -152,7 +187,10 @@ const Tickets: React.FC = () => {
                       {new Date(ticket.created_at || '').toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3">
+                      <button
+                        onClick={() => handleEditTicketClick(ticket)}
+                        className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3"
+                      >
                         <Edit className="h-5 w-5" />
                       </button>
                       <button className="text-red-600 hover:text-red-900 dark:hover:text-red-400">
@@ -172,6 +210,21 @@ const Tickets: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* New Ticket Modal */}
+      <NewTicketModal
+        isOpen={isNewTicketModalOpen}
+        onClose={handleCloseNewTicketModal}
+        onTicketCreated={handleTicketCreated}
+      />
+
+      {/* Edit Ticket Modal */}
+      <EditTicketModal
+        isOpen={isEditTicketModalOpen}
+        onClose={handleCloseEditTicketModal}
+        onTicketUpdated={handleTicketUpdated}
+        ticket={selectedTicket}
+      />
     </div>
   );
 };
