@@ -1,232 +1,344 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, PlusCircle, Filter, ChevronDown, Edit, Trash2 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
-import { Tables } from '../types/supabase';
-import LoadingSpinner from '../components/LoadingSpinner'; // Import LoadingSpinner
-import NewTicketModal from '../components/NewTicketModal'; // Import NewTicketModal
-import EditTicketModal from '../components/EditTicketModal'; // Import EditTicketModal
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { PlusCircle, Search, Filter, ArrowUpNarrowWide, ArrowDownNarrowWide, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useState } from 'react';
+import { Tables, Enums } from '@/types/supabase';
+import { useTickets } from '@/hooks/useTickets';
+import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns';
+import { CreateTicketModal } from '@/components/tickets/CreateTicketModal';
+import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer';
 
-type TicketWithDetails = Tables<'tickets'> & {
-  profiles: Tables<'profiles'> | null;
-  statuses: Tables<'statuses'> | null;
-  categories: Tables<'categories'> | null;
-};
+const ITEMS_PER_PAGE = 10;
 
-const Tickets: React.FC = () => {
-  const [tickets, setTickets] = useState<TicketWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isNewTicketModalOpen, setIsNewTicketModalOpen] = useState(false);
-  const [isEditTicketModalOpen, setIsEditTicketModalOpen] = useState(false); // State for edit modal visibility
-  const [selectedTicket, setSelectedTicket] = useState<Tables<'tickets'> | null>(null); // State for selected ticket to edit
+export function Tickets() {
+  const { data: tickets, isLoading, isError, error } = useTickets();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterCategory, setFilterCategory] = useState<string>('All');
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof Tables<'tickets'>;
+    direction: 'ascending' | 'descending';
+  } | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
-  const fetchTickets = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await supabase
-        .from('tickets')
-        .select('*, profiles(full_name), statuses(name), categories(name)')
-        .order('created_at', { ascending: false });
+  const filteredTickets = tickets?.filter((ticket) => {
+    const matchesSearch =
+      ticket.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.assignee?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.id.toLowerCase().includes(searchTerm.toLowerCase().substring(0,8));
 
-      if (error) throw error;
-      setTickets(data as TicketWithDetails[]);
-    } catch (err: any) {
-      console.error('Error fetching tickets:', err.message);
-      setError('Failed to load tickets.');
-    } finally {
-      setLoading(false);
+    const matchesStatus =
+      filterStatus === 'All' || ticket.status === filterStatus;
+    const matchesCategory =
+      filterCategory === 'All' || ticket.category === filterCategory;
+
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
+
+  const sortedTickets = [...(filteredTickets || [])].sort((a, b) => {
+    if (!sortConfig) return 0;
+
+    const aValue = a[sortConfig.key];
+    const bValue = b[sortConfig.key];
+
+    if (aValue === null || aValue === undefined) return sortConfig.direction === 'ascending' ? 1 : -1;
+    if (bValue === null || bValue === undefined) return sortConfig.direction === 'ascending' ? -1 : 1;
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortConfig.direction === 'ascending'
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchTickets();
-  }, [fetchTickets]);
-
-  const getStatusColor = (statusName: string | undefined) => {
-    switch (statusName) {
-      case 'Open': return 'bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-100';
-      case 'In Progress': return 'bg-blue-100 text-blue-800 dark:bg-blue-700 dark:text-blue-100';
-      case 'Closed': return 'bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100';
-      case 'Pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-700 dark:text-yellow-100';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      return sortConfig.direction === 'ascending'
+        ? aValue - bValue
+        : bValue - aValue;
     }
-  };
+    // Fallback for other types, or if types are mixed
+    return 0;
+  });
 
-  const getPriorityColor = (priority: string | undefined) => {
-    // Assuming priority can be derived or is a field in tickets table.
-    // For now, let's use a placeholder logic or assume a 'priority' field exists.
-    // If 'priority' is not directly in tickets, we'd need to add it or derive it.
-    // For this example, let's map status to a 'priority' feel.
-    switch (priority) {
-      case 'Critical': return 'text-red-600 dark:text-red-400 font-bold';
-      case 'High': return 'text-orange-500 dark:text-orange-300';
-      case 'Medium': return 'text-yellow-500 dark:text-yellow-300';
-      case 'Low': return 'text-green-500 dark:text-green-300';
-      default: return 'text-gray-500 dark:text-gray-400';
+  const totalPages = Math.ceil(sortedTickets.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentTickets = sortedTickets.slice(startIndex, endIndex);
+
+  const requestSort = (key: keyof Tables<'tickets'>) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (
+      sortConfig &&
+      sortConfig.key === key &&
+      sortConfig.direction === 'ascending'
+    ) {
+      direction = 'descending';
     }
+    setSortConfig({ key, direction });
   };
 
-  const handleNewTicketClick = () => {
-    setIsNewTicketModalOpen(true);
-  };
-
-  const handleCloseNewTicketModal = () => {
-    setIsNewTicketModalOpen(false);
-  };
-
-  const handleTicketCreated = () => {
-    fetchTickets(); // Re-fetch tickets after a new one is created
-  };
-
-  const handleEditTicketClick = (ticket: Tables<'tickets'>) => {
-    setSelectedTicket(ticket);
-    setIsEditTicketModalOpen(true);
-  };
-
-  const handleCloseEditTicketModal = () => {
-    setIsEditTicketModalOpen(false);
-    setSelectedTicket(null); // Clear selected ticket
-  };
-
-  const handleTicketUpdated = () => {
-    fetchTickets(); // Re-fetch tickets after one is updated
-  };
-
-  if (loading) {
-    return (
-      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
+  const getSortIndicator = (key: keyof Tables<'tickets'>) => {
+    if (!sortConfig || sortConfig.key !== key) return null;
+    return sortConfig.direction === 'ascending' ? (
+      <ArrowUpNarrowWide className="ml-1 h-3 w-3 inline" />
+    ) : (
+      <ArrowDownNarrowWide className="ml-1 h-3 w-3 inline" />
     );
-  }
+  };
 
-  if (error) {
+  const getStatusBadgeVariant = (status: Enums<'ticket_status'>) => {
+    switch (status) {
+      case 'Open':
+        return 'destructive';
+      case 'In Progress':
+        return 'secondary';
+      case 'Closed':
+      case 'Resolved':
+        return 'default';
+      case 'Pending':
+        return 'outline';
+      default:
+        return 'outline';
+    }
+  };
+
+  const handleRowClick = (ticketId: string) => {
+    setSelectedTicketId(ticketId);
+    setIsDetailsDrawerOpen(true);
+  };
+
+  if (isError) {
     return (
-      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center text-red-500">
-        <p>Error: {error}</p>
+      <div className="p-6">
+        <h1 className="text-3xl font-bold mb-6">Tickets</h1>
+        <p className="text-red-500">Error loading tickets: {error?.message}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-text-light dark:text-text-dark">Tickets</h1>
-
-      <div className="bg-card-light dark:bg-card-dark p-6 rounded-xl shadow-subtle dark:shadow-md-dark">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
-          <div className="relative w-full md:w-1/3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search tickets..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-background-light dark:bg-gray-700 text-text-light dark:text-text-dark focus:ring-primary focus:border-primary transition-colors duration-200"
-            />
-          </div>
-          <div className="flex space-x-3">
-            <button className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors duration-200">
-              <Filter className="h-4 w-4 mr-2" />
-              Filter
-              <ChevronDown className="h-4 w-4 ml-2" />
-            </button>
-            <button
-              onClick={handleNewTicketClick}
-              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md"
-            >
-              <PlusCircle className="h-4 w-4 mr-2" />
-              New Ticket
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  ID
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Subject
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Category
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Assigned To
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Date
-                </th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-card-light dark:bg-card-dark divide-y divide-gray-200 dark:divide-gray-700">
-              {tickets.length > 0 ? (
-                tickets.map((ticket) => (
-                  <tr key={ticket.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary">{ticket.id?.substring(0, 8)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{ticket.title}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.statuses?.name)}`}>
-                        {ticket.statuses?.name || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">
-                      {ticket.categories?.name || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">
-                      {ticket.profiles?.full_name || 'Unassigned'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(ticket.created_at || '').toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleEditTicketClick(ticket)}
-                        className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3"
-                      >
-                        <Edit className="h-5 w-5" />
-                      </button>
-                      <button className="text-red-600 hover:text-red-900 dark:hover:text-red-400">
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No tickets found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+    <div className="flex flex-col gap-6 p-4 md:p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Tickets</h1>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Create New Ticket
+        </Button>
       </div>
 
-      {/* New Ticket Modal */}
-      <NewTicketModal
-        isOpen={isNewTicketModalOpen}
-        onClose={handleCloseNewTicketModal}
-        onTicketCreated={handleTicketCreated}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Tickets</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col md:flex-row items-center gap-4 mb-4">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search tickets..."
+                className="w-full rounded-lg bg-background pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filter Status: {filterStatus}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {['All', 'Open', 'In Progress', 'Closed', 'Resolved', 'Pending'].map(
+                  (status) => (
+                    <DropdownMenuItem
+                      key={status}
+                      onClick={() => {
+                        setFilterStatus(status);
+                        setCurrentPage(1); // Reset to first page on filter change
+                      }}
+                    >
+                      {status}
+                    </DropdownMenuItem>
+                  )
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filter Category: {filterCategory}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {['All', 'Hardware', 'Software', 'Network', 'Account', 'General', 'Other'].map(
+                  (category) => (
+                    <DropdownMenuItem
+                      key={category}
+                      onClick={() => {
+                        setFilterCategory(category);
+                        setCurrentPage(1); // Reset to first page on filter change
+                      }}
+                    >
+                      {category}
+                    </DropdownMenuItem>
+                  )
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {isLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('id')}
+                    >
+                      Ticket ID {getSortIndicator('id')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('subject')}
+                    >
+                      Subject {getSortIndicator('subject')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('category')}
+                    >
+                      Category {getSortIndicator('category')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('status')}
+                    >
+                      Status {getSortIndicator('status')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('priority')}
+                    >
+                      Priority {getSortIndicator('priority')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('assignee')}
+                    >
+                      Assignee {getSortIndicator('assignee')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('created_at')}
+                    >
+                      Created At {getSortIndicator('created_at')}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {currentTickets.length > 0 ? (
+                    currentTickets.map((ticket) => (
+                      <TableRow key={ticket.id} onClick={() => handleRowClick(ticket.id)} className="cursor-pointer">
+                        <TableCell className="font-medium">
+                          {ticket.id.substring(0, 8)}
+                        </TableCell>
+                        <TableCell>{ticket.subject}</TableCell>
+                        <TableCell>{ticket.category}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(ticket.status)}>
+                            {ticket.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{ticket.priority}</TableCell>
+                        <TableCell>{ticket.assignee || 'Unassigned'}</TableCell>
+                        <TableCell>
+                          {ticket.created_at
+                            ? format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')
+                            : 'N/A'}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        No tickets found matching your criteria.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              <div className="flex justify-end items-center space-x-2 py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-2" /> Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <CreateTicketModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
       />
 
-      {/* Edit Ticket Modal */}
-      <EditTicketModal
-        isOpen={isEditTicketModalOpen}
-        onClose={handleCloseEditTicketModal}
-        onTicketUpdated={handleTicketUpdated}
-        ticket={selectedTicket}
+      <TicketDetailsDrawer
+        isOpen={isDetailsDrawerOpen}
+        onClose={() => setIsDetailsDrawerOpen(false)}
+        ticketId={selectedTicketId}
       />
     </div>
   );
-};
-
-export default Tickets;
+}

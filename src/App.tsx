@@ -1,76 +1,87 @@
-import React from 'react';
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
-import MainLayout from './components/Layout/MainLayout';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import Dashboard from './pages/Dashboard';
-import Tickets from './pages/Tickets';
-import Assets from './pages/Assets';
-import Users from './pages/Users';
-import Login from './pages/Login';
-import { AuthProvider, useAuth } from './lib/AuthContext'; // Import AuthProvider and useAuth
+import { MainLayout } from './components/layout/MainLayout';
+import { Tickets } from './pages/Tickets';
+import { AssetManagement } from './pages/AssetManagement';
+import { Users } from './pages/Users'; // Import Users page
+import './App.css';
 
-// ProtectedRoute component
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
+function AnimatedRoutes() {
+  const location = useLocation();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
-        Loading authentication...
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <>{children}</>;
-};
-
-const AppRoutes: React.FC = () => {
-  const router = createBrowserRouter([
-    {
-      path: '/login',
-      element: <Login />,
-    },
-    // Removed '/register' route as self-signup is disabled
-    {
-      path: '/',
-      element: (
-        <ProtectedRoute>
-          <MainLayout />
-        </ProtectedRoute>
-      ),
-      children: [
-        {
-          index: true,
-          element: <Dashboard />,
-        },
-        {
-          path: 'tickets',
-          element: <Tickets />,
-        },
-        {
-          path: 'assets',
-          element: <Assets />,
-        },
-        {
-          path: 'users',
-          element: <Users />,
-        },
-      ],
-    },
-  ]);
-
-  return <RouterProvider router={router} />;
-};
-
-const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route
+          path="/"
+          element={
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+              className="h-full w-full"
+            >
+              <Dashboard />
+            </motion.div>
+          }
+        />
+        <Route
+          path="/tickets"
+          element={
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+              className="h-full w-full"
+            >
+              <Tickets />
+            </motion.div>
+          }
+        />
+        <Route
+          path="/assets"
+          element={
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+              className="h-full w-full"
+            >
+              <AssetManagement />
+            </motion.div>
+          }
+        />
+        <Route
+          path="/users" // Add route for User Management
+          element={
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+              className="h-full w-full"
+            >
+              <Users />
+            </motion.div>
+          }
+        />
+      </Routes>
+    </AnimatePresence>
   );
-};
+}
+
+function App() {
+  return (
+    <Router>
+      <MainLayout>
+        <AnimatedRoutes />
+      </MainLayout>
+    </Router>
+  );
+}
 
 export default App;

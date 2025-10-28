@@ -1,193 +1,413 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, PlusCircle, Filter, ChevronDown, Edit, Trash2, Mail, Phone } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
-import { Tables } from '../types/supabase';
-import NewUserModal from '../components/NewUserModal'; // Import the new modal component
-import LoadingSpinner from '../components/LoadingSpinner'; // Import LoadingSpinner
+import React, { useState, useEffect } from 'react';
+import { format } from 'date-fns';
+import { PlusCircle, UserCog, Trash2, Mail, Lock } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { Tables, Enums } from '@/types/supabase';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast'; // Corrected import path
 
-type Profile = Tables<'profiles'>;
+type User = Tables<'users'>;
+type UserRole = Enums<'user_role'>;
 
-const Users: React.FC = () => {
-  const [users, setUsers] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isNewUserModalOpen, setIsNewUserModalOpen] = useState(false); // State for modal visibility
+const roleColors: Record<UserRole, string> = {
+  Admin: 'bg-red-500/20 text-red-600',
+  Editor: 'bg-blue-500/20 text-blue-600',
+  Viewer: 'bg-green-500/20 text-green-600',
+};
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setUsers(data);
-    } catch (err: any) {
-      console.error('Error fetching users:', err.message);
-      setError('Failed to load users.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+export const Users: React.FC = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [filteredRole, setFilteredRole] = useState<UserRole | 'All'>('All');
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [newUserData, setNewUserData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'Viewer' as UserRole,
+  });
+  const [resetPasswordEmail, setResetPasswordEmail] = useState('');
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers]);
+  }, []);
 
-  const getStatusColor = (status: string | undefined | null) => {
-    switch (status) {
-      case 'Active': return 'bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100';
-      case 'Inactive': return 'bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-100';
-      case 'Pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-700 dark:text-yellow-100';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
+  const fetchUsers = async () => {
+    const { data, error } = await supabase.from('users').select('*');
+    if (error) {
+      console.error('Error fetching users:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch users.',
+        variant: 'destructive',
+      });
+    } else {
+      setUsers(data || []);
     }
   };
 
-  const handleNewUserClick = () => {
-    setIsNewUserModalOpen(true);
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { name, email, password, role } = newUserData;
+
+    if (!name || !email || !password || !role) {
+      toast({
+        title: 'Validation Error',
+        description: 'All fields are required.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // 1. Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name, // Store full name in auth.users metadata
+          },
+        },
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      if (!authData.user) {
+        throw new Error('User creation failed in Supabase Auth.');
+      }
+
+      // 2. Insert user into public.users table
+      const { error: userInsertError } = await supabase.from('users').insert({
+        id: authData.user.id,
+        name,
+        email,
+        role,
+      });
+
+      if (userInsertError) {
+        // If public.users insert fails, try to delete the auth user to prevent orphaned records
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        throw userInsertError;
+      }
+
+      toast({
+        title: 'Success',
+        description: 'User added successfully.',
+      });
+      setIsAddUserModalOpen(false);
+      setNewUserData({ name: '', email: '', password: '', role: 'Viewer' });
+      fetchUsers(); // Refresh user list
+    } catch (error: any) {
+      console.error('Error adding user:', error);
+      toast({
+        title: 'Error',
+        description: `Failed to add user: ${error.message || 'Unknown error'}`,
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleCloseNewUserModal = () => {
-    setIsNewUserModalOpen(false);
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordEmail) {
+      toast({
+        title: 'Validation Error',
+        description: 'Email is required.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetPasswordEmail, {
+        redirectTo: `${window.location.origin}/update-password`, // Redirect to a page where user can set new password
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Password reset email sent. Check your inbox.',
+      });
+      setIsResetPasswordModalOpen(false);
+      setResetPasswordEmail('');
+    } catch (error: any) {
+      console.error('Error sending password reset email:', error);
+      toast({
+        title: 'Error',
+        description: `Failed to send reset email: ${error.message || 'Unknown error'}`,
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleUserCreated = () => {
-    fetchUsers(); // Re-fetch users after a new one is created
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      // Deleting from auth.users will cascade delete from public.users due to foreign key constraint
+      const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+
+      if (authError) {
+        throw authError;
+      }
+
+      toast({
+        title: 'Success',
+        description: 'User deleted successfully.',
+      });
+      fetchUsers(); // Refresh user list
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast({
+        title: 'Error',
+        description: `Failed to delete user: ${error.message || 'Unknown error'}`,
+        variant: 'destructive',
+      });
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center text-red-500">
-        <p>Error: {error}</p>
-      </div>
-    );
-  }
+  const filteredUsers =
+    filteredRole === 'All'
+      ? users
+      : users.filter((user) => user.role === filteredRole);
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-text-light dark:text-text-dark">Users</h1>
-
-      <div className="bg-card-light dark:bg-card-dark p-6 rounded-xl shadow-subtle dark:shadow-md-dark">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
-          <div className="relative w-full md:w-1/3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search users..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-background-light dark:bg-gray-700 text-text-light dark:text-text-dark focus:ring-primary focus:border-primary transition-colors duration-200"
-            />
-          </div>
-          <div className="flex space-x-3">
-            <button className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors duration-200">
-              <Filter className="h-4 w-4 mr-2" />
-              Filter
-              <ChevronDown className="h-4 w-4 ml-2" />
-            </button>
-            <button
-              onClick={handleNewUserClick}
-              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md"
-            >
-              <PlusCircle className="h-4 w-4 mr-2" />
-              New User
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  ID
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Name
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Email
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Role
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Phone
-                </th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-card-light dark:bg-card-dark divide-y divide-gray-200 dark:divide-gray-700">
-              {users.length > 0 ? (
-                users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary">{user.id?.substring(0, 8)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{user.full_name || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {user.email ? (
-                        <a href={`mailto:${user.email}`} className="flex items-center hover:text-primary">
-                          <Mail className="h-4 w-4 mr-2" />
-                          {user.email}
-                        </a>
-                      ) : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{user.role || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(user.status)}`}>
-                        {user.status || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {user.phone ? (
-                        <a href={`tel:${user.phone}`} className="flex items-center hover:text-primary">
-                          <Phone className="h-4 w-4 mr-2" />
-                          {user.phone}
-                        </a>
-                      ) : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3">
-                        <Edit className="h-5 w-5" />
-                      </button>
-                      <button className="text-red-600 hover:text-red-900 dark:hover:text-red-400">
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No users found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">User Management</h1>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsAddUserModalOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Add User
+          </Button>
+          <Button variant="outline" onClick={() => setIsResetPasswordModalOpen(true)}>
+            <Lock className="mr-2 h-4 w-4" /> Reset Password
+          </Button>
         </div>
       </div>
 
-      {/* New User Modal */}
-      <NewUserModal
-        isOpen={isNewUserModalOpen}
-        onClose={handleCloseNewUserModal}
-        onUserCreated={handleUserCreated}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Users</CardTitle>
+          <CardDescription>Manage your application users.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-4 flex items-center gap-4">
+            <Input placeholder="Search users..." className="max-w-sm" />
+            <Select
+              value={filteredRole}
+              onValueChange={(value: UserRole | 'All') => setFilteredRole(value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by Role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Roles</SelectItem>
+                <SelectItem value="Admin">Admin</SelectItem>
+                <SelectItem value="Editor">Editor</SelectItem>
+                <SelectItem value="Viewer">Viewer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Created At</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <Badge className={roleColors[user.role]}>{user.role}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {user.created_at ? format(new Date(user.created_at), 'PPP') : 'N/A'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Delete user</span>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center">
+                    No users found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Add User Modal */}
+      <Dialog open={isAddUserModalOpen} onOpenChange={setIsAddUserModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+            <DialogDescription>
+              Fill in the details to create a new user account.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAddUser} className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="name" className="text-right">
+                Name
+              </Label>
+              <Input
+                id="name"
+                value={newUserData.name}
+                onChange={(e) =>
+                  setNewUserData({ ...newUserData, name: e.target.value })
+                }
+                className="col-span-3"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="email" className="text-right">
+                Email
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                value={newUserData.email}
+                onChange={(e) =>
+                  setNewUserData({ ...newUserData, email: e.target.value })
+                }
+                className="col-span-3"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="password" className="text-right">
+                Password
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                value={newUserData.password}
+                onChange={(e) =>
+                  setNewUserData({ ...newUserData, password: e.target.value })
+                }
+                className="col-span-3"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="role" className="text-right">
+                Role
+              </Label>
+              <Select
+                value={newUserData.role}
+                onValueChange={(value: UserRole) =>
+                  setNewUserData({ ...newUserData, role: value })
+                }
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Admin">Admin</SelectItem>
+                  <SelectItem value="Editor">Editor</SelectItem>
+                  <SelectItem value="Viewer">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="submit">Add User</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Modal */}
+      <Dialog open={isResetPasswordModalOpen} onOpenChange={setIsResetPasswordModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Reset User Password</DialogTitle>
+            <DialogDescription>
+              Enter the email address of the user whose password you want to reset. A reset link will be sent to their email.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleResetPassword} className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="reset-email" className="text-right">
+                Email
+              </Label>
+              <Input
+                id="reset-email"
+                type="email"
+                value={resetPasswordEmail}
+                onChange={(e) => setResetPasswordEmail(e.target.value)}
+                className="col-span-3"
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit">Send Reset Link</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
-
-export default Users;

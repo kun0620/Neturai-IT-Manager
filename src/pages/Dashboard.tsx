@@ -1,218 +1,49 @@
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, Users, HardDrive, Ticket, PlusCircle, UserPlus, Package } from 'lucide-react';
-import DashboardCard from '../components/DashboardCard';
-import QuickActionCard from '../components/QuickActionCard';
-import { supabase } from '../lib/supabaseClient';
-import { Tables } from '../types/supabase';
-import LoadingSpinner from '../components/LoadingSpinner';
-import NewTicketModal from '../components/NewTicketModal';
-import NewAssetModal from '../components/NewAssetModal'; // Import NewAssetModal
-
-type TicketType = Tables<'tickets'>;
-type Profile = Tables<'profiles'>;
+import React from 'react';
 
 const Dashboard: React.FC = () => {
-  const [totalTickets, setTotalTickets] = useState<number | null>(null);
-  const [activeUsers, setActiveUsers] = useState<number | null>(null);
-  const [totalAssets, setTotalAssets] = useState<number | null>(null);
-  const [recentActivities, setRecentActivities] = useState<
-    (TicketType & { profiles: Profile | null; statuses: Tables<'statuses'> | null })[]
-  >([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isNewTicketModalOpen, setIsNewTicketModalOpen] = useState(false);
-  const [isNewAssetModalOpen, setIsNewAssetModalOpen] = useState(false); // State for NewAssetModal
-
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Fetch Total Tickets
-      const { count: ticketsCount, error: ticketsError } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true });
-      if (ticketsError) throw ticketsError;
-      setTotalTickets(ticketsCount);
-
-      // Fetch Active Users (using profiles table for now)
-      const { count: profilesCount, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
-      if (profilesError) throw profilesError;
-      setActiveUsers(profilesCount);
-
-      // Fetch Total Assets
-      const { count: assetsCount, error: assetsError } = await supabase
-        .from('assets')
-        .select('*', { count: 'exact', head: true });
-      if (assetsError) throw assetsError;
-      setTotalAssets(assetsCount);
-
-      // Fetch Recent Activities (latest 5 tickets)
-      const { data: activitiesData, error: activitiesError } = await supabase
-        .from('tickets')
-        .select('*, profiles(full_name), statuses(name)')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (activitiesError) throw activitiesError;
-      setRecentActivities(activitiesData as any); // Type assertion for joined data
-
-    } catch (err: any) {
-      console.error('Error fetching dashboard data:', err.message);
-      setError('Failed to load dashboard data.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const handleOpenNewTicketModal = () => {
-    setIsNewTicketModalOpen(true);
-  };
-
-  const handleCloseNewTicketModal = () => {
-    setIsNewTicketModalOpen(false);
-  };
-
-  const handleTicketCreated = () => {
-    fetchDashboardData(); // Re-fetch dashboard data after a new ticket is created
-  };
-
-  const handleOpenNewAssetModal = () => {
-    setIsNewAssetModalOpen(true);
-  };
-
-  const handleCloseNewAssetModal = () => {
-    setIsNewAssetModalOpen(false);
-  };
-
-  const handleAssetCreated = () => {
-    fetchDashboardData(); // Re-fetch dashboard data after a new asset is created
-  };
-
-  if (loading) {
-    return (
-      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center text-red-500">
-        <p>Error: {error}</p>
-      </div>
-    );
-  }
-
-  const getStatusColor = (statusName: string | undefined) => {
-    switch (statusName) {
-      case 'Open': return 'bg-red-500';
-      case 'In Progress': return 'bg-blue-500';
-      case 'Closed': return 'bg-green-500';
-      case 'Pending': return 'bg-yellow-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
   return (
-    <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 overflow-auto">
-      <h1 className="text-3xl font-bold text-text-light dark:text-text-dark mb-6">Dashboard</h1>
-
-      {/* Dashboard Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        <DashboardCard
-          title="Total Tickets"
-          value={totalTickets !== null ? totalTickets.toString() : 'N/A'}
-          icon={TrendingUp}
-          color="text-primary"
-        />
-        <DashboardCard
-          title="Active Users"
-          value={activeUsers !== null ? activeUsers.toString() : 'N/A'}
-          icon={Users}
-          color="text-primary"
-        />
-        <DashboardCard
-          title="Total Assets"
-          value={totalAssets !== null ? totalAssets.toString() : 'N/A'}
-          icon={HardDrive}
-          color="text-primary"
-        />
-      </div>
-
-      {/* Quick Actions Section */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold text-text-light dark:text-text-dark mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <QuickActionCard
-            title="Create New Ticket"
-            description="Quickly log a new support ticket."
-            icon={Ticket}
-            onClick={handleOpenNewTicketModal}
-            colorClass="bg-blue-600"
-          />
-          <QuickActionCard
-            title="View All Users"
-            description="Manage and view all system users."
-            icon={UserPlus}
-            to="/users"
-            colorClass="bg-green-600"
-          />
-          <QuickActionCard
-            title="Add New Asset"
-            description="Register a new IT asset to the inventory."
-            icon={Package}
-            onClick={handleOpenNewAssetModal} // Use onClick instead of to
-            colorClass="bg-purple-600"
-          />
+    <div className="flex min-h-screen w-full flex-col bg-muted/40">
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+      </header>
+      <main className="flex flex-1 flex-col gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+        <div className="flex items-center">
+          <h2 className="text-lg font-semibold md:text-2xl">Welcome to Neturai IT Dashboard!</h2>
         </div>
-      </div>
-
-      {/* Recent Activities Section */}
-      <div className="bg-card-light dark:bg-card-dark p-6 rounded-xl shadow-lg dark:shadow-md-dark">
-        <h2 className="text-2xl font-semibold text-text-light dark:text-text-dark mb-4">Recent Activities</h2>
-        <ul className="space-y-4">
-          {recentActivities.length > 0 ? (
-            recentActivities.map((activity) => (
-              <li key={activity.id} className="flex items-start space-x-3 flex-1 min-w-0">
-                <div className={`flex-shrink-0 w-2 h-2 mt-2 rounded-full ${getStatusColor(activity.statuses?.name)}`}></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-text-light dark:text-text-dark break-words">
-                    <span className="font-medium">{activity.profiles?.full_name || 'Unknown User'}</span>{' '}
-                    {activity.title} -{' '}
-                    <span className="font-medium text-primary">#{activity.id?.substring(0, 8)}</span>
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {new Date(activity.created_at || '').toLocaleString()}
-                  </p>
-                </div>
-              </li>
-            ))
-          ) : (
-            <p className="text-gray-500 dark:text-gray-400">No recent activities.</p>
-          )}
-        </ul>
-      </div>
-
-      {/* New Ticket Modal (rendered in Dashboard) */}
-      <NewTicketModal
-        isOpen={isNewTicketModalOpen}
-        onClose={handleCloseNewTicketModal}
-        onTicketCreated={handleTicketCreated}
-      />
-
-      {/* New Asset Modal (rendered in Dashboard) */}
-      <NewAssetModal
-        isOpen={isNewAssetModalOpen}
-        onClose={handleCloseNewAssetModal}
-        onAssetCreated={handleAssetCreated}
-      />
+        <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-3">
+          {/* This section will display various summary data such as ticket count, server status */}
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+            <h3 className="text-sm font-medium">Open Tickets</h3>
+            <p className="text-2xl font-bold">12</p>
+            <p className="text-xs text-muted-foreground">+2 from yesterday</p>
+          </div>
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+            <h3 className="text-sm font-medium">Servers Online</h3>
+            <p className="text-2xl font-bold">98%</p>
+            <p className="text-xs text-muted-foreground">Excellent status</p>
+          </div>
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+            <h3 className="text-sm font-medium">Active Users</h3>
+            <p className="text-2xl font-bold">245</p>
+            <p className="text-xs text-muted-foreground">+15 from last week</p>
+          </div>
+        </div>
+        <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="lg:col-span-2 rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+            <h3 className="text-lg font-semibold">Ticket Overview</h3>
+            {/* Graph or table showing tickets */}
+            <p className="text-muted-foreground">Latest ticket information will be displayed here.</p>
+          </div>
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+            <h3 className="text-lg font-semibold">Notifications</h3>
+            {/* List of notifications */}
+            <ul className="mt-4 space-y-2">
+              <li><span className="font-medium">Alert:</span> Server #123 has an issue</li>
+              <li><span className="font-medium">Update:</span> Ticket #456 has been resolved</li>
+            </ul>
+          </div>
+        </div>
+      </main>
     </div>
   );
 };

@@ -1,67 +1,74 @@
 /*
-      # Create tickets table
+      # Create tickets table and RLS
 
       1. New Tables
         - `tickets`
-          - `id` (uuid, primary key)
-          - `title` (text, not null)
-          - `description` (text)
-          - `status_id` (uuid, foreign key to `statuses.id`)
-          - `category_id` (uuid, foreign key to `categories.id`)
-          - `assigned_to` (uuid, foreign key to `profiles.id` or `auth.users.id`)
-          - `created_by` (uuid, foreign key to `auth.users.id`)
-          - `created_at` (timestamp, default now())
-          - `updated_at` (timestamp, default now())
+          - `id` (uuid, primary key, default gen_random_uuid())
+          - `user_id` (uuid, foreign key to auth.users.id, nullable)
+          - `subject` (text, not null)
+          - `description` (text, nullable)
+          - `category` (enum: 'Hardware', 'Software', 'Network', 'Account', 'General', 'Other', default 'General')
+          - `priority` (enum: 'Low', 'Medium', 'High', 'Critical', default 'Low')
+          - `status` (enum: 'Open', 'In Progress', 'Closed', 'Resolved', 'Pending', default 'Open')
+          - `assignee` (text, nullable)
+          - `created_at` (timestamptz, default now())
+          - `updated_at` (timestamptz, default now())
       2. Security
         - Enable RLS on `tickets` table
-        - Add policy for authenticated users to read tickets they created or are assigned to
-        - Add policy for authenticated users to insert tickets
-        - Add policy for authenticated users to update tickets they created or are assigned to
-        - Add policy for authenticated users to delete tickets they created
+        - Add policy for authenticated users to read their own tickets
+        - Add policy for authenticated users to create tickets
+        - Add policy for authenticated users to update their own tickets
     */
+
+    CREATE TYPE ticket_category AS ENUM ('Hardware', 'Software', 'Network', 'Account', 'General', 'Other');
+    CREATE TYPE ticket_priority AS ENUM ('Low', 'Medium', 'High', 'Critical');
+    CREATE TYPE ticket_status AS ENUM ('Open', 'In Progress', 'Closed', 'Resolved', 'Pending');
 
     CREATE TABLE IF NOT EXISTS tickets (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      title text NOT NULL DEFAULT '',
-      description text DEFAULT '',
-      status_id uuid REFERENCES statuses(id) ON DELETE SET NULL,
-      category_id uuid REFERENCES categories(id) ON DELETE SET NULL,
-      assigned_to uuid REFERENCES profiles(id) ON DELETE SET NULL,
-      created_by uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+      user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+      subject text NOT NULL,
+      description text,
+      category ticket_category DEFAULT 'General'::ticket_category,
+      priority ticket_priority DEFAULT 'Low'::ticket_priority,
+      status ticket_status DEFAULT 'Open'::ticket_status,
+      assignee text,
       created_at timestamptz DEFAULT now(),
       updated_at timestamptz DEFAULT now()
     );
 
     ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
 
-    DO $$
+    CREATE POLICY "Authenticated users can read their own tickets"
+      ON tickets
+      FOR SELECT
+      TO authenticated
+      USING (auth.uid() = user_id);
+
+    CREATE POLICY "Authenticated users can create tickets"
+      ON tickets
+      FOR INSERT
+      TO authenticated
+      WITH CHECK (auth.uid() = user_id);
+
+    CREATE POLICY "Authenticated users can update their own tickets"
+      ON tickets
+      FOR UPDATE
+      TO authenticated
+      USING (auth.uid() = user_id);
+
+    -- Function to update updated_at column
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
     BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authenticated users can view their own tickets and assigned tickets.' AND tablename = 'tickets') THEN
-        CREATE POLICY "Authenticated users can view their own tickets and assigned tickets."
-          ON tickets FOR SELECT
-          TO authenticated
-          USING (auth.uid() = created_by OR auth.uid() = assigned_to);
-      END IF;
+      NEW.updated_at = now();
+      RETURN NEW;
+    END;
+    $$ language 'plpgsql';
 
-      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authenticated users can create tickets.' AND tablename = 'tickets') THEN
-        CREATE POLICY "Authenticated users can create tickets."
-          ON tickets FOR INSERT
-          TO authenticated
-          WITH CHECK (auth.uid() = created_by);
-      END IF;
-
-      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authenticated users can update their own tickets and assigned tickets.' AND tablename = 'tickets') THEN
-        CREATE POLICY "Authenticated users can update their own tickets and assigned tickets."
-          ON tickets FOR UPDATE
-          TO authenticated
-          USING (auth.uid() = created_by OR auth.uid() = assigned_to)
-          WITH CHECK (auth.uid() = created_by OR auth.uid() = assigned_to);
-      END IF;
-
-      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authenticated users can delete their own tickets.' AND tablename = 'tickets') THEN
-        CREATE POLICY "Authenticated users can delete their own tickets."
-          ON tickets FOR DELETE
-          TO authenticated
-          USING (auth.uid() = created_by);
-      END IF;
-    END $$;
+    -- Trigger to call update_updated_at_column on update
+    DROP TRIGGER IF EXISTS set_updated_at ON tickets;
+    CREATE TRIGGER set_updated_at
+    BEFORE UPDATE ON tickets
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
