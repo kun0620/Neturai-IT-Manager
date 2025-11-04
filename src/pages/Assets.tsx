@@ -1,243 +1,327 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, PlusCircle, Filter, ChevronDown, Edit, Trash2, HardDrive } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
-import { Tables } from '../types/supabase';
-import LoadingSpinner from '../components/LoadingSpinner'; // Import LoadingSpinner
-import NewAssetModal from '../components/NewAssetModal'; // Import NewAssetModal
-import EditAssetModal from '../components/EditAssetModal'; // Import EditAssetModal
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { PlusCircle, Search, Filter, ArrowUpNarrowWide, ArrowDownNarrowWide, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useState } from 'react';
+import { Tables } from '@/types/supabase';
+import { useAssets } from '@/hooks/useAssets'; // Assuming you'll create this hook
+import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns';
 
-type AssetWithDetails = Tables<'assets'> & {
-  profiles: Tables<'profiles'> | null;
-};
+const ITEMS_PER_PAGE = 10;
 
-const Assets: React.FC = () => {
-  const [assets, setAssets] = useState<AssetWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isNewAssetModalOpen, setIsNewAssetModalOpen] = useState(false);
-  const [isEditAssetModalOpen, setIsEditAssetModalOpen] = useState(false);
-  const [selectedAsset, setSelectedAsset] = useState<Tables<'assets'> | null>(null);
+export function Assets() {
+  const { data: assets, isLoading, isError, error } = useAssets(); // Use the assets hook
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<string>('All');
+  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof Tables<'assets'>;
+    direction: 'ascending' | 'descending';
+  } | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const fetchAssets = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await supabase
-        .from('assets')
-        .select('*, profiles(full_name)')
-        .order('created_at', { ascending: false });
+  const filteredAssets = assets?.filter((asset) => {
+    const matchesSearch =
+      asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asset.assigned_to?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      asset.id.toLowerCase().includes(searchTerm.toLowerCase().substring(0,8));
 
-      if (error) throw error;
-      setAssets(data as AssetWithDetails[]);
-    } catch (err: any) {
-      console.error('Error fetching assets:', err.message);
-      setError('Failed to load assets.');
-    } finally {
-      setLoading(false);
+    const matchesType =
+      filterType === 'All' || asset.type === filterType;
+    const matchesStatus =
+      filterStatus === 'All' || asset.status === filterStatus;
+
+    return matchesSearch && matchesType && matchesStatus;
+  });
+
+  const sortedAssets = [...(filteredAssets || [])].sort((a, b) => {
+    if (!sortConfig) return 0;
+
+    const aValue = a[sortConfig.key];
+    const bValue = b[sortConfig.key];
+
+    if (aValue === null || aValue === undefined) return sortConfig.direction === 'ascending' ? 1 : -1;
+    if (bValue === null || bValue === undefined) return sortConfig.direction === 'ascending' ? -1 : 1;
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortConfig.direction === 'ascending'
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchAssets();
-  }, [fetchAssets]);
-
-  const getStatusColor = (status: string | undefined) => {
-    switch (status) {
-      case 'Active': return 'bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100';
-      case 'In Repair': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-700 dark:text-yellow-100';
-      case 'Retired': return 'bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-100';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      return sortConfig.direction === 'ascending'
+        ? aValue - bValue
+        : bValue - aValue;
     }
-  };
+    // Fallback for other types, or if types are mixed
+    return 0;
+  });
 
-  const handleNewAssetClick = () => {
-    setIsNewAssetModalOpen(true);
-  };
+  const totalPages = Math.ceil(sortedAssets.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentAssets = sortedAssets.slice(startIndex, endIndex);
 
-  const handleCloseNewAssetModal = () => {
-    setIsNewAssetModalOpen(false);
-  };
-
-  const handleAssetCreated = () => {
-    fetchAssets(); // Re-fetch assets after a new one is created
-  };
-
-  const handleEditAssetClick = (asset: Tables<'assets'>) => {
-    setSelectedAsset(asset);
-    setIsEditAssetModalOpen(true);
-  };
-
-  const handleCloseEditAssetModal = () => {
-    setIsEditAssetModalOpen(false);
-    setSelectedAsset(null); // Clear selected asset
-  };
-
-  const handleAssetUpdated = () => {
-    fetchAssets(); // Re-fetch assets after one is updated
-  };
-
-  const handleDeleteAsset = async (assetId: string) => {
-    if (!window.confirm('Are you sure you want to delete this asset? This action cannot be undone.')) {
-      return;
+  const requestSort = (key: keyof Tables<'assets'>) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (
+      sortConfig &&
+      sortConfig.key === key &&
+      sortConfig.direction === 'ascending'
+    ) {
+      direction = 'descending';
     }
-    setLoading(true);
-    setError(null);
-    try {
-      const { error: deleteError } = await supabase
-        .from('assets')
-        .delete()
-        .eq('id', assetId);
-
-      if (deleteError) throw deleteError;
-
-      fetchAssets(); // Re-fetch assets after deletion
-    } catch (err: any) {
-      console.error('Error deleting asset:', err.message);
-      setError(`Failed to delete asset: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
+    setSortConfig({ key, direction });
   };
 
-  if (loading) {
-    return (
-      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
+  const getSortIndicator = (key: keyof Tables<'assets'>) => {
+    if (!sortConfig || sortConfig.key !== key) return null;
+    return sortConfig.direction === 'ascending' ? (
+      <ArrowUpNarrowWide className="ml-1 h-3 w-3 inline" />
+    ) : (
+      <ArrowDownNarrowWide className="ml-1 h-3 w-3 inline" />
     );
-  }
+  };
 
-  if (error) {
+  const getStatusBadgeVariant = (status: Tables<'assets'>['status']) => {
+    switch (status) {
+      case 'In Use':
+        return 'default';
+      case 'Available':
+        return 'secondary';
+      case 'Maintenance':
+        return 'destructive';
+      case 'Retired':
+        return 'outline';
+      case 'Lost':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
+
+  if (isError) {
     return (
-      <div className="flex-1 p-6 bg-background-light dark:bg-background-dark transition-colors duration-200 flex items-center justify-center text-red-500">
-        <p>Error: {error}</p>
+      <div className="p-6">
+        <h1 className="text-3xl font-bold mb-6">Assets</h1>
+        <p className="text-red-500">Error loading assets: {error?.message}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-text-light dark:text-text-dark">Assets</h1>
-
-      <div className="bg-card-light dark:bg-card-dark p-6 rounded-xl shadow-subtle dark:shadow-md-dark">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
-          <div className="relative w-full md:w-1/3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search assets..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-background-light dark:bg-gray-700 text-text-light dark:text-text-dark focus:ring-primary focus:border-primary transition-colors duration-200"
-            />
-          </div>
-          <div className="flex space-x-3">
-            <button className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors duration-200">
-              <Filter className="h-4 w-4 mr-2" />
-              Filter
-              <ChevronDown className="h-4 w-4 ml-2" />
-            </button>
-            <button
-              onClick={handleNewAssetClick}
-              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md"
-            >
-              <PlusCircle className="h-4 w-4 mr-2" />
-              New Asset
-            </button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  ID
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Name
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Type
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Serial Number
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Assigned To
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Purchase Date
-                </th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-card-light dark:bg-card-dark divide-y divide-gray-200 dark:divide-gray-700">
-              {assets.length > 0 ? (
-                assets.map((asset) => (
-                  <tr key={asset.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary">{asset.id?.substring(0, 8)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{asset.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{asset.type}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">{asset.serial_number}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(asset.status)}`}>
-                        {asset.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light dark:text-text-dark">
-                      {asset.profiles?.full_name || 'Unassigned'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {asset.purchase_date ? new Date(asset.purchase_date).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleEditAssetClick(asset)}
-                        className="text-primary hover:text-indigo-900 dark:hover:text-indigo-400 mr-3"
-                      >
-                        <Edit className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteAsset(asset.id)}
-                        className="text-red-600 hover:text-red-900 dark:hover:text-red-400"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No assets found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+    <div className="flex flex-col gap-6 p-4 md:p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Assets</h1>
+        <Button>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Add New Asset
+        </Button>
       </div>
 
-      {/* New Asset Modal */}
-      <NewAssetModal
-        isOpen={isNewAssetModalOpen}
-        onClose={handleCloseNewAssetModal}
-        onAssetCreated={handleAssetCreated}
-      />
-
-      {/* Edit Asset Modal */}
-      <EditAssetModal
-        isOpen={isEditAssetModalOpen}
-        onClose={handleCloseEditAssetModal}
-        onAssetUpdated={handleAssetUpdated}
-        asset={selectedAsset}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>All Assets</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col md:flex-row items-center gap-4 mb-4">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search assets..."
+                className="w-full rounded-lg bg-background pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filter Type: {filterType}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Filter by Type</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {['All', 'Hardware', 'Software License', 'Network Device', 'Peripheral', 'Other'].map(
+                  (type) => (
+                    <DropdownMenuItem
+                      key={type}
+                      onClick={() => {
+                        setFilterType(type);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      {type}
+                    </DropdownMenuItem>
+                  )
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filter Status: {filterStatus}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {['All', 'In Use', 'Available', 'Maintenance', 'Retired', 'Lost'].map(
+                  (status) => (
+                    <DropdownMenuItem
+                      key={status}
+                      onClick={() => {
+                        setFilterStatus(status);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      {status}
+                    </DropdownMenuItem>
+                  )
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {isLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('id')}
+                    >
+                      Asset ID {getSortIndicator('id')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('name')}
+                    >
+                      Name {getSortIndicator('name')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('type')}
+                    >
+                      Type {getSortIndicator('type')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('status')}
+                    >
+                      Status {getSortIndicator('status')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('assigned_to')}
+                    >
+                      Assigned To {getSortIndicator('assigned_to')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('purchase_date')}
+                    >
+                      Purchase Date {getSortIndicator('purchase_date')}
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer"
+                      onClick={() => requestSort('warranty_end_date')}
+                    >
+                      Warranty End {getSortIndicator('warranty_end_date')}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {currentAssets.length > 0 ? (
+                    currentAssets.map((asset) => (
+                      <TableRow key={asset.id}>
+                        <TableCell className="font-medium">
+                          {asset.id.substring(0, 8)}
+                        </TableCell>
+                        <TableCell>{asset.name}</TableCell>
+                        <TableCell>{asset.type}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusBadgeVariant(asset.status)}>
+                            {asset.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{asset.assigned_to || 'Unassigned'}</TableCell>
+                        <TableCell>
+                          {asset.purchase_date
+                            ? format(new Date(asset.purchase_date), 'MMM dd, yyyy')
+                            : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {asset.warranty_end_date
+                            ? format(new Date(asset.warranty_end_date), 'MMM dd, yyyy')
+                            : 'N/A'}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        No assets found matching your criteria.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              <div className="flex justify-end items-center space-x-2 py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-2" /> Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
-};
-
-export default Assets;
+}

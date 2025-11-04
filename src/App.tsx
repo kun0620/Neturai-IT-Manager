@@ -1,84 +1,24 @@
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import Dashboard from './pages/Dashboard';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { MainLayout } from './components/layout/MainLayout';
+import Dashboard from './pages/Dashboard';
 import { Tickets } from './pages/Tickets';
-import { AssetManagement } from './pages/AssetManagement';
-import { Users } from './pages/Users'; // Import Users page
-import './App.css';
-
-function AnimatedRoutes() {
-  const location = useLocation();
-
-  return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        <Route
-          path="/"
-          element={
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
-              className="h-full w-full"
-            >
-              <Dashboard />
-            </motion.div>
-          }
-        />
-        <Route
-          path="/tickets"
-          element={
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
-              className="h-full w-full"
-            >
-              <Tickets />
-            </motion.div>
-          }
-        />
-        <Route
-          path="/assets"
-          element={
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
-              className="h-full w-full"
-            >
-              <AssetManagement />
-            </motion.div>
-          }
-        />
-        <Route
-          path="/users" // Add route for User Management
-          element={
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
-              className="h-full w-full"
-            >
-              <Users />
-            </motion.div>
-          }
-        />
-      </Routes>
-    </AnimatePresence>
-  );
-}
+import { Assets } from './pages/Assets';
+import { Users } from './pages/Users';
+import Reports from './pages/Reports';
+import { SettingsAndLogs } from './pages/SettingsAndLogs';
 
 function App() {
   return (
     <Router>
       <MainLayout>
-        <AnimatedRoutes />
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/tickets" element={<Tickets />} />
+          <Route path="/assets" element={<Assets />} />
+          <Route path="/users" element={<Users />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/settings" element={<SettingsAndLogs />} />
+        </Routes>
       </MainLayout>
     </Router>
   );

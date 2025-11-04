@@ -6,17 +6,15 @@ import {
   Home,
   LineChart,
   Menu,
-  Package,
   Package2,
   Search,
-  ShoppingCart,
   Ticket,
-  Users,
   HardDrive,
-  UserCog, // Import UserCog icon for User Management
+  UserCog,
+  Settings,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -56,15 +54,40 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       path: '/assets',
     },
     {
-      name: 'User Management', // New navigation item
+      name: 'User Management',
       icon: UserCog,
       path: '/users',
     },
+    {
+      name: 'Reports',
+      icon: LineChart,
+      path: '/reports',
+    },
+    {
+      name: 'Settings & Logs',
+      icon: Settings,
+      path: '/settings',
+    },
   ];
+
+  const sidebarVariants = {
+    hidden: { opacity: 0, x: -20 },
+    visible: { opacity: 1, x: 0, transition: { duration: 0.3 } },
+  };
+
+  const contentVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3, delay: 0.1 } },
+  };
 
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
-      <div className="hidden border-r bg-muted/40 md:block">
+      <motion.div
+        className="hidden border-r bg-muted/40 md:block"
+        initial="hidden"
+        animate="visible"
+        variants={sidebarVariants}
+      >
         <div className="flex h-full max-h-screen flex-col gap-2">
           <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
             <Link to="/" className="flex items-center gap-2 font-semibold">
@@ -89,23 +112,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </nav>
           </div>
           <div className="mt-auto p-4">
-            {/* <Card>
-              <CardHeader className="p-2 pt-0 md:p-4">
-                <CardTitle>Upgrade to Pro</CardTitle>
-                <CardDescription>
-                  Unlock all features and get unlimited access to our support
-                  team.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-2 pt-0 md:p-4">
-                <Button size="sm" className="w-full">
-                  Upgrade
-                </Button>
-              </CardContent>
-            </Card> */}
+            {/* Placeholder for future sidebar content like upgrade card */}
           </div>
         </div>
-      </div>
+      </motion.div>
       <div className="flex flex-col">
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -142,22 +152,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                   </Link>
                 ))}
               </nav>
-              {/* <div className="mt-auto">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Upgrade to Pro</CardTitle>
-                    <CardDescription>
-                      Unlock all features and get unlimited access to our
-                      support team.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button size="sm" className="w-full">
-                      Upgrade
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div> */}
+              {/* Placeholder for future mobile sidebar content */}
             </SheetContent>
           </Sheet>
           <div className="w-full flex-1">
@@ -199,9 +194,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+        <motion.main
+          className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6"
+          initial="hidden"
+          animate="visible"
+          variants={contentVariants}
+        >
           {children}
-        </main>
+        </motion.main>
       </div>
     </div>
   );
