@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'; // เพิ่ม Outlet ที่นี่
 import {
   Bell,
   CircleUser,
@@ -30,11 +30,11 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ModeToggle } from '../mode-toggle';
 import { NotificationDrawer } from '../dashboard/NotificationDrawer';
 import { supabase } from '@/lib/supabase';
-import { LoadingSpinner } from '../ui/loading-spinner'; // Assuming you have a LoadingSpinner
+import { LoadingSpinner } from '../ui/loading-spinner';
 import { toast } from 'sonner';
 
 interface MainLayoutProps {
-  children: React.ReactNode;
+  // children: React.ReactNode; // ไม่จำเป็นต้องใช้ children แล้ว
   isLoading?: boolean;
   isEmpty?: boolean;
   isError?: boolean;
@@ -60,7 +60,7 @@ const DefaultErrorState = () => (
 );
 
 export const MainLayout: React.FC<MainLayoutProps> = ({
-  children,
+  // children, // ลบ children ออก
   isLoading = false,
   isEmpty = false,
   isError = false,
@@ -259,7 +259,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           ) : isEmpty ? (
             emptyComponent || <DefaultEmptyState />
           ) : (
-            children
+            <Outlet /> // ใช้ Outlet ที่นี่แทน children
           )}
         </motion.main>
       </div>

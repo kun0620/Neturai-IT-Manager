@@ -4,6 +4,8 @@
       1. New Functions
         - `get_tickets_created_per_month()`: Returns month and count of tickets created per month.
         - `get_issue_categories_distribution()`: Returns category and count of tickets per category.
+      2. Security
+        - Grant `EXECUTE` permission on both functions to `anon` and `authenticated` roles.
     */
 
     CREATE OR REPLACE FUNCTION get_tickets_created_per_month()
@@ -46,3 +48,7 @@
         count DESC;
     END;
     $$;
+
+    -- Grant execute permissions to anon and authenticated roles
+    GRANT EXECUTE ON FUNCTION public.get_tickets_created_per_month() TO anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.get_issue_categories_distribution() TO anon, authenticated;

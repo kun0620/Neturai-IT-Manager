@@ -17,3 +17,18 @@ export function useAssets() {
     queryFn: getAssets,
   });
 }
+
+export const fetchTotalAssets = async (): Promise<number> => {
+  const { count, error } = await supabase
+    .from('assets')
+    .select('id', { count: 'exact' });
+  if (error) throw new Error(error.message);
+  return count || 0;
+};
+
+export const useTotalAssets = () => {
+  return useQuery<number, Error>({
+    queryKey: ['totalAssets'],
+    queryFn: fetchTotalAssets,
+  });
+};
