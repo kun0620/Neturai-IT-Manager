@@ -97,6 +97,27 @@ export interface Database {
           },
         ];
       };
+      roles: {
+        Row: {
+          created_at: string | null;
+          id: string;
+          name: string;
+          updated_at: string | null;
+        };
+        Insert: {
+          created_at?: string | null;
+          id?: string;
+          name: string;
+          updated_at?: string | null;
+        };
+        Update: {
+          created_at?: string | null;
+          id?: string;
+          name?: string;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
       ticket_comments: {
         Row: {
           comment_text: string;
@@ -234,7 +255,7 @@ export interface Database {
           email: string;
           id: string;
           name: string;
-          role: Database['public']['Enums']['user_role'];
+          role_id: string;
           updated_at: string | null;
         };
         Insert: {
@@ -242,7 +263,7 @@ export interface Database {
           email: string;
           id: string;
           name?: string;
-          role?: Database['public']['Enums']['user_role'];
+          role_id: string;
           updated_at?: string | null;
         };
         Update: {
@@ -250,10 +271,17 @@ export interface Database {
           email?: string;
           id?: string;
           name?: string;
-          role?: Database['public']['Enums']['user_role'];
+          role_id?: string;
           updated_at?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: 'fk_role';
+            columns: ['role_id'];
+            isOneToOne: false;
+            referencedRelation: 'roles';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'users_id_fkey';
             columns: ['id'];
@@ -307,7 +335,6 @@ export interface Database {
         | 'Other';
       ticket_priority: 'Low' | 'Medium' | 'High' | 'Critical';
       ticket_status: 'Open' | 'In Progress' | 'Closed' | 'Resolved' | 'Pending';
-      user_role: 'Admin' | 'Editor' | 'Viewer';
     };
     CompositeTypes: {
       [_ in never]: never;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   CircleUser,
@@ -12,6 +12,7 @@ import {
   HardDrive,
   UserCog,
   Settings,
+  LogOut,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -28,13 +29,47 @@ import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ModeToggle } from '../mode-toggle';
 import { NotificationDrawer } from '../dashboard/NotificationDrawer';
+import { supabase } from '@/lib/supabase';
+import { LoadingSpinner } from '../ui/loading-spinner'; // Assuming you have a LoadingSpinner
+import { toast } from 'sonner';
 
 interface MainLayoutProps {
   children: React.ReactNode;
+  isLoading?: boolean;
+  isEmpty?: boolean;
+  isError?: boolean;
+  // You can pass specific components for these states if needed
+  loadingComponent?: React.ReactNode;
+  emptyComponent?: React.ReactNode;
+  errorComponent?: React.ReactNode;
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
+// Placeholder components for loading, empty, and error states
+const DefaultLoadingState = () => <LoadingSpinner />;
+const DefaultEmptyState = () => (
+  <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+    <p className="text-lg">No data to display.</p>
+    <p className="text-sm">Try adjusting your filters or adding new items.</p>
+  </div>
+);
+const DefaultErrorState = () => (
+  <div className="flex flex-col items-center justify-center h-full text-destructive">
+    <p className="text-lg">An error occurred.</p>
+    <p className="text-sm">Please try again later or contact support.</p>
+  </div>
+);
+
+export const MainLayout: React.FC<MainLayoutProps> = ({
+  children,
+  isLoading = false,
+  isEmpty = false,
+  isError = false,
+  loadingComponent,
+  emptyComponent,
+  errorComponent,
+}) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
@@ -78,6 +113,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const contentVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.3, delay: 0.1 } },
+  };
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error('Logout Failed', {
+        description: error.message,
+      });
+    } else {
+      toast.success('Logged Out', {
+        description: 'You have been successfully logged out.',
+      });
+      navigate('/login'); // Redirect to login page after logout
+    }
   };
 
   return (
@@ -190,7 +239,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <DropdownMenuItem>Settings</DropdownMenuItem>
               <DropdownMenuItem>Support</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Logout</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
@@ -200,7 +252,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           animate="visible"
           variants={contentVariants}
         >
-          {children}
+          {isLoading ? (
+            loadingComponent || <DefaultLoadingState />
+          ) : isError ? (
+            errorComponent || <DefaultErrorState />
+          ) : isEmpty ? (
+            emptyComponent || <DefaultEmptyState />
+          ) : (
+            children
+          )}
         </motion.main>
       </div>
     </div>
