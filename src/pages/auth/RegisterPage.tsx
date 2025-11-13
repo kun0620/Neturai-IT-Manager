@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -24,90 +24,72 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 
-const formSchema = z
-  .object({
-    name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
-    email: z.string().email({ message: 'Invalid email address.' }),
-    password: z
-      .string()
-      .min(8, { message: 'Password must be at least 8 characters.' }),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match.',
-    path: ['confirmPassword'],
-  });
+const formSchema = z.object({
+  name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
+  email: z.string().email({ message: 'Invalid email address.' }),
+  password: z
+    .string()
+    .min(8, { message: 'Password must be at least 8 characters.' }),
+});
 
 const RegisterPage: React.FC = () => {
-  const navigate = useNavigate();
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
       email: '',
       password: '',
-      confirmPassword: '',
     },
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    // First, get the 'Viewer' role_id
-    const { data: roleData, error: roleError } = await supabase
-      .from('roles')
-      .select('id')
-      .eq('name', 'Viewer')
-      .single();
+    form.clearErrors(); // Clear previous errors
 
-    if (roleError || !roleData) {
-      toast.error('Registration Failed', {
-        description: `Could not retrieve default role: ${roleError?.message || 'Role not found'}. Please contact support.`,
-      });
-      return;
-    }
+    try {
+      // Fetch the 'Viewer' role_id
+      const { data: roleData, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'Viewer')
+        .single();
 
-    const viewerRoleId = roleData.id;
-
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: values.email,
-      password: values.password,
-      options: {
-        data: {
-          full_name: values.name, // Store full name in user metadata
-        },
-      },
-    });
-
-    if (signUpError) {
-      toast.error('Registration Failed', {
-        description: signUpError.message,
-      });
-      return;
-    }
-
-    if (data.user) {
-      const { error: insertError } = await supabase.from('users').insert({
-        id: data.user.id,
-        name: values.name,
-        email: values.email,
-        role_id: viewerRoleId, // Use the fetched role_id
-      });
-
-      if (insertError) {
-        toast.error('Profile Creation Failed', {
-          description: `Could not create user profile: ${insertError.message}. Please contact support.`,
+      if (roleError || !roleData) {
+        toast.error('Registration Failed', {
+          description: roleError?.message || 'Could not find Viewer role.',
         });
-        await supabase.auth.signOut(); // Sign out the user from auth.users if public.users insertion fails
         return;
       }
 
-      toast.success('Registration Successful', {
-        description: 'Your account has been created. You can now log in.',
+      const viewerRoleId = roleData.id;
+
+      // Call the Edge Function to create user in Auth and public.users table
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          email: values.email,
+          password: values.password,
+          name: values.name,
+          role_id: viewerRoleId,
+        },
       });
-      navigate('/login'); // Redirect to login page after successful registration
-    } else {
+
+      if (error) {
+        toast.error('Registration Failed', {
+          description: error.message,
+        });
+      } else if (data && data.user) {
+        toast.success('Registration Successful', {
+          description: 'Account created successfully. Please log in.',
+        });
+        // Optionally redirect to login page after successful registration
+        // navigate('/login');
+      } else {
+        toast.error('Registration Failed', {
+          description: 'An unexpected error occurred.',
+        });
+      }
+    } catch (error: any) {
       toast.error('Registration Failed', {
-        description: 'An unexpected error occurred during registration.',
+        description: error.message || 'An unexpected error occurred.',
       });
     }
   };
@@ -133,6 +115,7 @@ const RegisterPage: React.FC = () => {
                     <FormControl>
                       <Input
                         id="name"
+                        type="text"
                         placeholder="John Doe"
                         required
                         {...field}
@@ -170,24 +153,6 @@ const RegisterPage: React.FC = () => {
                     <FormControl>
                       <Input
                         id="password"
-                        type="password"
-                        required
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Confirm Password</FormLabel>
-                    <FormControl>
-                      <Input
-                        id="confirmPassword"
                         type="password"
                         required
                         {...field}

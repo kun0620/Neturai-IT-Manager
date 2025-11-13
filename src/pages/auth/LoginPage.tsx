@@ -98,12 +98,6 @@ const LoginPage: React.FC = () => {
                   <FormItem>
                     <div className="flex items-center">
                       <FormLabel>Password</FormLabel>
-                      <Link
-                        to="/forgot-password"
-                        className="ml-auto inline-block text-sm underline"
-                      >
-                        Forgot your password?
-                      </Link>
                     </div>
                     <FormControl>
                       <Input
@@ -126,6 +120,14 @@ const LoginPage: React.FC = () => {
             Don't have an account?{' '}
             <Link to="/register" className="underline">
               Sign up
+            </Link>
+          </div>
+          <div className="mt-2 text-center text-sm">
+            <Link
+              to="/forgot-password"
+              className="inline-block text-sm underline"
+            >
+              Forgot your password?
             </Link>
           </div>
         </CardContent>

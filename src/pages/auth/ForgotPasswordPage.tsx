@@ -38,7 +38,7 @@ const ForgotPasswordPage: React.FC = () => {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-      redirectTo: `${window.location.origin}/update-password`, // Redirect to a page where user can update password
+      redirectTo: `${window.location.origin}/update-password`,
     });
 
     if (error) {
@@ -47,7 +47,7 @@ const ForgotPasswordPage: React.FC = () => {
       });
     } else {
       toast.success('Password Reset Email Sent', {
-        description: 'Check your email for the password reset link.',
+        description: 'Please check your email for instructions to reset your password.',
       });
     }
   };
@@ -58,7 +58,7 @@ const ForgotPasswordPage: React.FC = () => {
         <CardHeader>
           <CardTitle className="text-2xl">Forgot Password</CardTitle>
           <CardDescription>
-            Enter your email below to receive a password reset link.
+            Enter your email below to receive a password reset link
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -89,8 +89,9 @@ const ForgotPasswordPage: React.FC = () => {
             </form>
           </Form>
           <div className="mt-4 text-center text-sm">
+            Remember your password?{' '}
             <Link to="/login" className="underline">
-              Back to Login
+              Login
             </Link>
           </div>
         </CardContent>

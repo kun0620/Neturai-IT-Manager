@@ -25,6 +25,7 @@ export const useTickets = () => {
           queryClient.invalidateQueries({ queryKey: ['ticketsSummary'] });
           queryClient.invalidateQueries({ queryKey: ['ticketsPerMonth'] });
           queryClient.invalidateQueries({ queryKey: ['issueCategories'] });
+          queryClient.invalidateQueries({ queryKey: ['recentTickets'] }); // Invalidate recent tickets
         }
       )
       .subscribe();
@@ -93,40 +94,33 @@ export const useTicketsSummary = () => {
   });
 };
 
-export const fetchTicketsPerMonth = async () => {
-  const { data, error } = await supabase.rpc('get_tickets_created_per_month');
+export const fetchTicketsPerMonth = async (startDate: Date, endDate: Date) => {
+  const { data, error } = await supabase.rpc('get_tickets_created_per_month', {
+    start_date: startDate.toISOString(),
+    end_date: endDate.toISOString(),
+  });
   if (error) throw new Error(error.message);
 
-  // Map month numbers to names
-  const monthNames = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return data.map((item: { month: number; count: number }) => ({
-    month: monthNames[item.month - 1],
-    tickets: item.count,
+  // RPC already returns formatted month names (e.g., 'Jan 2023')
+  return data.map((item: { month: string; tickets: number }) => ({
+    month: item.month,
+    tickets: item.tickets,
   }));
 };
 
-export const useTicketsPerMonth = () => {
+export const useTicketsPerMonth = (startDate: Date, endDate: Date) => {
   return useQuery({
-    queryKey: ['ticketsPerMonth'],
-    queryFn: fetchTicketsPerMonth,
+    queryKey: ['ticketsPerMonth', startDate, endDate],
+    queryFn: () => fetchTicketsPerMonth(startDate, endDate),
+    enabled: !!startDate && !!endDate,
   });
 };
 
-export const fetchIssueCategories = async () => {
-  const { data, error } = await supabase.rpc('get_issue_categories_distribution');
+export const fetchIssueCategories = async (startDate: Date, endDate: Date) => {
+  const { data, error } = await supabase.rpc('get_issue_categories_distribution', {
+    start_date: startDate.toISOString(),
+    end_date: endDate.toISOString(),
+  });
   if (error) throw new Error(error.message);
 
   const colors = [
@@ -138,17 +132,36 @@ export const fetchIssueCategories = async () => {
     'hsl(var(--muted))',
   ];
 
-  return data.map((item: { category: string; count: number }, index: number) => ({
-    name: item.category,
+  return data.map((item: { category_name: string; count: number }, index: number) => ({
+    name: item.category_name, // Corrected to category_name
     value: item.count,
     color: colors[index % colors.length],
   }));
 };
 
-export const useIssueCategories = () => {
+export const useIssueCategories = (startDate: Date, endDate: Date) => {
   return useQuery({
-    queryKey: ['issueCategories'],
-    queryFn: fetchIssueCategories,
+    queryKey: ['issueCategories', startDate, endDate],
+    queryFn: () => fetchIssueCategories(startDate, endDate),
+    enabled: !!startDate && !!endDate,
+  });
+};
+
+export const fetchRecentTickets = async (): Promise<Tables<'tickets'>[]> => {
+  // Temporarily remove foreign key joins to debug 500 error
+  const { data, error } = await supabase
+    .from('tickets')
+    .select('*') // Fetch all columns, including assigned_to and created_by UUIDs
+    .order('created_at', { ascending: false })
+    .limit(5);
+  if (error) throw new Error(error.message);
+  return data || [];
+};
+
+export const useRecentTickets = () => {
+  return useQuery<Tables<'tickets'>[], Error>({
+    queryKey: ['recentTickets'],
+    queryFn: fetchRecentTickets,
   });
 };
 
@@ -230,28 +243,44 @@ export const useTicketHistory = (ticketId: string) => {
 
 export const useCreateTicket = () => {
   const queryClient = useQueryClient();
+  const addHistoryMutation = useAddTicketHistory();
+
   return useMutation<Tables<'tickets'>, Error, TablesInsert<'tickets'>>({
     mutationFn: async (newTicket) => {
       const { data, error } = await supabase.from('tickets').insert(newTicket).select().single();
       if (error) throw new Error(error.message);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: async (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       queryClient.invalidateQueries({ queryKey: ['ticketsSummary'] });
       queryClient.invalidateQueries({ queryKey: ['ticketsPerMonth'] });
       queryClient.invalidateQueries({ queryKey: ['issueCategories'] });
+      queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
+
+      // Add initial history entry for ticket creation
+      if (data && variables.created_by) {
+        await addHistoryMutation.mutateAsync({
+          ticket_id: data.id,
+          changed_by: variables.created_by,
+          change_type: 'ticket_created', // This is a custom field, not in schema
+          changed_field: 'status', // Default field for creation
+          old_value: null,
+          new_value: `Ticket created with status: ${data.status}`,
+        });
+      }
     },
   });
 };
 
 export const useUpdateTicket = () => {
   const queryClient = useQueryClient();
-  return useMutation<Tables<'tickets'>, Error, Partial<Tables<'tickets'>> & { id: string }>({
+  return useMutation<Tables<'tickets'> | null, Error, Partial<Tables<'tickets'>> & { id: string }>({
     mutationFn: async ({ id, ...updates }) => {
-      const { data, error } = await supabase.from('tickets').update(updates).eq('id', id).select().single();
+      const { data, error } = await supabase.from('tickets').update(updates).eq('id', id).select();
       if (error) throw new Error(error.message);
-      return data;
+      // If data is an array, take the first element, or handle cases where no data is returned
+      return data ? data[0] : null;
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
@@ -259,6 +288,7 @@ export const useUpdateTicket = () => {
       queryClient.invalidateQueries({ queryKey: ['ticketsSummary'] });
       queryClient.invalidateQueries({ queryKey: ['ticketsPerMonth'] });
       queryClient.invalidateQueries({ queryKey: ['issueCategories'] });
+      queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
     },
   });
 };

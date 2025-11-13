@@ -1,345 +1,259 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+  Activity,
+  Ticket,
+  Hourglass,
+  CheckCircle,
+  LayoutDashboard,
+} from 'lucide-react';
+import { SummaryCard } from '@/components/dashboard/SummaryCard';
+import {
+  useTicketsSummary,
+  useTicketsPerMonth,
+  useIssueCategories,
+  useRecentTickets,
+} from '@/hooks/useTickets';
 import {
   BarChart,
   Bar,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
+  Legend,
 } from 'recharts';
-import {
-  useTicketsSummary,
-  useTicketsPerMonth,
-  useIssueCategories,
-  useTickets,
-} from '@/hooks/useTickets';
-import { useTotalAssets } from '@/hooks/useAssets';
-import { Loader2 } from 'lucide-react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { toast } from 'sonner';
-import { Tables } from '@/types/supabase';
+import { Badge } from '@/components/ui/badge';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { ErrorState } from '@/components/common/ErrorState';
 
 const Dashboard: React.FC = () => {
-  const { data: ticketsSummary, isLoading: isLoadingTicketsSummary, error: ticketsSummaryError } = useTicketsSummary();
-  const { data: totalAssets, isLoading: isLoadingTotalAssets, error: totalAssetsError } = useTotalAssets();
-  const { data: ticketsPerMonth, isLoading: isLoadingTicketsPerMonth, error: ticketsPerMonthError } = useTicketsPerMonth();
-  const { data: issueCategories, isLoading: isLoadingIssueCategories, error: issueCategoriesError } = useIssueCategories();
-  const { data: allTickets, isLoading: isLoadingAllTickets, error: allTicketsError } = useTickets();
+  // Define default date range for dashboard charts (e.g., current year)
+  const defaultStartDate = new Date(new Date().getFullYear(), 0, 1); // Start of current year
+  const defaultEndDate = new Date(); // Today
 
-  const recentTickets = allTickets
-    ? allTickets
-        .sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime())
-        .slice(0, 5)
-    : [];
+  const {
+    data: summaryData,
+    isLoading: isLoadingSummary,
+    isError: isErrorSummary,
+    error: errorSummary,
+  } = useTicketsSummary();
+  const {
+    data: ticketsPerMonthData,
+    isLoading: isLoadingTicketsPerMonth,
+    isError: isErrorTicketsPerMonth,
+    error: errorTicketsPerMonth,
+  } = useTicketsPerMonth(defaultStartDate, defaultEndDate); // Pass default dates
+  const {
+    data: issueCategoriesData,
+    isLoading: isLoadingIssueCategories,
+    isError: isErrorIssueCategories,
+    error: errorIssueCategories,
+  } = useIssueCategories(defaultStartDate, defaultEndDate); // Pass default dates
+  const {
+    data: recentTickets,
+    isLoading: isLoadingRecentTickets,
+    isError: isErrorRecentTickets,
+    error: errorRecentTickets,
+  } = useRecentTickets();
 
-  // Realtime notification for new tickets
-  useEffect(() => {
-    if (allTickets && allTickets.length > 0) {
-      const latestTicket = allTickets[0]; // Assuming the first ticket is the latest due to sorting in useTickets hook or a separate check
-      // This is a simplified check. In a real-time scenario, you'd compare against a previously known state
-      // or use the payload from the Supabase Realtime subscription directly to detect new tickets.
-      // For this example, we'll just show a toast for the latest ticket if it's "new" (e.g., within the last few seconds).
-      const now = new Date();
-      const ticketCreatedAt = new Date(latestTicket.created_at!);
-      const diffSeconds = (now.getTime() - ticketCreatedAt.getTime()) / 1000;
-
-      if (diffSeconds < 10) { // If ticket was created within the last 10 seconds
-        toast.info(`New Ticket: ${latestTicket.subject}`, {
-          description: `Category: ${latestTicket.category}, Priority: ${latestTicket.priority}`,
-          action: {
-            label: 'View',
-            onClick: () => console.log(`View ticket ${latestTicket.id}`), // Placeholder for opening details drawer
-          },
-        });
-      }
-    }
-  }, [allTickets]);
-
-  const renderLoading = () => (
-    <div className="flex items-center justify-center h-32">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-    </div>
-  );
-
-  const renderError = (error: Error) => (
-    <div className="text-red-500 text-center p-4">
-      Error: {error.message}
-    </div>
-  );
-
-  const getStatusBadgeVariant = (status: Tables<'tickets'>['status']) => {
+  const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'Open':
         return 'destructive';
       case 'In Progress':
         return 'default';
       case 'Resolved':
-        return 'success';
-      case 'Closed':
         return 'secondary';
-      case 'Pending':
-        return 'warning';
+      case 'Closed':
+        return 'success';
       default:
         return 'outline';
     }
   };
 
-  const getPriorityBadgeVariant = (priority: Tables<'tickets'>['priority']) => {
-    switch (priority) {
-      case 'Critical':
-        return 'destructive';
-      case 'High':
-        return 'default';
-      case 'Medium':
-        return 'secondary';
-      case 'Low':
-        return 'outline';
-      default:
-        return 'outline';
-    }
-  };
+  if (isLoadingSummary || isLoadingTicketsPerMonth || isLoadingIssueCategories || isLoadingRecentTickets) {
+    return <LoadingSpinner />;
+  }
+
+  if (isErrorSummary || isErrorTicketsPerMonth || isErrorIssueCategories || isErrorRecentTickets) {
+    return (
+      <ErrorState
+        title="Error Loading Dashboard"
+        message={
+          errorSummary?.message ||
+          errorTicketsPerMonth?.message ||
+          errorIssueCategories?.message ||
+          errorRecentTickets?.message ||
+          'An unknown error occurred.'
+        }
+      />
+    );
+  }
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-      </header>
-      <main className="flex flex-1 flex-col gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
-        <div className="flex items-center">
-          <h2 className="text-lg font-semibold md:text-2xl">Welcome to Neturai IT Dashboard!</h2>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Open Tickets</CardTitle>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                className="h-4 w-4 text-muted-foreground"
-              >
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-            </CardHeader>
-            <CardContent>
-              {isLoadingTicketsSummary ? renderLoading() : ticketsSummaryError ? renderError(ticketsSummaryError) : (
-                <div className="text-2xl font-bold">{ticketsSummary?.open}</div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Tickets currently awaiting action
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">In Progress Tickets</CardTitle>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                className="h-4 w-4 text-muted-foreground"
-              >
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </CardHeader>
-            <CardContent>
-              {isLoadingTicketsSummary ? renderLoading() : ticketsSummaryError ? renderError(ticketsSummaryError) : (
-                <div className="text-2xl font-bold">{ticketsSummary?.inProgress}</div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Tickets being actively worked on
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Closed Tickets</CardTitle>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                className="h-4 w-4 text-muted-foreground"
-              >
-                <rect width="20" height="14" x="2" y="6" rx="2" />
-                <path d="M22 10H2" />
-              </svg>
-            </CardHeader>
-            <CardContent>
-              {isLoadingTicketsSummary ? renderLoading() : ticketsSummaryError ? renderError(ticketsSummaryError) : (
-                <div className="text-2xl font-bold">{ticketsSummary?.closed}</div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Tickets successfully resolved
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                className="h-4 w-4 text-muted-foreground"
-              >
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-              </svg>
-            </CardHeader>
-            <CardContent>
-              {isLoadingTotalAssets ? renderLoading() : totalAssetsError ? renderError(totalAssetsError) : (
-                <div className="text-2xl font-bold">{totalAssets}</div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                All IT assets managed
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+    <div className="flex flex-col gap-6 p-4 md:p-6">
+      <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+        <LayoutDashboard className="h-8 w-8" /> Welcome to your Dashboard!
+      </h1>
+      <p className="text-muted-foreground text-lg">
+        This is where you'll see an overview of your IT operations.
+      </p>
 
-        <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Tickets Created Per Month</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoadingTicketsPerMonth ? renderLoading() : ticketsPerMonthError ? renderError(ticketsPerMonthError) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={ticketsPerMonth}>
-                    <XAxis
-                      dataKey="month"
-                      stroke="#888888"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="#888888"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => `${value}`}
-                    />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="tickets" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
+      {/* Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard
+          title="Open Tickets"
+          value={summaryData?.open || 0}
+          icon={Ticket}
+          color="text-red-500"
+          description="Tickets awaiting action"
+        />
+        <SummaryCard
+          title="In Progress"
+          value={summaryData?.inProgress || 0}
+          icon={Hourglass}
+          color="text-blue-500"
+          description="Tickets currently being worked on"
+        />
+        <SummaryCard
+          title="Closed Tickets"
+          value={summaryData?.closed || 0}
+          icon={CheckCircle}
+          color="text-green-500"
+          description="Tickets resolved this month"
+        />
+        <SummaryCard
+          title="Total Tickets"
+          value={summaryData?.total || 0}
+          icon={Activity}
+          color="text-purple-500"
+          description="All tickets in the system"
+        />
+      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Issue Categories Distribution</CardTitle>
-            </CardHeader>
-            <CardContent className="flex justify-center items-center h-[350px]">
-              {isLoadingIssueCategories ? renderLoading() : issueCategoriesError ? renderError(issueCategoriesError) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={issueCategories}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      fill="#8884d8"
-                      label
-                    >
-                      {issueCategories?.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Tickets</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoadingAllTickets ? renderLoading() : allTicketsError ? renderError(allTicketsError) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created At</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentTickets.length > 0 ? (
-                    recentTickets.map((ticket) => (
-                      <TableRow key={ticket.id} onClick={() => console.log(`Open ticket details for ${ticket.id}`)} className="cursor-pointer hover:bg-muted">
-                        <TableCell className="font-medium">{ticket.subject}</TableCell>
-                        <TableCell>{ticket.category}</TableCell>
-                        <TableCell>
-                          <Badge variant={getPriorityBadgeVariant(ticket.priority)}>{ticket.priority}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status}</Badge>
-                        </TableCell>
-                        <TableCell>{format(new Date(ticket.created_at!), 'MMM dd, yyyy HH:mm')}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
-                        No recent tickets found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+      {/* Charts Section */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+          <h3 className="text-lg font-semibold mb-4">Tickets Created Per Month</h3>
+          <div className="h-64">
+            {ticketsPerMonthData && ticketsPerMonthData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={ticketsPerMonthData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--popover))',
+                      borderColor: 'hsl(var(--border))',
+                      borderRadius: 'var(--radius)',
+                    }}
+                    itemStyle={{ color: 'hsl(var(--foreground))' }}
+                  />
+                  <Bar dataKey="tickets" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center bg-muted rounded-md">
+                <p className="text-muted-foreground">No data for tickets per month.</p>
+              </div>
             )}
-          </CardContent>
-        </Card>
-      </main>
+          </div>
+        </div>
+
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+          <h3 className="text-lg font-semibold mb-4">Issue Categories Distribution</h3>
+          <div className="h-64">
+            {issueCategoriesData && issueCategoriesData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={issueCategoriesData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    nameKey="name"
+                  >
+                    {issueCategoriesData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--popover))',
+                      borderColor: 'hsl(var(--border))',
+                      borderRadius: 'var(--radius)',
+                    }}
+                    itemStyle={{ color: 'hsl(var(--foreground))' }}
+                  />
+                  <Legend
+                    wrapperStyle={{ paddingTop: '20px' }}
+                    formatter={(value, entry) => (
+                      <span style={{ color: 'hsl(var(--foreground))' }}>{value}</span>
+                    )}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center bg-muted rounded-md">
+                <p className="text-muted-foreground">No data for issue categories.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Tickets Table */}
+      <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+        <h3 className="text-lg font-semibold mb-4">Recent Tickets</h3>
+        <div className="overflow-x-auto">
+          {recentTickets && recentTickets.length > 0 ? (
+            <table className="w-full text-sm text-left text-muted-foreground">
+              <thead className="text-xs text-foreground uppercase bg-muted">
+                <tr>
+                  <th scope="col" className="px-6 py-3">Ticket ID</th>
+                  <th scope="col" className="px-6 py-3">Title</th>
+                  <th scope="col" className="px-6 py-3">Status</th>
+                  <th scope="col" className="px-6 py-3">Assigned To</th>
+                  <th scope="col" className="px-6 py-3">Updated At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentTickets.map((ticket) => (
+                  <tr key={ticket.id} className="bg-background border-b hover:bg-muted/50 transition-colors">
+                    <td className="px-6 py-4 font-medium text-foreground">{`#${ticket.id.substring(0, 8)}`}</td>
+                    <td className="px-6 py-4">{ticket.title}</td>
+                    <td className="px-6 py-4">
+                      <Badge variant={getStatusBadgeVariant(ticket.status)}>
+                        {ticket.status}
+                      </Badge>
+                    </td>
+                    {/* Display raw assigned_to UUID or a placeholder for now */}
+                    <td className="px-6 py-4">
+                      {ticket.assigned_to ? ticket.assigned_to.substring(0, 8) : 'Unassigned'}
+                    </td>
+                    <td className="px-6 py-4">
+                      {format(new Date(ticket.updated_at), 'MMM dd, yyyy HH:mm')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="h-32 flex items-center justify-center bg-muted rounded-md">
+              <p className="text-muted-foreground">No recent tickets found.</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

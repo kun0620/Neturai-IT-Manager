@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Drawer,
   DrawerContent,
@@ -65,7 +65,7 @@ export function TicketDetailsDrawer({
   const [editedAssignee, setEditedAssignee] = useState<string | null>();
 
   // Reset state when drawer opens/closes or ticket changes
-  useState(() => {
+  useEffect(() => {
     if (ticket) {
       setEditedStatus(ticket.status);
       setEditedPriority(ticket.priority);

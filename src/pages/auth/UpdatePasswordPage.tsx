@@ -1,5 +1,5 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -24,20 +24,22 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 
-const formSchema = z
-  .object({
-    password: z
-      .string()
-      .min(8, { message: 'Password must be at least 8 characters.' }),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match.',
-    path: ['confirmPassword'],
-  });
+const formSchema = z.object({
+  password: z
+    .string()
+    .min(8, { message: 'Password must be at least 8 characters.' }),
+  confirmPassword: z
+    .string()
+    .min(8, { message: 'Confirm password must be at least 8 characters.' }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match.",
+  path: ['confirmPassword'],
+});
 
 const UpdatePasswordPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [isValidToken, setIsValidToken] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -46,6 +48,32 @@ const UpdatePasswordPage: React.FC = () => {
       confirmPassword: '',
     },
   });
+
+  useEffect(() => {
+    const accessToken = searchParams.get('access_token');
+    const refreshToken = searchParams.get('refresh_token');
+
+    if (accessToken && refreshToken) {
+      supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      }).then(({ error }) => {
+        if (error) {
+          toast.error('Invalid Token', {
+            description: 'The password reset link is invalid or expired.',
+          });
+          navigate('/forgot-password');
+        } else {
+          setIsValidToken(true);
+        }
+      });
+    } else {
+      toast.error('Missing Token', {
+        description: 'No password reset token found. Please use the link from your email.',
+      });
+      navigate('/forgot-password');
+    }
+  }, [searchParams, navigate]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     const { error } = await supabase.auth.updateUser({
@@ -58,11 +86,32 @@ const UpdatePasswordPage: React.FC = () => {
       });
     } else {
       toast.success('Password Updated', {
-        description: 'Your password has been successfully updated.',
+        description: 'Your password has been updated successfully. You can now log in.',
       });
-      navigate('/login'); // Redirect to login page after successful update
+      navigate('/login');
     }
   };
+
+  if (!isValidToken) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="mx-auto max-w-sm">
+          <CardHeader>
+            <CardTitle className="text-2xl">Verifying Token...</CardTitle>
+            <CardDescription>Please wait while we verify your reset link.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-center">If you are not redirected, please try again from the forgot password page.</p>
+            <div className="mt-4 text-center text-sm">
+              <Link to="/forgot-password" className="underline">
+                Go to Forgot Password
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
