@@ -18,33 +18,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCreateTicket } from '@/hooks/useTickets';
+import { useTickets } from '@/hooks/useTickets'; // Import the single useTickets object
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import { Enums } from '@/types/supabase';
+import { Enums, Tables } from '@/types/database.types'; // Import Tables for category type
 
 interface CreateTicketDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  categories: Tables<'ticket_categories'>[]; // Accept categories as prop
 }
 
-export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps) {
+export function CreateTicketDialog({ isOpen, onClose, categories }: CreateTicketDialogProps) {
   const { user } = useAuth();
+  // Destructure useCreateTicket from the useTickets object
+  const { useCreateTicket } = useTickets;
   const createTicketMutation = useCreateTicket();
 
   const [step, setStep] = useState(1);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<Enums<'ticket_category'>>('General');
+  const [selectedCategoryName, setSelectedCategoryName] = useState<string>(categories[0]?.name || ''); // Use category name
   const [priority, setPriority] = useState<Enums<'ticket_priority'>>('Low');
   const [assignee, setAssignee] = useState('');
+
+  // Set initial category if categories are loaded
+  useState(() => {
+    if (categories.length > 0 && !selectedCategoryName) {
+      setSelectedCategoryName(categories[0].name);
+    }
+  });
 
   const resetForm = () => {
     setStep(1);
     setSubject('');
     setDescription('');
-    setCategory('General');
+    setSelectedCategoryName(categories[0]?.name || '');
     setPriority('Low');
     setAssignee('');
   };
@@ -67,12 +77,18 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
       return;
     }
 
+    const selectedCategory = categories.find(cat => cat.name === selectedCategoryName);
+    if (!selectedCategory) {
+      toast.error('Please select a valid category.');
+      return;
+    }
+
     try {
       await createTicketMutation.mutateAsync({
         user_id: user.id,
         subject,
         description,
-        category,
+        category_id: selectedCategory.id, // Pass category_id
         priority,
         assignee: assignee || null,
         status: 'Open', // Default status for new tickets
@@ -125,20 +141,18 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
             <div className="grid gap-2">
               <Label htmlFor="category">Category</Label>
               <Select
-                value={category}
-                onValueChange={(value: Enums<'ticket_category'>) => setCategory(value)}
+                value={selectedCategoryName}
+                onValueChange={(value: string) => setSelectedCategoryName(value)}
               >
                 <SelectTrigger id="category">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {['Hardware', 'Software', 'Network', 'Account', 'General', 'Other'].map(
-                    (cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    )
-                  )}
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

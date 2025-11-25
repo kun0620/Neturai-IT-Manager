@@ -7,13 +7,8 @@ import {
   Users,
   BarChart2,
   Settings,
-  FileText, // Changed Log to FileText
   Menu,
-  X,
-  Sun,
-  Moon,
   Bell,
-  Kanban, // Added Kanban icon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -32,6 +27,7 @@ import { useAuth } from '@/context/AuthContext';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input'; // Import Input component
 
 interface NavItem {
   name: string;
@@ -100,7 +96,7 @@ export const MainLayout: React.FC = () => {
                   key={item.name}
                   to={item.href}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
-                    location.pathname === item.href
+                    location.pathname.startsWith(item.href)
                       ? 'bg-muted text-primary'
                       : 'text-muted-foreground'
                   }`}
@@ -131,16 +127,17 @@ export const MainLayout: React.FC = () => {
                 <Link
                   to="/"
                   className="flex items-center gap-2 text-lg font-semibold mb-4"
+                  onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <HardHat className="h-6 w-6" />
-                  <span className="sr-only">Neturai IT Manager</span>
+                  <span className="">Neturai IT Manager</span>
                 </Link>
                 {navItems.map((item) => (
                   <Link
                     key={item.name}
                     to={item.href}
                     className={`mx-[-0.65rem] flex items-center gap-4 rounded-xl px-3 py-2 ${
-                      location.pathname === item.href
+                      location.pathname.startsWith(item.href)
                         ? 'bg-muted text-foreground hover:text-foreground'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
@@ -154,13 +151,13 @@ export const MainLayout: React.FC = () => {
             </SheetContent>
           </Sheet>
 
-          {/* Search Bar (can be added here) */}
+          {/* Search Bar */}
           <div className="w-full flex-1">
-            {/* <Input
+            <Input
               type="search"
               placeholder="Search..."
               className="w-full appearance-none bg-background pl-8 shadow-none md:w-2/3 lg:w-1/3"
-            /> */}
+            />
           </div>
 
           {/* Right-side actions */}

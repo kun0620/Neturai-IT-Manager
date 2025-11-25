@@ -1,27 +1,75 @@
 import React from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
-import { useTicketDetails } from '@/hooks/useTicketDetails'; // Assuming this hook will be created
+import { useTickets } from '@/hooks/useTickets';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Button } from '@/components/ui/button';
+import { Tables } from '@/types/database.types';
+import { format } from 'date-fns';
 
 interface TicketDetailDialogProps {
   isOpen: boolean;
   onClose: () => void;
   ticketId: string;
+  categories: Tables<'ticket_categories'>[];
 }
 
-export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({ isOpen, onClose, ticketId }) => {
-  const { data: ticket, isLoading, error } = useTicketDetails(ticketId); // Fetch ticket details
+export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({
+  isOpen,
+  onClose,
+  ticketId,
+  categories,
+}) => {
+  const { useTicketById } = useTickets;
+  const { data: ticket, isLoading, error } = useTicketById(ticketId);
+
+  const getCategoryName = (categoryId: string | null) => {
+    if (!categoryId) return 'N/A';
+    const category = categories.find(cat => cat.id === categoryId);
+    return category ? category.name : 'Unknown';
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'Critical':
+        return 'bg-red-500 text-white';
+      case 'High':
+        return 'bg-orange-500 text-white';
+      case 'Medium':
+        return 'bg-yellow-500 text-black';
+      case 'Low':
+        return 'bg-green-500 text-white';
+      default:
+        return 'bg-gray-200 text-black';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Open':
+        return 'bg-blue-500 text-white';
+      case 'In Progress':
+        return 'bg-indigo-500 text-white';
+      case 'Resolved':
+        return 'bg-emerald-500 text-white';
+      case 'Closed':
+        return 'bg-gray-500 text-white';
+      default:
+        return 'bg-gray-200 text-black';
+    }
+  };
 
   if (isLoading) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-[800px] h-[70vh] flex items-center justify-center">
+        <DialogContent className="sm:max-w-[425px]">
           <LoadingSpinner />
         </DialogContent>
       </Dialog>
@@ -31,11 +79,11 @@ export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({ isOpen, 
   if (error) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-[800px] h-[70vh]">
+        <DialogContent className="sm:max-w-[425px]">
           <EmptyState
-            title="Error Loading Ticket Details"
+            title="Error Loading Ticket"
             message={error.message}
-            action={<Button onClick={onClose}>Close</Button>}
+            action={<Button onClick={() => window.location.reload()}>Retry</Button>}
           />
         </DialogContent>
       </Dialog>
@@ -45,104 +93,64 @@ export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({ isOpen, 
   if (!ticket) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-[800px] h-[70vh]">
-          <EmptyState
-            title="Ticket Not Found"
-            message="The requested ticket could not be loaded."
-            action={<Button onClick={onClose}>Close</Button>}
-          />
+        <DialogContent className="sm:max-w-[425px]">
+          <EmptyState title="Ticket Not Found" message="The selected ticket could not be loaded." />
         </DialogContent>
       </Dialog>
     );
   }
 
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case 'Open':
-        return 'destructive';
-      case 'In Progress':
-        return 'secondary';
-      case 'Closed':
-      case 'Resolved':
-        return 'default';
-      case 'Pending':
-        return 'outline';
-      default:
-        return 'outline';
-    }
-  };
-
-  const getPriorityBadgeVariant = (priority: string) => {
-    switch (priority) {
-      case 'High':
-        return 'destructive';
-      case 'Medium':
-        return 'secondary';
-      case 'Low':
-        return 'outline';
-      default:
-        return 'outline';
-    }
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] h-[70vh] flex flex-col">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Ticket #{ticket.id?.substring(0, 8)} - {ticket.subject}
-          </DialogTitle>
-          <DialogDescription>
-            Details and history for this ticket.
-          </DialogDescription>
+          <DialogTitle>{ticket.title}</DialogTitle>
+          <DialogDescription>Ticket ID: {ticket.id}</DialogDescription>
         </DialogHeader>
-        <Separator className="my-2" />
-        <ScrollArea className="flex-grow pr-4">
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="col-span-1 text-sm font-medium">Status:</div>
-              <div className="col-span-3">
-                <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status}</Badge>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="col-span-1 text-sm font-medium">Priority:</div>
-              <div className="col-span-3">
-                <Badge variant={getPriorityBadgeVariant(ticket.priority)}>{ticket.priority}</Badge>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="col-span-1 text-sm font-medium">Category:</div>
-              <div className="col-span-3 text-sm">{ticket.category}</div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="col-span-1 text-sm font-medium">Created By:</div>
-              <div className="col-span-3 text-sm">{ticket.users?.name || 'N/A'}</div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="col-span-1 text-sm font-medium">Assigned To:</div>
-              <div className="col-span-3 text-sm">{ticket.assignee_users?.name || 'Unassigned'}</div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="col-span-1 text-sm font-medium">Created At:</div>
-              <div className="col-span-3 text-sm">
-                {ticket.created_at ? format(new Date(ticket.created_at), 'PPP p') : 'N/A'}
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <div className="col-span-1 text-sm font-medium">Last Updated:</div>
-              <div className="col-span-3 text-sm">
-                {ticket.updated_at ? format(new Date(ticket.updated_at), 'PPP p') : 'N/A'}
-              </div>
-            </div>
-            <Separator className="my-4" />
-            <div>
-              <h4 className="mb-2 text-lg font-semibold">Description</h4>
-              <p className="text-sm text-gray-700 dark:text-gray-300">{ticket.description}</p>
-            </div>
-            {/* Add sections for comments and history here later */}
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <span className="text-sm font-medium col-span-1">Category:</span>
+            <span className="col-span-3">{getCategoryName(ticket.category_id)}</span>
           </div>
-        </ScrollArea>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <span className="text-sm font-medium col-span-1">Priority:</span>
+            <span className="col-span-3">
+              <Badge className={getPriorityColor(ticket.priority)}>{ticket.priority}</Badge>
+            </span>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <span className="text-sm font-medium col-span-1">Status:</span>
+            <span className="col-span-3">
+              <Badge className={getStatusColor(ticket.status)}>{ticket.status}</Badge>
+            </span>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <span className="text-sm font-medium col-span-1">Description:</span>
+            <span className="col-span-3">{ticket.description || 'No description provided.'}</span>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <span className="text-sm font-medium col-span-1">Created By:</span>
+            <span className="col-span-3">{ticket.created_by}</span> {/* This will be a UUID, ideally should fetch user name */}
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <span className="text-sm font-medium col-span-1">Assigned To:</span>
+            <span className="col-span-3">{ticket.assigned_to || 'Unassigned'}</span> {/* This will be a UUID, ideally should fetch user name */}
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <span className="text-sm font-medium col-span-1">Created At:</span>
+            <span className="col-span-3">{format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')}</span>
+          </div>
+          {ticket.resolved_at && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <span className="text-sm font-medium col-span-1">Resolved At:</span>
+              <span className="col-span-3">{format(new Date(ticket.resolved_at), 'MMM dd, yyyy HH:mm')}</span>
+            </div>
+          )}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <span className="text-sm font-medium col-span-1">Last Updated:</span>
+            <span className="col-span-3">{format(new Date(ticket.updated_at), 'MMM dd, yyyy HH:mm')}</span>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

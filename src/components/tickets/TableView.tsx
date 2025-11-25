@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   Table,
   TableBody,
@@ -6,91 +7,89 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tables, Enums } from '@/types/supabase';
 import { Badge } from '@/components/ui/badge';
+import { Tables } from '@/types/database.types';
 import { format } from 'date-fns';
 
 interface TableViewProps {
   tickets: Tables<'tickets'>[];
+  categories: Tables<'ticket_categories'>[];
   onTicketClick: (ticketId: string) => void;
 }
 
-export function TableView({ tickets, onTicketClick }: TableViewProps) {
-  const getStatusBadgeVariant = (status: Enums<'ticket_status'>) => {
+export const TableView: React.FC<TableViewProps> = ({ tickets, categories, onTicketClick }) => {
+  const getCategoryName = (categoryId: string | null) => {
+    if (!categoryId) return 'N/A';
+    const category = categories.find(cat => cat.id === categoryId);
+    return category ? category.name : 'Unknown';
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'Critical':
+        return 'bg-red-500 text-white';
+      case 'High':
+        return 'bg-orange-500 text-white';
+      case 'Medium':
+        return 'bg-yellow-500 text-black';
+      case 'Low':
+        return 'bg-green-500 text-white';
+      default:
+        return 'bg-gray-200 text-black';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'Open':
-        return 'destructive';
+        return 'bg-blue-500 text-white';
       case 'In Progress':
-        return 'secondary';
-      case 'Closed':
+        return 'bg-indigo-500 text-white';
       case 'Resolved':
-        return 'default';
-      case 'Pending':
-        return 'outline';
+        return 'bg-emerald-500 text-white';
+      case 'Closed':
+        return 'bg-gray-500 text-white';
       default:
-        return 'outline';
+        return 'bg-gray-200 text-black';
     }
   };
 
-  const getPriorityBadgeVariant = (priority: Enums<'ticket_priority'>) => {
-    switch (priority) {
-      case 'High':
-        return 'destructive';
-      case 'Medium':
-        return 'secondary';
-      case 'Low':
-        return 'outline';
-      default:
-        return 'outline';
-    }
-  };
+  if (tickets.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No tickets found. Create a new one to get started!
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-md border overflow-auto h-full">
+    <div className="rounded-md border overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[100px]">ID</TableHead>
-            <TableHead>Subject</TableHead>
+            <TableHead>Title</TableHead>
             <TableHead>Category</TableHead>
             <TableHead>Priority</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Assignee</TableHead>
-            <TableHead>Updated At</TableHead>
+            <TableHead>Created At</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tickets.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                No tickets found.
+          {tickets.map((ticket) => (
+            <TableRow key={ticket.id} onClick={() => onTicketClick(ticket.id)} className="cursor-pointer hover:bg-accent">
+              <TableCell className="font-medium">{ticket.title}</TableCell>
+              <TableCell>{getCategoryName(ticket.category_id)}</TableCell>
+              <TableCell>
+                <Badge className={getPriorityColor(ticket.priority)}>{ticket.priority}</Badge>
               </TableCell>
+              <TableCell>
+                <Badge className={getStatusColor(ticket.status)}>{ticket.status}</Badge>
+              </TableCell>
+              <TableCell>{format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')}</TableCell>
             </TableRow>
-          ) : (
-            tickets.map((ticket) => (
-              <TableRow key={ticket.id} onClick={() => onTicketClick(ticket.id)} className="cursor-pointer">
-                <TableCell className="font-medium">{ticket.id.substring(0, 8)}</TableCell>
-                <TableCell>{ticket.subject}</TableCell>
-                <TableCell>{ticket.category}</TableCell>
-                <TableCell>
-                  <Badge variant={getPriorityBadgeVariant(ticket.priority)}>
-                    {ticket.priority}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={getStatusBadgeVariant(ticket.status)}>
-                    {ticket.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{ticket.assignee || 'Unassigned'}</TableCell>
-                <TableCell>
-                  {ticket.updated_at ? format(new Date(ticket.updated_at), 'MMM dd, yyyy HH:mm') : 'N/A'}
-                </TableCell>
-              </TableRow>
-            ))
-          )}
+          ))}
         </TableBody>
       </Table>
     </div>
   );
-}
+};

@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tables } from '@/types/supabase';
+import { Tables } from '@/types/database.types';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
@@ -88,8 +88,8 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
       case 'Closed':
       case 'Resolved':
         return 'default';
-      case 'Pending':
-        return 'outline';
+      // case 'Pending': // 'Pending' is not in ticket_status enum
+      //   return 'outline';
       default:
         return 'outline';
     }
@@ -120,9 +120,9 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
                 </TableHead>
                 <TableHead
                   className="cursor-pointer"
-                  onClick={() => requestSort('subject')}
+                  onClick={() => requestSort('title')}
                 >
-                  Subject {getSortIndicator('subject')}
+                  Title {getSortIndicator('title')}
                 </TableHead>
                 <TableHead
                   className="cursor-pointer"
@@ -132,9 +132,9 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
                 </TableHead>
                 <TableHead
                   className="cursor-pointer"
-                  onClick={() => requestSort('assignee')}
+                  onClick={() => requestSort('assigned_to')}
                 >
-                  Assignee {getSortIndicator('assignee')}
+                  Assigned To {getSortIndicator('assigned_to')}
                 </TableHead>
                 <TableHead
                   className="cursor-pointer"
@@ -151,13 +151,13 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
                     <TableCell className="font-medium">
                       {ticket.id.substring(0, 8)}
                     </TableCell>
-                    <TableCell>{ticket.subject}</TableCell>
+                    <TableCell>{ticket.title}</TableCell>
                     <TableCell>
                       <Badge variant={getStatusBadgeVariant(ticket.status)}>
                         {ticket.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>{ticket.assignee || 'Unassigned'}</TableCell>
+                    <TableCell>{ticket.assigned_to ? ticket.assigned_to.substring(0, 8) : 'Unassigned'}</TableCell>
                     <TableCell>
                       {ticket.updated_at
                         ? format(new Date(ticket.updated_at), 'MMM dd, yyyy HH:mm')

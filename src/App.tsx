@@ -13,7 +13,7 @@ import { SettingsAndLogs } from '@/pages/SettingsAndLogs';
 import { AuthProvider } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { ThemeProvider } from '@/components/theme-provider';
-import { Toaster } from '@/components/ui/sonner'; // Changed from toaster to sonner
+import { Toaster } from '@/components/ui/sonner';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
@@ -44,7 +44,7 @@ function App() {
             </Routes>
           </AuthProvider>
         </BrowserRouter>
-        <Toaster /> {/* Toaster should be outside BrowserRouter if it's a global component */}
+        <Toaster />
       </ThemeProvider>
     </QueryClientProvider>
   );

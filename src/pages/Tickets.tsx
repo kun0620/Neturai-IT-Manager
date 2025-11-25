@@ -5,7 +5,7 @@ import { PlusCircle, Table2, Kanban } from 'lucide-react';
 import { TableView } from '@/components/tickets/TableView';
 import { KanbanView } from '@/components/tickets/KanbanView';
 import { CreateTicketDialog } from '@/components/tickets/CreateTicketDialog';
-import { useTickets } from '@/hooks/useTickets';
+import { useTickets } from '@/hooks/useTickets'; // Import the single useTickets object
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useAuth } from '@/context/AuthContext';
@@ -16,14 +16,18 @@ export const Tickets: React.FC = () => {
   const [isTicketDetailDialogOpen, setIsTicketDetailDialogOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const { user } = useAuth();
-  const { data: tickets, isLoading, error } = useTickets();
+
+  // Destructure useAllTickets and useTicketCategories from the useTickets object
+  const { useAllTickets, useTicketCategories } = useTickets;
+  const { data: tickets, isLoading: isLoadingTickets, error: ticketsError } = useAllTickets(); // Call useAllTickets as a function
+  const { data: categories, isLoading: isLoadingCategories, error: categoriesError } = useTicketCategories();
 
   const handleTicketClick = (ticketId: string) => {
     setSelectedTicketId(ticketId);
     setIsTicketDetailDialogOpen(true);
   };
 
-  if (isLoading) {
+  if (isLoadingTickets || isLoadingCategories) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <LoadingSpinner />
@@ -31,11 +35,11 @@ export const Tickets: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (ticketsError || categoriesError) {
     return (
       <EmptyState
         title="Error Loading Tickets"
-        message={error.message}
+        message={ticketsError?.message || categoriesError?.message || "An unknown error occurred."}
         action={<Button onClick={() => window.location.reload()}>Retry</Button>}
       />
     );
@@ -64,10 +68,10 @@ export const Tickets: React.FC = () => {
         </div>
 
         <TabsContent value="kanban" className="mt-4">
-          <KanbanView tickets={tickets || []} onTicketClick={handleTicketClick} />
+          <KanbanView tickets={tickets || []} categories={categories || []} onTicketClick={handleTicketClick} />
         </TabsContent>
         <TabsContent value="table" className="mt-4">
-          <TableView tickets={tickets || []} onTicketClick={handleTicketClick} />
+          <TableView tickets={tickets || []} categories={categories || []} onTicketClick={handleTicketClick} />
         </TabsContent>
       </Tabs>
 
@@ -75,7 +79,7 @@ export const Tickets: React.FC = () => {
         <CreateTicketDialog
           isOpen={isCreateTicketDialogOpen}
           onClose={() => setIsCreateTicketDialogOpen(false)}
-          userId={user?.id || ''}
+          categories={categories || []} // Pass categories to dialog
         />
       )}
 
@@ -87,6 +91,7 @@ export const Tickets: React.FC = () => {
             setSelectedTicketId(null);
           }}
           ticketId={selectedTicketId}
+          categories={categories || []} // Pass categories to detail dialog
         />
       )}
     </div>
