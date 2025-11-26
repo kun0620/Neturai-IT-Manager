@@ -1,66 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
     import { ColumnDef } from '@tanstack/react-table';
     import { format } from 'date-fns';
-    import { Button } from '@/components/ui/button';
     import { DataTable } from '@/components/ui/data-table';
-    import { useUsers } from '@/hooks/useUsers';
-    import { Tables } from '@/types/supabase';
-    import { UserFormDialog } from '@/components/users/UserFormDialog';
-    import { DeleteUserDialog } from '@/components/users/DeleteUserDialog';
-    import { ResetPasswordDialog } from '@/components/users/ResetPasswordDialog';
-    import { PlusCircle } from 'lucide-react';
-    import { useQueryClient } from '@tanstack/react-query';
-    import { LoadingSpinner } from '@/components/ui/loading-spinner'; // Corrected import path
+    import { useUsers, UserWithRole } from '@/hooks/useUsers'; // Import UserWithRole from useUsers
+    import { LoadingSpinner } from '@/components/ui/loading-spinner';
     import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
     import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
 
-    type UserWithRole = Tables<'users'> & {
-      roles: Tables<'roles'> | null;
-    };
-
     export const Users: React.FC = () => {
-      const queryClient = useQueryClient();
       const { data: users, isLoading, isError, error } = useUsers();
 
-      const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
-      const [editingUser, setEditingUser] = useState<UserWithRole | undefined>(undefined);
-      const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-      const [deletingUser, setDeletingUser] = useState<{ id: string; name: string } | undefined>(undefined);
-      const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
-      const [resettingUser, setResettingUser] = useState<{ email: string; name: string } | undefined>(undefined);
-
-      const handleAddUser = () => {
-        setEditingUser(undefined);
-        setIsFormDialogOpen(true);
-      };
-
-      const handleEditUser = (user: UserWithRole) => {
-        setEditingUser(user);
-        setIsFormDialogOpen(true);
-      };
-
-      const handleDeleteUser = (user: UserWithRole) => {
-        setDeletingUser({ id: user.id, name: user.name });
-        setIsDeleteDialogOpen(true);
-      };
-
-      const handleResetPassword = (user: UserWithRole) => {
-        setResettingUser({ email: user.email, name: user.name });
-        setIsResetPasswordDialogOpen(true);
-      };
-
-      const handleDialogClose = () => {
-        setIsFormDialogOpen(false);
-        setIsDeleteDialogOpen(false);
-        setIsResetPasswordDialogOpen(false);
-        setEditingUser(undefined);
-        setDeletingUser(undefined);
-        setResettingUser(undefined);
-      };
-
-      const handleSuccess = () => {
-        queryClient.invalidateQueries({ queryKey: ['users'] });
-      };
+      // Removed all state and handlers for dialogs related to CRUD operations
 
       const columns: ColumnDef<UserWithRole>[] = [
         {
@@ -101,25 +51,20 @@ import React, { useState } from 'react';
         {
           accessorKey: 'created_at',
           header: 'Created Date',
-          cell: ({ row }) => format(new Date(row.getValue('created_at')), 'PPP'),
+          cell: ({ row }) => {
+            const createdAt = row.getValue('created_at') as string | null;
+            if (createdAt) {
+              try {
+                return format(new Date(createdAt), 'PPP');
+              } catch (e) {
+                console.error("Error formatting date:", e);
+                return 'Invalid Date';
+              }
+            }
+            return 'N/A';
+          },
         },
-        {
-          id: 'actions',
-          header: 'Actions',
-          cell: ({ row }) => (
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" onClick={() => handleEditUser(row.original)}>
-                Edit
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleResetPassword(row.original)}>
-                Reset Password
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => handleDeleteUser(row.original)}>
-                Delete
-              </Button>
-            </div>
-          ),
-        },
+        // Removed 'actions' column as this is a view-only page
       ];
 
       if (isLoading) {
@@ -142,12 +87,10 @@ import React, { useState } from 'react';
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold">User Management</h1>
-            <Button onClick={handleAddUser}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add User
-            </Button>
+            {/* Removed Add User button */}
           </div>
           <p className="text-muted-foreground">
-            Manage users and their roles within the system.
+            View user information and their assigned roles within the system. This page is for viewing user data only.
           </p>
 
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
@@ -159,32 +102,7 @@ import React, { useState } from 'react';
             />
           </div>
 
-          <UserFormDialog
-            isOpen={isFormDialogOpen}
-            onClose={handleDialogClose}
-            user={editingUser}
-            onSuccess={handleSuccess}
-          />
-
-          {deletingUser && (
-            <DeleteUserDialog
-              isOpen={isDeleteDialogOpen}
-              onClose={handleDialogClose}
-              userId={deletingUser.id}
-              userName={deletingUser.name}
-              onSuccess={handleSuccess}
-            />
-          )}
-
-          {resettingUser && (
-            <ResetPasswordDialog
-              isOpen={isResetPasswordDialogOpen}
-              onClose={handleDialogClose}
-              userEmail={resettingUser.email}
-              userName={resettingUser.name}
-              onSuccess={handleSuccess}
-            />
-          )}
+          {/* Removed UserFormDialog, DeleteUserDialog, ResetPasswordDialog components */}
         </div>
       );
     };
