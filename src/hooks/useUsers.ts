@@ -2,16 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Tables } from '@/types/supabase';
 
-type UserWithRole = Tables<'users'> & {
-  roles: Tables<'roles'> | null;
-};
+export type UserProfile = Tables<'users'>;
 
-async function fetchUsers(): Promise<UserWithRole[]> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*, roles(name)')
-    .order('created_at', { ascending: false });
-
+async function getUsers(): Promise<UserProfile[]> {
+  const { data, error } = await supabase.from('users').select('id, email, name');
   if (error) {
     throw new Error(error.message);
   }
@@ -19,9 +13,9 @@ async function fetchUsers(): Promise<UserWithRole[]> {
 }
 
 export function useUsers() {
-  return useQuery<UserWithRole[], Error>({
+  return useQuery<UserProfile[], Error>({
     queryKey: ['users'],
-    queryFn: fetchUsers,
+    queryFn: getUsers,
   });
 }
 

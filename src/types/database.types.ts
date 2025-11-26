@@ -13,39 +13,48 @@ export type Database = {
         Row: {
           asset_code: string | null
           assigned_to: string | null
+          category: string | null
           category_id: string | null
           created_at: string
           description: string | null
           id: string
           image_url: string | null
           last_service_date: string | null
+          location: string | null
           name: string
+          serial_number: string | null
           status: Database['public']['Enums']['asset_status']
           updated_at: string
         }
         Insert: {
           asset_code?: string | null
           assigned_to?: string | null
+          category?: string | null
           category_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
           image_url?: string | null
           last_service_date?: string | null
+          location?: string | null
           name: string
+          serial_number?: string | null
           status?: Database['public']['Enums']['asset_status']
           updated_at?: string
         }
         Update: {
           asset_code?: string | null
           assigned_to?: string | null
+          category?: string | null
           category_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
           image_url?: string | null
           last_service_date?: string | null
+          location?: string | null
           name?: string
+          serial_number?: string | null
           status?: Database['public']['Enums']['asset_status']
           updated_at?: string
         }
@@ -458,7 +467,7 @@ export type Database = {
       }
     }
     Enums: {
-      asset_status: 'In Use' | 'In Repair' | 'Retired' | 'Available'
+      asset_status: 'Available' | 'Assigned' | 'In Repair' | 'Retired' | 'Lost' | 'In Use'
       ticket_priority: 'Low' | 'Medium' | 'High' | 'Critical'
       ticket_status: 'Open' | 'In Progress' | 'Resolved' | 'Closed'
     }
