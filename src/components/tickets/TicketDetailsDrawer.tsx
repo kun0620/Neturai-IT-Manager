@@ -11,18 +11,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import {
-  useTicketById,
-  useTicketComments,
-  useTicketHistory,
-  useAddTicketComment,
-  useUpdateTicket,
-  useAddTicketHistory,
-} from '@/hooks/useTickets';
+import { useTickets } from '@/hooks/useTickets'; // Import the entire useTickets object
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Send, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { Tables, Enums } from '@/types/supabase';
@@ -47,18 +40,10 @@ export function TicketDetailsDrawer({
   ticketId,
 }: TicketDetailsDrawerProps) {
   const { user } = useAuth();
-  const { data: ticket, isLoading: isLoadingTicket } = useTicketById(ticketId || '');
-  const { data: comments, isLoading: isLoadingComments } = useTicketComments(
-    ticketId || ''
-  );
-  const { data: history, isLoading: isLoadingHistory } = useTicketHistory(
-    ticketId || ''
-  );
-  const addCommentMutation = useAddTicketComment();
-  const updateTicketMutation = useUpdateTicket();
-  const addHistoryMutation = useAddTicketHistory();
+  // Access hooks from the useTickets object
+  const { data: ticket, isLoading: isLoadingTicket } = useTickets.useTicketById(ticketId || '');
+  const updateTicketMutation = useTickets.useUpdateTicket();
 
-  const [newComment, setNewComment] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editedStatus, setEditedStatus] = useState<Enums<'ticket_status'>>();
   const [editedPriority, setEditedPriority] = useState<Enums<'ticket_priority'>>();
@@ -69,10 +54,9 @@ export function TicketDetailsDrawer({
     if (ticket) {
       setEditedStatus(ticket.status);
       setEditedPriority(ticket.priority);
-      setEditedAssignee(ticket.assignee);
+      setEditedAssignee(ticket.assigned_to);
     }
     setEditMode(false);
-    setNewComment('');
   }, [ticketId, ticket]);
 
   const getStatusBadgeVariant = (status: Tables<'tickets'>['status']) => {
@@ -91,57 +75,19 @@ export function TicketDetailsDrawer({
     }
   };
 
-  const handleAddComment = async () => {
-    if (!newComment.trim() || !ticketId || !user?.id) return;
-
-    try {
-      await addCommentMutation.mutateAsync({
-        ticket_id: ticketId,
-        user_id: user.id,
-        comment_text: newComment,
-      });
-      setNewComment('');
-      toast.success('Comment added successfully!');
-    } catch (error: any) {
-      toast.error(`Failed to add comment: ${error.message}`);
-    }
-  };
-
   const handleUpdateTicket = async () => {
     if (!ticketId || !user?.id || !ticket) return;
 
     const updates: Partial<Tables<'tickets'>> = {};
-    const historyEntries: Tables<'ticket_history'>['Insert'][] = [];
 
     if (editedStatus !== ticket.status) {
       updates.status = editedStatus;
-      historyEntries.push({
-        ticket_id: ticketId,
-        user_id: user.id,
-        change_type: 'status_change',
-        old_value: ticket.status,
-        new_value: editedStatus,
-      });
     }
     if (editedPriority !== ticket.priority) {
       updates.priority = editedPriority;
-      historyEntries.push({
-        ticket_id: ticketId,
-        user_id: user.id,
-        change_type: 'priority_change',
-        old_value: ticket.priority,
-        new_value: editedPriority,
-      });
     }
-    if (editedAssignee !== ticket.assignee) {
-      updates.assignee = editedAssignee;
-      historyEntries.push({
-        ticket_id: ticketId,
-        user_id: user.id,
-        change_type: 'assignee_change',
-        old_value: ticket.assignee || 'Unassigned',
-        new_value: editedAssignee || 'Unassigned',
-      });
+    if (editedAssignee !== ticket.assigned_to) {
+      updates.assigned_to = editedAssignee;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -150,10 +96,7 @@ export function TicketDetailsDrawer({
     }
 
     try {
-      await updateTicketMutation.mutateAsync({ id: ticketId, ...updates });
-      for (const entry of historyEntries) {
-        await addHistoryMutation.mutateAsync(entry);
-      }
+      await updateTicketMutation.mutateAsync({ id: ticketId, updates });
       toast.success('Ticket updated successfully!');
       setEditMode(false);
     } catch (error: any) {
@@ -185,7 +128,7 @@ export function TicketDetailsDrawer({
               <div className="p-4">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="text-2xl font-bold">{ticket.subject}</h3>
+                    <h3 className="text-2xl font-bold">{ticket.title}</h3>
                     <p className="text-sm text-muted-foreground">
                       Ticket ID: {ticket.id.substring(0, 8)}
                     </p>
@@ -200,10 +143,8 @@ export function TicketDetailsDrawer({
                 </div>
 
                 <Tabs defaultValue="details" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-1">
                     <TabsTrigger value="details">Details</TabsTrigger>
-                    <TabsTrigger value="comments">Comments</TabsTrigger>
-                    <TabsTrigger value="history">History</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="details" className="mt-4">
@@ -220,7 +161,7 @@ export function TicketDetailsDrawer({
                           <p className="text-sm font-medium text-muted-foreground">
                             Category
                           </p>
-                          <p className="text-base">{ticket.category}</p>
+                          <p className="text-base">{ticket.category_id || 'N/A'}</p>
                         </div>
                         <div>
                           <p className="text-sm font-medium text-muted-foreground">
@@ -237,7 +178,7 @@ export function TicketDetailsDrawer({
                                 <SelectValue placeholder="Select status" />
                               </SelectTrigger>
                               <SelectContent>
-                                {['Open', 'In Progress', 'Closed', 'Resolved', 'Pending'].map(
+                                {['Open', 'In Progress', 'Closed', 'Resolved'].map(
                                   (status) => (
                                     <SelectItem key={status} value={status}>
                                       {status}
@@ -286,10 +227,10 @@ export function TicketDetailsDrawer({
                             <Input
                               value={editedAssignee || ''}
                               onChange={(e) => setEditedAssignee(e.target.value || null)}
-                              placeholder="Assignee name"
+                              placeholder="Assignee ID"
                             />
                           ) : (
-                            <p className="text-base">{ticket.assignee || 'Unassigned'}</p>
+                            <p className="text-base">{ticket.assigned_to || 'Unassigned'}</p>
                           )}
                         </div>
                         <div>
@@ -324,112 +265,6 @@ export function TicketDetailsDrawer({
                           )}
                           Save Changes
                         </Button>
-                      )}
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="comments" className="mt-4">
-                    <div className="space-y-4">
-                      {isLoadingComments ? (
-                        Array.from({ length: 3 }).map((_, i) => (
-                          <div key={i} className="space-y-2">
-                            <Skeleton className="h-4 w-1/3" />
-                            <Skeleton className="h-8 w-full" />
-                          </div>
-                        ))
-                      ) : comments && comments.length > 0 ? (
-                        comments.map((comment) => (
-                          <div
-                            key={comment.id}
-                            className="border-b pb-2 last:border-b-0"
-                          >
-                            <p className="text-sm font-medium">
-                              {comment.user_id?.substring(0, 8) || 'Anonymous'}
-                              <span className="text-xs text-muted-foreground ml-2">
-                                {comment.created_at
-                                  ? format(
-                                      new Date(comment.created_at),
-                                      'MMM dd, yyyy HH:mm'
-                                    )
-                                  : 'N/A'}
-                              </span>
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {comment.comment_text}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-center text-muted-foreground">
-                          No comments yet.
-                        </p>
-                      )}
-                    </div>
-                    <div className="mt-4 flex gap-2">
-                      <Input
-                        placeholder="Add a comment..."
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') handleAddComment();
-                        }}
-                        disabled={addCommentMutation.isPending}
-                      />
-                      <Button
-                        onClick={handleAddComment}
-                        disabled={addCommentMutation.isPending || !newComment.trim()}
-                      >
-                        {addCommentMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="history" className="mt-4">
-                    <div className="space-y-4">
-                      {isLoadingHistory ? (
-                        Array.from({ length: 3 }).map((_, i) => (
-                          <div key={i} className="space-y-2">
-                            <Skeleton className="h-4 w-1/3" />
-                            <Skeleton className="h-8 w-full" />
-                          </div>
-                        ))
-                      ) : history && history.length > 0 ? (
-                        history.map((entry) => (
-                          <div
-                            key={entry.id}
-                            className="border-b pb-2 last:border-b-0"
-                          >
-                            <p className="text-sm font-medium">
-                              {entry.user_id?.substring(0, 8) || 'System'}
-                              <span className="text-xs text-muted-foreground ml-2">
-                                {entry.created_at
-                                  ? format(
-                                      new Date(entry.created_at),
-                                      'MMM dd, yyyy HH:mm'
-                                    )
-                                  : 'N/A'}
-                              </span>
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {entry.change_type.replace(/_/g, ' ')}: From{' '}
-                              <span className="font-semibold">
-                                {entry.old_value || 'N/A'}
-                              </span>{' '}
-                              to{' '}
-                              <span className="font-semibold">
-                                {entry.new_value || 'N/A'}
-                              </span>
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-center text-muted-foreground">
-                          No history available.
-                        </p>
                       )}
                     </div>
                   </TabsContent>

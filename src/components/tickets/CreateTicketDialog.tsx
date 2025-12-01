@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useTickets } from '@/hooks/useTickets'; // Import the single useTickets object
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/context/AuthContext'; // Corrected import path for useAuth
+import { useUsersForAssignment } from '@/hooks/useUsers'; // Import for assignee dropdown
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { Enums, Tables } from '@/types/database.types'; // Import Tables for category type
@@ -32,21 +33,21 @@ interface CreateTicketDialogProps {
 
 export function CreateTicketDialog({ isOpen, onClose, categories }: CreateTicketDialogProps) {
   const { user } = useAuth();
-  // Destructure useCreateTicket from the useTickets object
   const { useCreateTicket } = useTickets;
   const createTicketMutation = useCreateTicket();
+  const { data: usersForAssignment, isLoading: isLoadingUsers } = useUsersForAssignment();
 
   const [step, setStep] = useState(1);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedCategoryName, setSelectedCategoryName] = useState<string>(categories[0]?.name || ''); // Use category name
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || ''); // Use category ID
   const [priority, setPriority] = useState<Enums<'ticket_priority'>>('Low');
-  const [assignee, setAssignee] = useState('');
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
 
   // Set initial category if categories are loaded
   useState(() => {
-    if (categories.length > 0 && !selectedCategoryName) {
-      setSelectedCategoryName(categories[0].name);
+    if (categories.length > 0 && !selectedCategoryId) {
+      setSelectedCategoryId(categories[0].id);
     }
   });
 
@@ -54,9 +55,9 @@ export function CreateTicketDialog({ isOpen, onClose, categories }: CreateTicket
     setStep(1);
     setSubject('');
     setDescription('');
-    setSelectedCategoryName(categories[0]?.name || '');
+    setSelectedCategoryId(categories[0]?.id || '');
     setPriority('Low');
-    setAssignee('');
+    setAssigneeId(null);
   };
 
   const handleNext = () => {
@@ -77,8 +78,7 @@ export function CreateTicketDialog({ isOpen, onClose, categories }: CreateTicket
       return;
     }
 
-    const selectedCategory = categories.find(cat => cat.name === selectedCategoryName);
-    if (!selectedCategory) {
+    if (!selectedCategoryId) {
       toast.error('Please select a valid category.');
       return;
     }
@@ -88,9 +88,9 @@ export function CreateTicketDialog({ isOpen, onClose, categories }: CreateTicket
         user_id: user.id,
         subject,
         description,
-        category_id: selectedCategory.id, // Pass category_id
+        category_id: selectedCategoryId, // Pass category_id
         priority,
-        assignee: assignee || null,
+        assignee: assigneeId,
         status: 'Open', // Default status for new tickets
       });
       toast.success('Ticket created successfully!');
@@ -141,15 +141,15 @@ export function CreateTicketDialog({ isOpen, onClose, categories }: CreateTicket
             <div className="grid gap-2">
               <Label htmlFor="category">Category</Label>
               <Select
-                value={selectedCategoryName}
-                onValueChange={(value: string) => setSelectedCategoryName(value)}
+                value={selectedCategoryId}
+                onValueChange={(value: string) => setSelectedCategoryId(value)}
               >
                 <SelectTrigger id="category">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.name}>
+                    <SelectItem key={cat.id} value={cat.id}>
                       {cat.name}
                     </SelectItem>
                   ))}
@@ -176,12 +176,23 @@ export function CreateTicketDialog({ isOpen, onClose, categories }: CreateTicket
             </div>
             <div className="grid gap-2">
               <Label htmlFor="assignee">Assignee (Optional)</Label>
-              <Input
-                id="assignee"
-                placeholder="Name of the person assigned"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-              />
+              <Select
+                value={assigneeId || ''}
+                onValueChange={(value: string) => setAssigneeId(value === '' ? null : value)}
+                disabled={isLoadingUsers}
+              >
+                <SelectTrigger id="assignee">
+                  <SelectValue placeholder="Select assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Unassigned</SelectItem>
+                  {usersForAssignment?.map((assignee) => (
+                    <SelectItem key={assignee.id} value={assignee.id}>
+                      {assignee.name || assignee.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         )}

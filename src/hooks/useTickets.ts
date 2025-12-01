@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
-import { Tables, Enums } from '@/types/database.types';
+import { Tables, Enums, TablesUpdate } from '@/types/database.types';
 
 // Hook สำหรับดึงข้อมูลสรุป (จำนวน Tickets ทั้งหมด, จำนวน Assets ทั้งหมด)
 const useDashboardSummary = () => {
@@ -113,7 +113,7 @@ interface CreateTicketPayload {
   user_id: string;
   subject: string;
   description: string;
-  category_id: string; // Changed from category (enum) to category_id (string)
+  category_id: string;
   priority: Enums<'ticket_priority'>;
   assignee: string | null;
   status: Enums<'ticket_status'>;
@@ -127,10 +127,10 @@ const useCreateTicket = () => {
         .from('tickets')
         .insert([
           {
-            user_id: newTicket.user_id,
+            created_by: newTicket.user_id, // Changed from user_id to created_by
             title: newTicket.subject,
             description: newTicket.description,
-            category_id: newTicket.category_id, // Use category_id
+            category_id: newTicket.category_id,
             priority: newTicket.priority,
             assigned_to: newTicket.assignee,
             status: newTicket.status,
@@ -145,10 +145,39 @@ const useCreateTicket = () => {
       return data;
     },
     onSuccess: () => {
-      // Invalidate relevant queries to refetch data after a new ticket is created
       queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
       queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
-      queryClient.invalidateQueries({ queryKey: ['allTickets'] }); // Invalidate allTickets query
+      queryClient.invalidateQueries({ queryKey: ['allTickets'] });
+    },
+  });
+};
+
+// Hook สำหรับอัปเดต Ticket
+interface UpdateTicketPayload {
+  id: string;
+  updates: TablesUpdate<'tickets'>;
+}
+
+const useUpdateTicket = () => {
+  const queryClient = useQueryClient();
+  return useMutation<Tables<'tickets'>, Error, UpdateTicketPayload>({
+    mutationFn: async ({ id, updates }) => {
+      const { data, error } = await supabase
+        .from('tickets')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['allTickets'] });
+      queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
+      queryClient.invalidateQueries({ queryKey: ['ticket', variables.id] });
     },
   });
 };
@@ -157,8 +186,9 @@ const useCreateTicket = () => {
 export const useTickets = {
   useDashboardSummary,
   useRecentTickets,
-  useAllTickets, // Add useAllTickets to the exported object
+  useAllTickets,
   useCreateTicket,
-  useTicketById, // Add useTicketById
-  useTicketCategories, // Add useTicketCategories
+  useTicketById,
+  useTicketCategories,
+  useUpdateTicket, // Add useUpdateTicket
 };

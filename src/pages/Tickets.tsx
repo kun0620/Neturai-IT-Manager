@@ -9,11 +9,11 @@ import { useTickets } from '@/hooks/useTickets'; // Import the single useTickets
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useAuth } from '@/context/AuthContext';
-import { TicketDetailDialog } from '@/components/tickets/TicketDetailDialog'; // Assuming this component will be created
+import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Changed to TicketDetailsDrawer
 
 export const Tickets: React.FC = () => {
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
-  const [isTicketDetailDialogOpen, setIsTicketDetailDialogOpen] = useState(false);
+  const [isTicketDetailsDrawerOpen, setIsTicketDetailsDrawerOpen] = useState(false); // Changed state name
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const { user } = useAuth();
 
@@ -24,7 +24,7 @@ export const Tickets: React.FC = () => {
 
   const handleTicketClick = (ticketId: string) => {
     setSelectedTicketId(ticketId);
-    setIsTicketDetailDialogOpen(true);
+    setIsTicketDetailsDrawerOpen(true); // Changed to open drawer
   };
 
   if (isLoadingTickets || isLoadingCategories) {
@@ -83,15 +83,15 @@ export const Tickets: React.FC = () => {
         />
       )}
 
-      {isTicketDetailDialogOpen && selectedTicketId && (
-        <TicketDetailDialog
-          isOpen={isTicketDetailDialogOpen}
+      {isTicketDetailsDrawerOpen && selectedTicketId && (
+        <TicketDetailsDrawer // Changed to TicketDetailsDrawer
+          isOpen={isTicketDetailsDrawerOpen}
           onClose={() => {
-            setIsTicketDetailDialogOpen(false);
+            setIsTicketDetailsDrawerOpen(false);
             setSelectedTicketId(null);
           }}
           ticketId={selectedTicketId}
-          categories={categories || []} // Pass categories to detail dialog
+          // categories={categories || []} // Categories are not directly used in this basic drawer
         />
       )}
     </div>
