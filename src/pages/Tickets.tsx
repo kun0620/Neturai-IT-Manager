@@ -5,26 +5,25 @@ import { PlusCircle, Table2, Kanban } from 'lucide-react';
 import { TableView } from '@/components/tickets/TableView';
 import { KanbanView } from '@/components/tickets/KanbanView';
 import { CreateTicketDialog } from '@/components/tickets/CreateTicketDialog';
-import { useTickets } from '@/hooks/useTickets'; // Import the single useTickets object
+import { useTickets } from '@/hooks/useTickets';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useAuth } from '@/context/AuthContext';
-import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Changed to TicketDetailsDrawer
+import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Import TicketDetailsDrawer
 
 export const Tickets: React.FC = () => {
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
-  const [isTicketDetailsDrawerOpen, setIsTicketDetailsDrawerOpen] = useState(false); // Changed state name
+  const [isTicketDetailDrawerOpen, setIsTicketDetailDrawerOpen] = useState(false); // Changed from Dialog to Drawer
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const { user } = useAuth();
 
-  // Destructure useAllTickets and useTicketCategories from the useTickets object
   const { useAllTickets, useTicketCategories } = useTickets;
-  const { data: tickets, isLoading: isLoadingTickets, error: ticketsError } = useAllTickets(); // Call useAllTickets as a function
+  const { data: tickets, isLoading: isLoadingTickets, error: ticketsError } = useAllTickets();
   const { data: categories, isLoading: isLoadingCategories, error: categoriesError } = useTicketCategories();
 
   const handleTicketClick = (ticketId: string) => {
     setSelectedTicketId(ticketId);
-    setIsTicketDetailsDrawerOpen(true); // Changed to open drawer
+    setIsTicketDetailDrawerOpen(true); // Open the drawer
   };
 
   if (isLoadingTickets || isLoadingCategories) {
@@ -79,19 +78,19 @@ export const Tickets: React.FC = () => {
         <CreateTicketDialog
           isOpen={isCreateTicketDialogOpen}
           onClose={() => setIsCreateTicketDialogOpen(false)}
-          categories={categories || []} // Pass categories to dialog
+          categories={categories || []}
         />
       )}
 
-      {isTicketDetailsDrawerOpen && selectedTicketId && (
-        <TicketDetailsDrawer // Changed to TicketDetailsDrawer
-          isOpen={isTicketDetailsDrawerOpen}
+      {isTicketDetailDrawerOpen && selectedTicketId && (
+        <TicketDetailsDrawer // Use TicketDetailsDrawer here
+          isOpen={isTicketDetailDrawerOpen}
           onClose={() => {
-            setIsTicketDetailsDrawerOpen(false);
+            setIsTicketDetailDrawerOpen(false);
             setSelectedTicketId(null);
           }}
           ticketId={selectedTicketId}
-          // categories={categories || []} // Categories are not directly used in this basic drawer
+          categories={categories || []} // Pass categories to the drawer
         />
       )}
     </div>

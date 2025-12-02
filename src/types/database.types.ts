@@ -149,16 +149,19 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          updated_at: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           name: string
+          updated_at?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -240,21 +243,21 @@ export type Database = {
           created_at: string
           id: string
           ticket_id: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           comment_text: string
           created_at?: string
           id?: string
           ticket_id: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           comment_text?: string
           created_at?: string
           id?: string
           ticket_id?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -401,12 +404,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: 'users_id_fkey'
-            columns: ['id']
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
           {
             foreignKeyName: 'users_role_id_fkey'
             columns: ['role_id']
