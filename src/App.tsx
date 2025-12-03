@@ -12,6 +12,7 @@ import Reports from '@/pages/Reports';
 import { SettingsAndLogs } from '@/pages/SettingsAndLogs';
 import { AuthProvider } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+// Removed: import { TicketDetailsPage } from '@/pages/TicketDetailsPage';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="tickets" element={<Tickets />} />
+              {/* Removed: <Route path="tickets/:ticketId" element={<TicketDetailsPage />} /> */}
               <Route path="assets" element={<AssetManagement />} />
               <Route path="users" element={<Users />} />
               <Route path="reports" element={<Reports />} />

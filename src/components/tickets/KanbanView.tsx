@@ -1,36 +1,23 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { Tables } from '@/types/database.types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { TICKET_STATUS_OPTIONS } from '@/constants/enums';
 import { format } from 'date-fns';
 
 interface KanbanViewProps {
   tickets: Tables<'tickets'>[];
   categories: Tables<'ticket_categories'>[];
-  onTicketClick: (ticketId: string) => void;
+  onOpenDrawer: (ticketId: string) => void; // New prop to open the drawer
 }
 
-export const KanbanView: React.FC<KanbanViewProps> = ({ tickets, categories, onTicketClick }) => {
+export function KanbanView({ tickets, categories, onOpenDrawer }: KanbanViewProps) {
   const getCategoryName = (categoryId: string | null) => {
     return categories.find((cat) => cat.id === categoryId)?.name || 'N/A';
   };
 
-  const getStatusColor = (status: Tables<'tickets'>['status']) => {
-    switch (status) {
-      case 'Open':
-        return 'bg-blue-500 hover:bg-blue-600';
-      case 'In Progress':
-        return 'bg-yellow-500 hover:bg-yellow-600';
-      case 'Resolved':
-        return 'bg-green-500 hover:bg-green-600';
-      case 'Closed':
-        return 'bg-gray-500 hover:bg-gray-600';
-      default:
-        return 'bg-gray-400 hover:bg-gray-500';
-    }
-  };
-
-  const getPriorityVariant = (priority: Tables<'tickets'>['priority']) => {
+  const getPriorityBadgeVariant = (priority: Tables<'tickets'>['priority']) => {
     switch (priority) {
       case 'Low':
         return 'outline';
@@ -45,53 +32,62 @@ export const KanbanView: React.FC<KanbanViewProps> = ({ tickets, categories, onT
     }
   };
 
-  const statusColumns = ['Open', 'In Progress', 'Resolved', 'Closed'] as Tables<'tickets'>['status'][];
+  const ticketsByStatus = TICKET_STATUS_OPTIONS.reduce((acc, status) => {
+    acc[status] = tickets.filter((ticket) => ticket.status === status);
+    return acc;
+  }, {} as Record<Tables<'tickets'>['status'], Tables<'tickets'>[]>);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {statusColumns.map((status) => (
-        <div key={status} className="flex flex-col gap-3">
-          <h3 className={`text-lg font-semibold p-2 rounded-md text-white ${getStatusColor(status)}`}>
-            {status} ({tickets.filter((t) => t.status === status).length})
-          </h3>
-          <div className="flex flex-col gap-3 min-h-[100px] p-2 border border-dashed rounded-md">
-            {tickets
-              .filter((t) => t.status === status)
-              .map((ticket) => (
-                <Card
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+    >
+      {TICKET_STATUS_OPTIONS.map((status) => (
+        <Card key={status} className="flex flex-col h-full">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-semibold flex items-center justify-between">
+              {status}
+              <Badge variant="secondary" className="ml-2">
+                {ticketsByStatus[status]?.length || 0}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto space-y-3">
+            {ticketsByStatus[status] && ticketsByStatus[status].length > 0 ? (
+              ticketsByStatus[status].map((ticket) => (
+                <motion.div
                   key={ticket.id}
-                  className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
-                  onClick={() => onTicketClick(ticket.id)}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="border rounded-lg p-3 bg-background shadow-sm cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => onOpenDrawer(ticket.id)} // Open drawer on click
                 >
-                  <CardHeader className="p-3 pb-1">
-                    <CardTitle className="text-base font-semibold">
-                      {ticket.title}
-                    </CardTitle>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>#{ticket.id.substring(0, 8)}</span>
-                      <span>
-                        {ticket.created_at ? format(new Date(ticket.created_at), 'MMM d') : 'N/A'}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-3 pt-0 flex flex-wrap gap-2">
-                    <Badge variant={getPriorityVariant(ticket.priority)}>
+                  <h4 className="font-medium text-sm mb-1">{ticket.title}</h4>
+                  <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                    {ticket.description || 'No description'}
+                  </p>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    <Badge variant="outline" className="text-xs">
+                      {getCategoryName(ticket.category_id)}
+                    </Badge>
+                    <Badge variant={getPriorityBadgeVariant(ticket.priority)} className="text-xs">
                       {ticket.priority}
                     </Badge>
-                    <Badge variant="secondary">{getCategoryName(ticket.category_id)}</Badge>
-                    {/* Add assignee badge if available */}
-                    {ticket.assigned_to && (
-                      <Badge variant="outline">Assigned</Badge>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            {tickets.filter((t) => t.status === status).length === 0 && (
-              <p className="text-center text-sm text-muted-foreground py-4">No tickets in this status.</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Created: {ticket.created_at ? format(new Date(ticket.created_at), 'MMM dd, yyyy') : 'N/A'}
+                  </p>
+                </motion.div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No tickets in this status.</p>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       ))}
-    </div>
+    </motion.div>
   );
-};
+}

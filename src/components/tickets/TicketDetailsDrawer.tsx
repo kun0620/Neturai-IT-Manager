@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Drawer,
   DrawerContent,
@@ -12,15 +12,23 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { useTickets } from '@/hooks/useTickets';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tables } from '@/types/database.types';
+import { Tables, type Enums } from '@/types/database.types'; // Changed to import type Enums
+import { TICKET_STATUS_OPTIONS } from '@/constants/enums'; // Import runtime enum values
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
-// import { supabase } from '@/lib/supabaseClient'; // No longer needed here, moved to useCommentAuthors hook
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from 'sonner';
+import { useUsersForAssignment } from '@/hooks/useUsers'; // Import useUsersForAssignment
 
 interface TicketDetailsDrawerProps {
   isOpen: boolean;
@@ -35,57 +43,161 @@ export function TicketDetailsDrawer({
   ticketId,
   categories,
 }: TicketDetailsDrawerProps) {
-  const queryClient = useQueryClient();
-  const { useTicketById, useUserById, useTicketComments, useAddTicketComment, useCommentAuthors } = useTickets;
-  
-  const { 
-    data: ticket, 
-    isLoading: isLoadingTicket, 
-    error: ticketError,
-    refetch: refetchTicket
-  } = useTicketById(ticketId || '');
+  const {
+    useTicketById,
+    useUserById,
+    useTicketComments,
+    useAddTicketComment,
+    useCommentAuthors,
+    useUpdateTicket,
+    useTicketHistory,
+    useHistoryAuthors,
+  } = useTickets;
 
-  const { 
-    data: createdByUser, 
-    isLoading: isLoadingCreatedBy, 
-    error: createdByError,
-    refetch: refetchCreatedBy
-  } = useUserById(ticket?.created_by || null);
-
-  const { 
-    data: assignedToUser, 
-    isLoading: isLoadingAssignedTo, 
-    error: assignedToError,
-    refetch: refetchAssignedTo
-  } = useUserById(ticket?.assigned_to || null);
-
-  const { 
-    data: comments, 
-    isLoading: isLoadingComments, 
-    error: commentsError,
-    refetch: refetchComments
-  } = useTicketComments(ticketId || '');
-
-  // Use the new useCommentAuthors hook
-  const { 
-    data: commentAuthors, 
-    isLoading: isLoadingCommentAuthors, 
-    error: commentAuthorsError 
-  } = useCommentAuthors(comments);
-
-  const { mutate: addComment, isPending: isAddingComment } = useAddTicketComment();
   const { user } = useAuth();
 
+  const {
+    data: ticket,
+    isLoading: isLoadingTicket,
+    error: ticketError,
+    refetch: refetchTicket,
+  } = useTicketById(ticketId || '');
+
+  const {
+    data: createdByUser,
+    isLoading: isLoadingCreatedBy,
+    error: createdByError,
+    refetch: refetchCreatedBy,
+  } = useUserById(ticket?.created_by || null);
+
+  const {
+    data: assignedToUser,
+    isLoading: isLoadingAssignedTo,
+    error: assignedToError,
+    refetch: refetchAssignedTo,
+  } = useUserById(ticket?.assigned_to || null);
+
+  const {
+    data: comments,
+    isLoading: isLoadingComments,
+    error: commentsError,
+    refetch: refetchComments,
+  } = useTicketComments(ticketId || '');
+
+  const {
+    data: commentAuthors,
+    isLoading: isLoadingCommentAuthors,
+    error: commentAuthorsError,
+  } = useCommentAuthors(comments);
+
+  const {
+    data: history,
+    isLoading: isLoadingHistory,
+    error: historyError,
+    refetch: refetchHistory,
+  } = useTicketHistory(ticketId || '');
+
+  const {
+    data: historyAuthors,
+    isLoading: isLoadingHistoryAuthors,
+    error: historyAuthorsError,
+  } = useHistoryAuthors(history);
+
+  const {
+    data: assignableUsers,
+    isLoading: isLoadingAssignableUsers,
+    error: assignableUsersError,
+  } = useUsersForAssignment(); // Fetch all users for assignment
+
+  const { mutate: addComment, isPending: isAddingComment } = useAddTicketComment();
+  const { mutate: updateTicket, isPending: isUpdatingTicket } = useUpdateTicket();
+
   const [newCommentText, setNewCommentText] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<Enums<'ticket_status'> | undefined>(
+    ticket?.status
+  );
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null | undefined>(
+    ticket?.assigned_to
+  );
+
+  // Update selectedStatus and selectedAssignee when ticket data changes
+  useEffect(() => {
+    if (ticket?.status && selectedStatus !== ticket.status) {
+      setSelectedStatus(ticket.status);
+    }
+    if (ticket?.assigned_to !== undefined && selectedAssignee !== ticket.assigned_to) {
+      setSelectedAssignee(ticket.assigned_to);
+    }
+  }, [ticket?.status, ticket?.assigned_to]);
 
   const handleAddComment = () => {
     if (newCommentText.trim() && ticketId && user?.id) {
-      addComment({
-        ticket_id: ticketId,
-        user_id: user.id,
-        comment_text: newCommentText.trim(),
-      });
-      setNewCommentText('');
+      addComment(
+        {
+          ticket_id: ticketId,
+          user_id: user.id,
+          comment_text: newCommentText.trim(),
+        },
+        {
+          onSuccess: () => {
+            setNewCommentText('');
+            toast.success('Comment added successfully!');
+          },
+          onError: (err) => {
+            toast.error(`Failed to add comment: ${err.message}`);
+          },
+        }
+      );
+    }
+  };
+
+  const handleStatusChange = (newStatus: Enums<'ticket_status'>) => {
+    if (ticketId && user?.id && newStatus !== ticket?.status) {
+      updateTicket(
+        {
+          id: ticketId,
+          updates: { status: newStatus },
+          userId: user.id,
+        },
+        {
+          onSuccess: () => {
+            setSelectedStatus(newStatus);
+            toast.success(`Ticket status updated to ${newStatus}`);
+          },
+          onError: (err) => {
+            toast.error(`Failed to update status: ${err.message}`);
+          },
+        }
+      );
+    }
+  };
+
+  const handleAssigneeChange = (newAssigneeId: string) => {
+    // Convert "unassigned" string to null for database
+    const assigneeToUpdate = newAssigneeId === 'unassigned' ? null : newAssigneeId;
+
+    if (ticketId && user?.id && assigneeToUpdate !== ticket?.assigned_to) {
+      updateTicket(
+        {
+          id: ticketId,
+          updates: { assigned_to: assigneeToUpdate },
+          userId: user.id,
+        },
+        {
+          onSuccess: () => {
+            setSelectedAssignee(assigneeToUpdate);
+            toast.success(
+              `Ticket assigned to ${
+                assignableUsers?.find((u) => u.id === assigneeToUpdate)?.name ||
+                'Unassigned'
+              }`
+            );
+          },
+          onError: (err) => {
+            toast.error(`Failed to assign ticket: ${err.message}`);
+          },
+        }
+      );
     }
   };
 
@@ -94,7 +206,8 @@ export function TicketDetailsDrawer({
     refetchCreatedBy();
     refetchAssignedTo();
     refetchComments();
-    // useCommentAuthors will refetch automatically when comments change
+    refetchHistory();
+    // useCommentAuthors and useHistoryAuthors will refetch automatically when comments/history change
   };
 
   const getCategoryName = (categoryId: string | null) => {
@@ -130,8 +243,24 @@ export function TicketDetailsDrawer({
     }
   };
 
-  const isLoadingAny = isLoadingTicket || isLoadingCreatedBy || isLoadingAssignedTo || isLoadingComments || isLoadingCommentAuthors;
-  const hasError = ticketError || createdByError || assignedToError || commentsError || commentAuthorsError;
+  const isLoadingAny =
+    isLoadingTicket ||
+    isLoadingCreatedBy ||
+    isLoadingAssignedTo ||
+    isLoadingComments ||
+    isLoadingCommentAuthors ||
+    isLoadingHistory ||
+    isLoadingHistoryAuthors ||
+    isLoadingAssignableUsers;
+  const hasError =
+    ticketError ||
+    createdByError ||
+    assignedToError ||
+    commentsError ||
+    commentAuthorsError ||
+    historyError ||
+    historyAuthorsError ||
+    assignableUsersError;
 
   return (
     <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -162,7 +291,16 @@ export function TicketDetailsDrawer({
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Error</AlertTitle>
                   <AlertDescription>
-                    Failed to load ticket details. {ticketError?.message || createdByError?.message || assignedToError?.message || commentsError?.message || commentAuthorsError?.message || "Please try again."}
+                    Failed to load ticket details.{' '}
+                    {ticketError?.message ||
+                      createdByError?.message ||
+                      assignedToError?.message ||
+                      commentsError?.message ||
+                      commentAuthorsError?.message ||
+                      historyError?.message ||
+                      historyAuthorsError?.message ||
+                      assignableUsersError?.message ||
+                      'Please try again.'}
                   </AlertDescription>
                 </Alert>
                 <Button onClick={handleRetry} className="mt-4">
@@ -193,15 +331,37 @@ export function TicketDetailsDrawer({
                       <p className="text-sm font-medium text-muted-foreground">
                         Category
                       </p>
-                      <p className="text-base">{getCategoryName(ticket.category_id)}</p>
+                      <p className="text-base">
+                        {getCategoryName(ticket.category_id)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">
                         Status
                       </p>
-                      <Badge variant={getStatusBadgeVariant(ticket.status)}>
-                        {ticket.status}
-                      </Badge>
+                      <Select
+                        onValueChange={(value: Enums<'ticket_status'>) =>
+                          handleStatusChange(value)
+                        }
+                        value={selectedStatus}
+                        disabled={isUpdatingTicket || !user?.id}
+                      >
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Select Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TICKET_STATUS_OPTIONS.map((statusOption) => ( // Use TICKET_STATUS_OPTIONS
+                            <SelectItem key={statusOption} value={statusOption}>
+                              {statusOption}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!user?.id && (
+                        <p className="text-xs text-red-500 mt-1">
+                          Login to change status.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">
@@ -215,9 +375,28 @@ export function TicketDetailsDrawer({
                       <p className="text-sm font-medium text-muted-foreground">
                         Assignee
                       </p>
-                      <p className="text-base">
-                        {assignedToUser?.name || assignedToUser?.email || 'Unassigned'}
-                      </p>
+                      <Select
+                        onValueChange={handleAssigneeChange}
+                        value={selectedAssignee || 'unassigned'}
+                        disabled={isUpdatingTicket || !user?.id || isLoadingAssignableUsers}
+                      >
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Select Assignee" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                          {assignableUsers?.map((assignee) => (
+                            <SelectItem key={assignee.id} value={assignee.id}>
+                              {assignee.name || assignee.email}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!user?.id && (
+                        <p className="text-xs text-red-500 mt-1">
+                          Login to assign ticket.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">
@@ -274,17 +453,25 @@ export function TicketDetailsDrawer({
                       <div className="space-y-4">
                         {comments.map((comment) => {
                           const userId = comment.user_id;
-                          const safeUserId = (typeof userId === 'string' && userId.length > 0) ? userId : 'unknown';
-                          const userInitials = safeUserId.substring(0, Math.min(safeUserId.length, 2)).toUpperCase();
+                          const safeUserId =
+                            typeof userId === 'string' && userId.length > 0
+                              ? userId
+                              : 'unknown';
+                          const userInitials = safeUserId
+                            .substring(0, Math.min(safeUserId.length, 2))
+                            .toUpperCase();
                           const author = commentAuthors?.[safeUserId]; // Use optional chaining for commentAuthors
 
                           return (
-                            <div key={comment.id} className="flex items-start space-x-3">
+                            <div
+                              key={comment.id}
+                              className="flex items-start space-x-3"
+                            >
                               <Avatar className="h-8 w-8">
-                                <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${safeUserId}`} />
-                                <AvatarFallback>
-                                  {userInitials}
-                                </AvatarFallback>
+                                <AvatarImage
+                                  src={`https://api.dicebear.com/7.x/initials/svg?seed=${safeUserId}`}
+                                />
+                                <AvatarFallback>{userInitials}</AvatarFallback>
                               </Avatar>
                               <div className="flex-1">
                                 <div className="flex items-center justify-between">
@@ -292,7 +479,10 @@ export function TicketDetailsDrawer({
                                     {author?.name || author?.email || 'Unknown User'}
                                   </p>
                                   <p className="text-xs text-muted-foreground">
-                                    {format(new Date(comment.created_at), 'MMM dd, yyyy HH:mm')}
+                                    {format(
+                                      new Date(comment.created_at),
+                                      'MMM dd, yyyy HH:mm'
+                                    )}
                                   </p>
                                 </div>
                                 <p className="text-sm text-muted-foreground mt-1">
@@ -327,12 +517,88 @@ export function TicketDetailsDrawer({
                       )}
                     </div>
                   </div>
+
+                  <Separator className="my-4" />
+
+                  {/* History Section */}
+                  <div>
+                    <h4 className="text-lg font-semibold mb-2">History</h4>
+                    {isLoadingHistory || isLoadingHistoryAuthors ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                      </div>
+                    ) : history && history.length > 0 ? (
+                      <div className="space-y-4">
+                        {history.map((entry) => {
+                          const userId = entry.user_id;
+                          const safeUserId =
+                            typeof userId === 'string' && userId.length > 0
+                              ? userId
+                              : 'unknown';
+                          const userInitials = safeUserId
+                            .substring(0, Math.min(safeUserId.length, 2))
+                            .toUpperCase();
+                          const author = historyAuthors?.[safeUserId];
+
+                          let historyMessage = '';
+                          if (entry.change_type === 'status_change') {
+                            historyMessage = `Changed status from "${entry.old_value || 'N/A'}" to "${
+                              entry.new_value || 'N/A'
+                            }"`;
+                          } else if (entry.change_type === 'assigned_to_change') {
+                            const oldAssigneeName =
+                              assignableUsers?.find((u) => u.id === entry.old_value)?.name ||
+                              'Unassigned';
+                            const newAssigneeName =
+                              assignableUsers?.find((u) => u.id === entry.new_value)?.name ||
+                              'Unassigned';
+                            historyMessage = `Changed assignee from "${oldAssigneeName}" to "${newAssigneeName}"`;
+                          } else {
+                            historyMessage = `Changed ${entry.change_type}: ${
+                              entry.old_value || 'N/A'
+                            } -> ${entry.new_value || 'N/A'}`;
+                          }
+
+                          return (
+                            <div
+                              key={entry.id}
+                              className="flex items-start space-x-3"
+                            >
+                              <Avatar className="h-8 w-8">
+                                <AvatarImage
+                                  src={`https://api.dicebear.com/7.x/initials/svg?seed=${safeUserId}`}
+                                />
+                                <AvatarFallback>{userInitials}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-medium">
+                                    {author?.name || author?.email || 'Unknown User'}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {format(
+                                      new Date(entry.created_at),
+                                      'MMM dd, yyyy HH:mm'
+                                    )}
+                                  </p>
+                                </div>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {historyMessage}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No history yet.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (
-              <p className="text-center text-muted-foreground p-4">
-                Ticket not found.
-              </p>
+              <p className="text-center text-muted-foreground p-4">Ticket not found.</p>
             )}
           </div>
         </ScrollArea>

@@ -23,7 +23,7 @@ import { useAuth } from '@/context/AuthContext'; // Corrected import path for us
 import { useUsersForAssignment } from '@/hooks/useUsers'; // Import for assignee dropdown
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import { Enums, Tables } from '@/types/database.types'; // Import Tables for category type
+import { Tables, type Enums } from '@/types/database.types'; // Changed to import type Enums
 
 interface CreateTicketDialogProps {
   isOpen: boolean;

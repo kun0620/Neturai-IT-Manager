@@ -20,6 +20,8 @@ import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useTickets } from '@/hooks/useTickets'; // Import useTickets to get categories
 
 interface RecentTicketsTableProps {
   tickets: Tables<'tickets'>[];
@@ -33,6 +35,10 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
     key: keyof Tables<'tickets'>;
     direction: 'ascending' | 'descending';
   } | null>(null);
+  const navigate = useNavigate();
+
+  const { useTicketCategories } = useTickets;
+  const { data: categories } = useTicketCategories(); // Fetch categories
 
   const sortedTickets = [...tickets].sort((a, b) => {
     if (!sortConfig) return 0;
@@ -85,14 +91,36 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
         return 'destructive';
       case 'In Progress':
         return 'secondary';
-      case 'Closed':
       case 'Resolved':
         return 'default';
-      // case 'Pending': // 'Pending' is not in ticket_status enum
-      //   return 'outline';
+      case 'Closed':
+        return 'outline';
       default:
         return 'outline';
     }
+  };
+
+  const getPriorityBadgeVariant = (priority: Tables<'tickets'>['priority']) => {
+    switch (priority) {
+      case 'Low':
+        return 'outline';
+      case 'Medium':
+        return 'secondary';
+      case 'High':
+        return 'destructive';
+      case 'Critical':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
+
+  const getCategoryName = (categoryId: string | null) => {
+    return categories?.find((cat) => cat.id === categoryId)?.name || 'N/A';
+  };
+
+  const handleTicketClick = (ticketId: string) => {
+    navigate('/tickets', { state: { ticketId } });
   };
 
   return (
@@ -114,15 +142,21 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
               <TableRow>
                 <TableHead
                   className="cursor-pointer"
-                  onClick={() => requestSort('id')}
-                >
-                  Ticket ID {getSortIndicator('id')}
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer"
                   onClick={() => requestSort('title')}
                 >
                   Title {getSortIndicator('title')}
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer"
+                  onClick={() => requestSort('category_id')}
+                >
+                  Category {getSortIndicator('category_id')}
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer"
+                  onClick={() => requestSort('priority')}
+                >
+                  Priority {getSortIndicator('priority')}
                 </TableHead>
                 <TableHead
                   className="cursor-pointer"
@@ -132,71 +166,72 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
                 </TableHead>
                 <TableHead
                   className="cursor-pointer"
-                  onClick={() => requestSort('assigned_to')}
+                  onClick={() => requestSort('created_at')}
                 >
-                  Assigned To {getSortIndicator('assigned_to')}
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer"
-                  onClick={() => requestSort('updated_at')}
-                >
-                  Last Update {getSortIndicator('updated_at')}
+                  Created At {getSortIndicator('created_at')}
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {currentTickets.length > 0 ? (
                 currentTickets.map((ticket) => (
-                  <TableRow key={ticket.id}>
+                  <TableRow key={ticket.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleTicketClick(ticket.id)}>
                     <TableCell className="font-medium">
-                      {ticket.id.substring(0, 8)}
+                      {/* Title is now plain text, but the row is clickable */}
+                      {ticket.title}
                     </TableCell>
-                    <TableCell>{ticket.title}</TableCell>
+                    <TableCell>{getCategoryName(ticket.category_id)}</TableCell>
+                    <TableCell>
+                      <Badge variant={getPriorityBadgeVariant(ticket.priority)}>
+                        {ticket.priority}
+                      </Badge>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={getStatusBadgeVariant(ticket.status)}>
                         {ticket.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>{ticket.assigned_to ? ticket.assigned_to.substring(0, 8) : 'Unassigned'}</TableCell>
                     <TableCell>
-                      {ticket.updated_at
-                        ? format(new Date(ticket.updated_at), 'MMM dd, yyyy HH:mm')
+                      {ticket.created_at
+                        ? format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')
                         : 'N/A'}
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     No recent tickets found.
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-          <div className="flex justify-end items-center space-x-2 py-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" /> Previous
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-              }
-              disabled={currentPage === totalPages}
-            >
-              Next <ChevronRight className="h-4 w-4 ml-2" />
-            </Button>
-          </div>
+          {sortedTickets.length > ITEMS_PER_PAGE && (
+            <div className="flex justify-end items-center space-x-2 py-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-2" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                }
+                disabled={currentPage === totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>

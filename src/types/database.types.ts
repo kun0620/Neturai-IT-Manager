@@ -276,43 +276,43 @@ export type Database = {
       }
       ticket_history: {
         Row: {
-          changed_by: string
-          changed_field: string
-          created_at: string
           id: string
-          new_value: string | null
-          old_value: string | null
           ticket_id: string
+          user_id: string | null
+          change_type: string
+          old_value: string | null
+          new_value: string | null
+          created_at: string
         }
         Insert: {
-          changed_by: string
-          changed_field: string
-          created_at?: string
           id?: string
-          new_value?: string | null
-          old_value?: string | null
           ticket_id: string
+          user_id?: string | null
+          change_type: string
+          old_value?: string | null
+          new_value?: string | null
+          created_at?: string
         }
         Update: {
-          changed_by?: string
-          changed_field?: string
-          created_at?: string
           id?: string
-          new_value?: string | null
-          old_value?: string | null
           ticket_id?: string
+          user_id?: string | null
+          change_type?: string
+          old_value?: string | null
+          new_value?: string | null
+          created_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: 'ticket_history_changed_by_fkey'
-            columns: ['changed_by']
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
           {
             foreignKeyName: 'ticket_history_ticket_id_fkey'
             columns: ['ticket_id']
             referencedRelation: 'tickets'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'ticket_history_user_id_fkey'
+            columns: ['user_id']
+            referencedRelation: 'users'
             referencedColumns: ['id']
           },
         ]
