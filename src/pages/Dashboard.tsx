@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
   Ticket,
@@ -7,6 +7,9 @@ import {
   CircleDot, // Icon for Open tickets
   Hourglass, // Icon for In Progress tickets
   CheckCircle, // Icon for Closed tickets
+  Plus, // Icon for New Ticket
+  ListTodo, // Icon for View All Tickets
+  PackagePlus, // Icon for Add Asset
 } from 'lucide-react';
 import { SummaryCard } from '@/components/dashboard/SummaryCard';
 import {
@@ -15,8 +18,14 @@ import {
 import { ErrorState } from '@/components/common/ErrorState';
 import { RecentTicketsTable } from '@/components/dashboard/RecentTicketsTable'; // Import the component
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'; // Import LoadingSkeleton
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { Button } from '@/components/ui/button'; // Import Button component
+import { CreateTicketDialog } from '@/components/tickets/CreateTicketDialog'; // Import CreateTicketDialog
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate(); // Initialize useNavigate
+  const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
+
   // Destructure individual hooks from the useTickets object
   const {
     useDashboardSummary,
@@ -24,6 +33,7 @@ const Dashboard: React.FC = () => {
     useOpenTicketsCount,
     useInProgressTicketsCount,
     useClosedTicketsCount,
+    useTicketCategories, // Add useTicketCategories
   } = useTickets;
 
   const {
@@ -61,19 +71,28 @@ const Dashboard: React.FC = () => {
     error: errorRecentTickets,
   } = useRecentTickets();
 
+  const {
+    data: categories,
+    isLoading: isLoadingCategories,
+    isError: isErrorCategories,
+    error: errorCategories,
+  } = useTicketCategories(); // Fetch categories for CreateTicketDialog
+
   const isLoadingAny =
     isLoadingSummary ||
     isLoadingOpenTickets ||
     isLoadingInProgressTickets ||
     isLoadingClosedTickets ||
-    isLoadingRecentTickets;
+    isLoadingRecentTickets ||
+    isLoadingCategories; // Include categories loading
 
   const isErrorAny =
     isErrorSummary ||
     isErrorOpenTickets ||
     isErrorInProgressTickets ||
     isErrorClosedTickets ||
-    isErrorRecentTickets;
+    isErrorRecentTickets ||
+    isErrorCategories; // Include categories error
 
   if (isLoadingAny) {
     return (
@@ -107,6 +126,7 @@ const Dashboard: React.FC = () => {
           errorInProgressTickets?.message ||
           errorClosedTickets?.message ||
           errorRecentTickets?.message ||
+          errorCategories?.message || // Include categories error message
           'An unknown error occurred.'
         }
       />
@@ -122,6 +142,19 @@ const Dashboard: React.FC = () => {
         This is where you'll see an overview of your IT operations.
       </p>
 
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button onClick={() => setIsCreateTicketDialogOpen(true)} className="flex items-center gap-2">
+          <Plus className="h-4 w-4" /> New Ticket
+        </Button>
+        <Button onClick={() => navigate('/tickets')} variant="outline" className="flex items-center gap-2">
+          <ListTodo className="h-4 w-4" /> View All Tickets
+        </Button>
+        <Button onClick={() => navigate('/assets/new')} variant="outline" className="flex items-center gap-2">
+          <PackagePlus className="h-4 w-4" /> Add Asset
+        </Button>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
@@ -130,6 +163,7 @@ const Dashboard: React.FC = () => {
           icon={CircleDot}
           color="text-green-500"
           description="Tickets awaiting action"
+          onClick={() => navigate('/tickets?status=Open')}
         />
         <SummaryCard
           title="In Progress Tickets"
@@ -137,6 +171,7 @@ const Dashboard: React.FC = () => {
           icon={Hourglass}
           color="text-yellow-500"
           description="Tickets currently being worked on"
+          onClick={() => navigate('/tickets?status=In%20Progress')}
         />
         <SummaryCard
           title="Closed Tickets"
@@ -144,6 +179,7 @@ const Dashboard: React.FC = () => {
           icon={CheckCircle}
           color="text-red-500"
           description="Tickets that have been resolved"
+          onClick={() => navigate('/tickets?status=Closed')}
         />
         <SummaryCard
           title="Total Assets"
@@ -151,11 +187,21 @@ const Dashboard: React.FC = () => {
           icon={HardDrive} // Using HardDrive icon for assets
           color="text-blue-500"
           description="All IT assets managed"
+          onClick={() => navigate('/assets')}
         />
       </div>
 
       {/* Recent Tickets Table */}
       <RecentTicketsTable tickets={recentTickets || []} />
+
+      {/* Create Ticket Dialog */}
+      {categories && (
+        <CreateTicketDialog
+          isOpen={isCreateTicketDialogOpen}
+          onClose={() => setIsCreateTicketDialogOpen(false)}
+          categories={categories}
+        />
+      )}
     </div>
   );
 };

@@ -31,6 +31,7 @@ function App() {
               <Route path="tickets" element={<Tickets />} />
               {/* Removed: <Route path="tickets/:ticketId" element={<TicketDetailsPage />} /> */}
               <Route path="assets" element={<AssetManagement />} />
+              <Route path="assets/new" element={<AssetManagement />} /> {/* New route for adding asset */}
               <Route path="users" element={<Users />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<SettingsAndLogs />} />

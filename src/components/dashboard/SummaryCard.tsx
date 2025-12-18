@@ -8,6 +8,7 @@ interface SummaryCardProps {
   icon: LucideIcon;
   description?: string;
   color?: string;
+  onClick?: () => void; // Add onClick prop
 }
 
 export function SummaryCard({
@@ -16,12 +17,16 @@ export function SummaryCard({
   icon: Icon,
   description,
   color = 'text-primary',
+  onClick, // Destructure onClick
 }: SummaryCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
+      className={onClick ? 'cursor-pointer' : ''} // Apply cursor-pointer if onClick is present
+      whileHover={onClick ? { scale: 1.02, boxShadow: '0 8px 16px rgba(0,0,0,0.1)' } : {}} // Add hover effect
+      onClick={onClick} // Attach onClick handler
     >
       <Card className="hover:shadow-lg transition-shadow duration-300">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

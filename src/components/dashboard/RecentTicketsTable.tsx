@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTickets } from '@/hooks/useTickets'; // Import useTickets to get categories
+import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Import the TicketDetailsDrawer
 
 interface RecentTicketsTableProps {
   tickets: Tables<'tickets'>[];
@@ -38,7 +39,11 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
   const navigate = useNavigate();
 
   const { useTicketCategories } = useTickets;
-  const { data: categories } = useTicketCategories(); // Fetch categories
+  const { data: categories, isLoading: isLoadingCategories } = useTicketCategories(); // Fetch categories
+
+  // State for the TicketDetailsDrawer
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
   const sortedTickets = [...tickets].sort((a, b) => {
     if (!sortConfig) return 0;
@@ -120,7 +125,13 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
   };
 
   const handleTicketClick = (ticketId: string) => {
-    navigate('/tickets', { state: { ticketId } });
+    setSelectedTicketId(ticketId);
+    setIsDrawerOpen(true);
+  };
+
+  const handleCloseDrawer = () => {
+    setIsDrawerOpen(false);
+    setSelectedTicketId(null);
   };
 
   return (
@@ -234,6 +245,16 @@ export function RecentTicketsTable({ tickets }: RecentTicketsTableProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Ticket Details Drawer */}
+      {!isLoadingCategories && categories && (
+        <TicketDetailsDrawer
+          isOpen={isDrawerOpen}
+          onClose={handleCloseDrawer}
+          ticketId={selectedTicketId}
+          categories={categories}
+        />
+      )}
     </motion.div>
   );
 }
