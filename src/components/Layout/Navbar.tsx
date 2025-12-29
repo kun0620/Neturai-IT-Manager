@@ -1,17 +1,29 @@
 import React from 'react';
-import { Menu, UserCircle, LogOut } from 'lucide-react'; // Added LogOut import back for the new logout button
+import { Menu, UserCircle, LogOut } from 'lucide-react';
 import ThemeToggle from '../ThemeToggle';
-import { useAuth } from '../../lib/AuthContext'; // Import useAuth
+import { useAuth } from '../../lib/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
   isSidebarCollapsed: boolean;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarCollapsed }) => {
+const Navbar: React.FC<NavbarProps> = ({
+  onToggleSidebar,
+  isSidebarCollapsed,
+}) => {
   const { signOut } = useAuth();
   const navigate = useNavigate();
+
+  const {
+    role,
+    loading: roleLoading,
+    isAdmin,
+    isIT,
+    isUser,
+  } = useCurrentProfile();
 
   const handleLogout = async () => {
     const { error } = await signOut();
@@ -23,9 +35,17 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarCollapsed }) 
     }
   };
 
+  // แสดงชื่อ / role (ยังไม่ดึงชื่อจริงจาก profiles)
+  const displayName =
+    isAdmin ? 'Admin'
+    : isIT ? 'IT Staff'
+    : 'User';
+
+  const displayRole = role ? role.toUpperCase() : 'USER';
+
   return (
     <nav className="bg-card-light dark:bg-card-dark p-4 shadow-lg dark:shadow-2xl-dark flex items-center justify-between sticky top-0 z-30 w-full">
-      {/* Mobile Sidebar Toggle & App Name for Mobile */}
+      {/* Mobile Sidebar Toggle */}
       <div className="flex items-center md:hidden">
         <button
           onClick={onToggleSidebar}
@@ -34,28 +54,47 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, isSidebarCollapsed }) 
         >
           <Menu className="h-6 w-6" />
         </button>
-        <div className="text-xl font-bold text-primary">IT Management</div>
+        <div className="text-xl font-bold text-primary">
+          IT Management
+        </div>
       </div>
 
-      {/* App Name for Desktop (hidden on mobile, conditional on sidebar state) */}
+      {/* Desktop App Name */}
       {isSidebarCollapsed && (
         <div className="hidden md:block text-2xl font-extrabold text-primary">
           IT Management
         </div>
       )}
 
-      {/* User Profile and Theme Toggle */}
+      {/* Right Section */}
       <div className="flex items-center space-x-4">
         <ThemeToggle />
-        {/* User Avatar and Name */}
-        <div className="flex items-center space-x-2 group">
-          <div className="h-9 w-9 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-sm font-medium text-gray-600 dark:text-gray-300 overflow-hidden">
-            {/* Using Lucide icon as a placeholder avatar */}
-            <UserCircle className="h-full w-full text-gray-400 dark:text-gray-500 group-hover:text-primary dark:group-hover:text-primary transition-colors duration-200" />
+
+        {/* User Info */}
+        <div className="flex items-center space-x-2">
+          <div className="h-9 w-9 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+            <UserCircle className="h-full w-full text-gray-400 dark:text-gray-500" />
           </div>
-          <span className="text-text-light dark:text-text-dark font-medium hidden sm:block group-hover:text-primary dark:group-hover:text-primary transition-colors duration-200">Admin</span>
+
+          <div className="hidden sm:flex flex-col leading-tight">
+            {roleLoading ? (
+              <span className="text-xs text-muted-foreground">
+                Loading...
+              </span>
+            ) : (
+              <>
+                <span className="text-sm font-medium text-text-light dark:text-text-dark">
+                  {displayName}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {displayRole}
+                </span>
+              </>
+            )}
+          </div>
         </div>
-        {/* Logout Button */}
+
+        {/* Logout */}
         <button
           onClick={handleLogout}
           className="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
