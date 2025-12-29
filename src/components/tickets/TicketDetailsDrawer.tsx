@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { useTickets } from '@/hooks/useTickets';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tables, type Enums } from '@/types/database.types'; // Changed to import type Enums
 import { TICKET_STATUS_OPTIONS } from '@/constants/enums'; // Import runtime enum values
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -29,13 +28,21 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useUsersForAssignment } from '@/hooks/useUsers'; // Import useUsersForAssignment
+import { useCurrentProfile } from '@/hooks/useCurrentProfile';
+import type { Database, Enums } from '@/types/database.types';
+
+type Ticket = Database['public']['Tables']['tickets']['Row'];
+type TicketCategory = Database['public']['Tables']['ticket_categories']['Row'];
+
+
 
 interface TicketDetailsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   ticketId: string | null;
-  categories: Tables<'ticket_categories'>[];
+  categories: TicketCategory[];
 }
+
 
 export function TicketDetailsDrawer({
   isOpen,
@@ -53,8 +60,11 @@ export function TicketDetailsDrawer({
     useTicketHistory,
     useHistoryAuthors,
   } = useTickets;
+const { canManageTickets, loading: roleLoading } = useCurrentProfile();
 
-  const { user } = useAuth();
+  const { session } = useAuth();
+  const user = session?.user;
+
 
   const {
     data: ticket,
@@ -214,34 +224,35 @@ export function TicketDetailsDrawer({
     return categories.find((cat) => cat.id === categoryId)?.name || 'N/A';
   };
 
-  const getStatusBadgeVariant = (status: Tables<'tickets'>['status']) => {
-    switch (status) {
-      case 'Open':
-        return 'destructive';
-      case 'In Progress':
-        return 'secondary';
-      case 'Closed':
-      case 'Resolved':
-        return 'default';
-      default:
-        return 'outline';
-    }
-  };
+  const getStatusBadgeVariant = (status: Ticket['status']) => {
+  switch (status) {
+    case 'Open':
+      return 'destructive';
+    case 'In Progress':
+      return 'secondary';
+    case 'Closed':
+    case 'Resolved':
+      return 'default';
+    default:
+      return 'outline';
+  }
+};
 
-  const getPriorityBadgeVariant = (priority: Tables<'tickets'>['priority']) => {
-    switch (priority) {
-      case 'Low':
-        return 'outline';
-      case 'Medium':
-        return 'secondary';
-      case 'High':
-        return 'default';
-      case 'Critical':
-        return 'destructive';
-      default:
-        return 'outline';
-    }
-  };
+const getPriorityBadgeVariant = (priority: Ticket['priority']) => {
+  switch (priority) {
+    case 'Low':
+      return 'outline';
+    case 'Medium':
+      return 'secondary';
+    case 'High':
+      return 'default';
+    case 'Critical':
+      return 'destructive';
+    default:
+      return 'outline';
+  }
+};
+
 
   const isLoadingAny =
     isLoadingTicket ||
@@ -340,28 +351,31 @@ export function TicketDetailsDrawer({
                         Status
                       </p>
                       <Select
-                        onValueChange={(value: Enums<'ticket_status'>) =>
-                          handleStatusChange(value)
-                        }
-                        value={selectedStatus}
-                        disabled={isUpdatingTicket || !user?.id}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Select Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TICKET_STATUS_OPTIONS.map((statusOption) => ( // Use TICKET_STATUS_OPTIONS
-                            <SelectItem key={statusOption} value={statusOption}>
-                              {statusOption}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {!user?.id && (
-                        <p className="text-xs text-red-500 mt-1">
-                          Login to change status.
-                        </p>
-                      )}
+  value={selectedStatus}
+  onValueChange={(value) =>
+    handleStatusChange(value as Enums<'ticket_status'>)
+  }
+  disabled={roleLoading || isUpdatingTicket || !canManageTickets}
+>
+  <SelectTrigger className="w-[180px]">
+    <SelectValue placeholder="Select Status" />
+  </SelectTrigger>
+  <SelectContent>
+    {TICKET_STATUS_OPTIONS.map((statusOption) => (
+      <SelectItem key={statusOption} value={statusOption}>
+        {statusOption}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
+{!canManageTickets && !roleLoading && (
+  <p className="text-xs text-muted-foreground mt-1">
+    You don’t have permission to change status.
+  </p>
+)}
+
+
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">
@@ -375,28 +389,35 @@ export function TicketDetailsDrawer({
                       <p className="text-sm font-medium text-muted-foreground">
                         Assignee
                       </p>
-                      <Select
-                        onValueChange={handleAssigneeChange}
-                        value={selectedAssignee || 'unassigned'}
-                        disabled={isUpdatingTicket || !user?.id || isLoadingAssignableUsers}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Select Assignee" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unassigned">Unassigned</SelectItem>
-                          {assignableUsers?.map((assignee) => (
-                            <SelectItem key={assignee.id} value={assignee.id}>
-                              {assignee.name || assignee.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {!user?.id && (
-                        <p className="text-xs text-red-500 mt-1">
-                          Login to assign ticket.
-                        </p>
-                      )}
+<Select
+  value={selectedAssignee || 'unassigned'}
+  onValueChange={handleAssigneeChange}
+  disabled={
+    roleLoading ||
+    isUpdatingTicket ||
+    isLoadingAssignableUsers ||
+    !canManageTickets
+  }
+>
+  <SelectTrigger className="w-[180px]">
+    <SelectValue placeholder="Select Assignee" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="unassigned">Unassigned</SelectItem>
+    {assignableUsers?.map((assignee) => (
+      <SelectItem key={assignee.id} value={assignee.id}>
+        {assignee.name || assignee.email}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
+{!canManageTickets && !roleLoading && (
+  <p className="text-xs text-muted-foreground mt-1">
+    You don’t have permission to assign tickets.
+  </p>
+)}
+
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">
@@ -605,4 +626,5 @@ export function TicketDetailsDrawer({
       </DrawerContent>
     </Drawer>
   );
+  
 }

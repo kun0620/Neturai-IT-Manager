@@ -1,6 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
-import { Tables, type Enums, TablesUpdate } from '@/types/database.types'; // Changed to import type Enums
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database.types';
+import type { Enums } from '@/types/database.types';
+import type { TablesUpdate } from '@/types/database.types';
+
+type Ticket = Database['public']['Tables']['tickets']['Row'];
+type TicketCategory = Database['public']['Tables']['ticket_categories']['Row'];
+type TicketComment = Database['public']['Tables']['ticket_comments']['Row'];
+type TicketHistory = Database['public']['Tables']['ticket_history']['Row'];
+type Profile = Database['public']['Tables']['profiles']['Row'];
+type RecentTicket = Pick<
+  Ticket,
+  'id' | 'title' | 'category_id' | 'priority' | 'status' | 'created_at'
+>;
 
 // Hook สำหรับดึงข้อมูลสรุป (จำนวน Tickets ทั้งหมด, จำนวน Assets ทั้งหมด)
 const useDashboardSummary = () => {
@@ -80,26 +92,25 @@ const useClosedTicketsCount = () => {
 
 // Hook สำหรับดึง Recent Tickets 5 รายการ
 const useRecentTickets = () => {
-  return useQuery<Tables<'tickets'>[], Error>({
+  return useQuery<RecentTicket[], Error>({
     queryKey: ['recentTickets', 5],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tickets')
-        .select('id, title, category_id, priority, status, created_at, created_by') // Specific columns as requested
+        .select('id, title, category_id, priority, status, created_at')
         .order('created_at', { ascending: false })
         .limit(5);
 
-      if (error) {
-        throw new Error(error.message);
-      }
-      return data || [];
+      if (error) throw error;
+      return data ?? [];
     },
   });
 };
 
+
 // Hook สำหรับดึง Tickets ทั้งหมด
 const useAllTickets = () => {
-  return useQuery<Tables<'tickets'>[], Error>({
+  return useQuery<Ticket[], Error>({
     queryKey: ['allTickets'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -117,7 +128,7 @@ const useAllTickets = () => {
 
 // Hook สำหรับดึง Ticket ตาม ID (ไม่มีการ Join)
 const useTicketById = (ticketId: string) => {
-  return useQuery<Tables<'tickets'>, Error>({
+  return useQuery<Ticket, Error>({
     queryKey: ['ticket', ticketId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -137,30 +148,30 @@ const useTicketById = (ticketId: string) => {
 
 // Hook สำหรับดึงข้อมูลผู้ใช้ตาม ID (สำหรับ created_by และ assigned_to)
 const useUserById = (userId: string | null) => {
-  return useQuery<Pick<Tables<'users'>, 'id' | 'name' | 'email'>, Error>({
-    queryKey: ['user', userId],
+  return useQuery<
+    Pick<Profile, 'id' | 'name' | 'email'> | null,
+    Error
+  >({
+    queryKey: ['profile', userId],
     queryFn: async () => {
-      if (!userId) {
-        throw new Error('User ID is null or undefined');
-      }
+      if (!userId) return null;
+
       const { data, error } = await supabase
-        .from('users')
+        .from('profiles')
         .select('id, name, email')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw error;
       return data;
     },
-    enabled: !!userId, // Only run query if userId is available
+    enabled: !!userId,
   });
 };
 
 // Hook สำหรับดึง Ticket Categories ทั้งหมด
 const useTicketCategories = () => {
-  return useQuery<Tables<'ticket_categories'>[], Error>({
+  return useQuery<TicketCategory[], Error>({
     queryKey: ['ticketCategories'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -189,7 +200,7 @@ interface CreateTicketPayload {
 
 const useCreateTicket = () => {
   const queryClient = useQueryClient();
-  return useMutation<Tables<'tickets'>, Error, CreateTicketPayload>({
+  return useMutation<Ticket, Error, CreateTicketPayload>({
     mutationFn: async (newTicket) => {
       const { data, error } = await supabase
         .from('tickets')
@@ -232,7 +243,7 @@ interface UpdateTicketPayload {
 
 const useUpdateTicket = () => {
   const queryClient = useQueryClient();
-  return useMutation<Tables<'tickets'>, Error, UpdateTicketPayload>({
+  return useMutation<Ticket, Error, UpdateTicketPayload>({
     mutationFn: async ({ id, updates, userId }) => {
       // 1. Fetch current ticket to get old values for history
       const { data: oldTicket, error: fetchError } = await supabase
@@ -309,7 +320,7 @@ const useUpdateTicket = () => {
 
 // Hook สำหรับดึงคอมเมนต์ของ Ticket (ไม่มีการ Join)
 const useTicketComments = (ticketId: string) => {
-  return useQuery<Tables<'ticket_comments'>[], Error>({
+  return useQuery<TicketComment[], Error>({
     queryKey: ['ticketComments', ticketId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -336,7 +347,8 @@ interface AddTicketCommentPayload {
 
 const useAddTicketComment = () => {
   const queryClient = useQueryClient();
-  return useMutation<Tables<'ticket_comments'>, Error, AddTicketCommentPayload>({
+
+  return useMutation<TicketComment, Error, AddTicketCommentPayload>({
     mutationFn: async (newComment) => {
       const { data, error } = await supabase
         .from('ticket_comments')
@@ -350,48 +362,48 @@ const useAddTicketComment = () => {
       return data;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['ticketComments', variables.ticket_id] });
+      queryClient.invalidateQueries({
+        queryKey: ['ticketComments', variables.ticket_id],
+      });
     },
   });
 };
 
-// Hook สำหรับดึงข้อมูลผู้เขียนคอมเมนต์
-const useCommentAuthors = (comments: Tables<'ticket_comments'>[] | undefined) => {
-  const uniqueUserIds = Array.from(new Set(comments?.map(c => c.user_id).filter(Boolean) as string[] || []));
 
-  return useQuery<Record<string, Pick<Tables<'users'>, 'id' | 'name' | 'email'>>, Error>({
+// Hook สำหรับดึงข้อมูลผู้เขียนคอมเมนต์
+const useCommentAuthors = (comments: TicketComment[] | undefined) => {
+  const uniqueUserIds = Array.from(
+    new Set(comments?.map(c => c.user_id).filter(Boolean) as string[] || [])
+  );
+
+  return useQuery<Record<string, Pick<Profile, 'id' | 'name' | 'email'>>, Error>({
     queryKey: ['commentAuthors', uniqueUserIds.join(',')],
     queryFn: async () => {
       if (uniqueUserIds.length === 0) return {};
 
-      const fetchedAuthors: Record<string, Pick<Tables<'users'>, 'id' | 'name' | 'email'>> = {};
+      const result: Record<string, Pick<Profile, 'id' | 'name' | 'email'>> = {};
 
-      await Promise.all(uniqueUserIds.map(async (userId) => {
-        try {
-          const { data, error } = await supabase
-            .from('users')
+      await Promise.all(
+        uniqueUserIds.map(async (id) => {
+          const { data } = await supabase
+            .from('profiles')
             .select('id, name, email')
-            .eq('id', userId)
-            .single();
-          if (error) throw error;
-          if (data) {
-            fetchedAuthors[userId] = data;
-          }
-        } catch (e) {
-          console.error(`Failed to fetch user ${userId}:`, e);
-        }
-      }));
-      return fetchedAuthors;
+            .eq('id', id)
+            .maybeSingle();
+
+          if (data) result[id] = data;
+        })
+      );
+
+      return result;
     },
     enabled: uniqueUserIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    cacheTime: 10 * 60 * 1000, // 10 minutes
   });
 };
 
 // Hook สำหรับดึงประวัติ Ticket
 const useTicketHistory = (ticketId: string) => {
-  return useQuery<Tables<'ticket_history'>[], Error>({
+  return useQuery<TicketHistory[], Error>({
     queryKey: ['ticketHistory', ticketId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -410,38 +422,37 @@ const useTicketHistory = (ticketId: string) => {
 };
 
 // Hook สำหรับดึงข้อมูลผู้เขียนประวัติ
-const useHistoryAuthors = (history: Tables<'ticket_history'>[] | undefined) => {
-  const uniqueUserIds = Array.from(new Set(history?.map(h => h.user_id).filter(Boolean) as string[] || []));
+const useHistoryAuthors = (history: TicketHistory[] | undefined) => {
+  const uniqueUserIds = Array.from(
+    new Set(history?.map(h => h.user_id).filter(Boolean) as string[] || [])
+  );
 
-  return useQuery<Record<string, Pick<Tables<'users'>, 'id' | 'name' | 'email'>>, Error>({
+  return useQuery<Record<string, Pick<Profile, 'id' | 'name' | 'email'>>, Error>({
     queryKey: ['historyAuthors', uniqueUserIds.join(',')],
     queryFn: async () => {
       if (uniqueUserIds.length === 0) return {};
 
-      const fetchedAuthors: Record<string, Pick<Tables<'users'>, 'id' | 'name' | 'email'>> = {};
+      const result: Record<string, Pick<Profile, 'id' | 'name' | 'email'>> = {};
 
-      await Promise.all(uniqueUserIds.map(async (userId) => {
-        try {
-          const { data, error } = await supabase
-            .from('users')
+      await Promise.all(
+        uniqueUserIds.map(async (id) => {
+          const { data } = await supabase
+            .from('profiles')
             .select('id, name, email')
-            .eq('id', userId)
-            .single();
-          if (error) throw error;
-          if (data) {
-            fetchedAuthors[userId] = data;
-          }
-        } catch (e) {
-          console.error(`Failed to fetch user ${userId}:`, e);
-        }
-      }));
-      return fetchedAuthors;
+            .eq('id', id)
+            .maybeSingle();
+
+          if (data) result[id] = data;
+        })
+      );
+
+      return result;
     },
     enabled: uniqueUserIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    cacheTime: 10 * 60 * 1000, // 10 minutes
   });
 };
+
+
 
 // Export all hooks as a single object named 'useTickets'
 export const useTickets = {

@@ -6,7 +6,7 @@ import React, {
   useEffect,
 } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabaseClient'; // แก้ไขจาก '@/lib/supabase' เป็น '@/lib/supabaseClient'
+import { supabase } from '@/lib/supabase';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 

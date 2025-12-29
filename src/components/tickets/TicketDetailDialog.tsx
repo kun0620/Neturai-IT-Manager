@@ -8,11 +8,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { useTickets } from '@/hooks/useTickets';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { EditTicketDialog } from './EditTicketDialog'; // Import the EditTicketDialog
+import { format } from 'date-fns';
+
+import { useTickets } from '@/hooks/useTickets';
+import { useCurrentProfile } from '@/hooks/useCurrentProfile';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { EditTicketDialog } from './EditTicketDialog';
 import { Tables } from '@/types/database.types';
 
 interface TicketDetailDialogProps {
@@ -32,11 +34,12 @@ export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({
   const { data: ticket, isLoading, error } = useTicketById(ticketId);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  const getCategoryName = (categoryId: string | null) => {
-    return categories.find((cat) => cat.id === categoryId)?.name || 'N/A';
-  };
+  const { canManageTickets, loading: roleLoading } = useCurrentProfile();
 
-  if (isLoading) {
+  const getCategoryName = (categoryId: string | null) =>
+    categories.find((cat) => cat.id === categoryId)?.name || 'N/A';
+
+  if (isLoading || roleLoading) {
     return (
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
         <DialogContent className="sm:max-w-[600px]">
@@ -52,29 +55,15 @@ export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({
     );
   }
 
-  if (error) {
+  if (error || !ticket) {
     return (
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Error</DialogTitle>
-            <DialogDescription>Failed to load ticket details: {error.message}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={onClose}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  if (!ticket) {
-    return (
-      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Ticket Not Found</DialogTitle>
-            <DialogDescription>The requested ticket could not be found.</DialogDescription>
+            <DialogDescription>
+              {error ? error.message : 'Ticket not found.'}
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button onClick={onClose}>Close</Button>
@@ -92,75 +81,69 @@ export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({
             <DialogTitle>Ticket #{ticket.id.substring(0, 8)}</DialogTitle>
             <DialogDescription>Details for this support ticket.</DialogDescription>
           </DialogHeader>
+
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <span className="text-sm font-medium col-span-1">Title:</span>
+            <div className="grid grid-cols-4 gap-4">
+              <span className="text-sm font-medium">Title:</span>
               <span className="col-span-3">{ticket.title}</span>
             </div>
-            <div className="grid grid-cols-4 items-start gap-4">
-              <span className="text-sm font-medium col-span-1">Description:</span>
+
+            <div className="grid grid-cols-4 gap-4">
+              <span className="text-sm font-medium">Description:</span>
               <span className="col-span-3 text-sm text-muted-foreground">
                 {ticket.description || 'No description provided.'}
               </span>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <span className="text-sm font-medium col-span-1">Status:</span>
+
+            <div className="grid grid-cols-4 gap-4">
+              <span className="text-sm font-medium">Status:</span>
+              <Badge>
+                {ticket.status}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-4 gap-4">
+              <span className="text-sm font-medium">Priority:</span>
+              <Badge variant="secondary">
+                {ticket.priority}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-4 gap-4">
+              <span className="text-sm font-medium">Category:</span>
               <span className="col-span-3">
-                <Badge
-                  variant={
-                    ticket.status === 'Open'
-                      ? 'default'
-                      : ticket.status === 'In Progress'
-                      ? 'secondary'
-                      : ticket.status === 'Resolved'
-                      ? 'success'
-                      : 'destructive'
-                  }
-                >
-                  {ticket.status}
-                </Badge>
+                {getCategoryName(ticket.category_id)}
               </span>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <span className="text-sm font-medium col-span-1">Priority:</span>
+
+            <div className="grid grid-cols-4 gap-4">
+              <span className="text-sm font-medium">Created At:</span>
               <span className="col-span-3">
-                <Badge
-                  variant={
-                    ticket.priority === 'Low'
-                      ? 'outline'
-                      : ticket.priority === 'Medium'
-                      ? 'secondary'
-                      : ticket.priority === 'High'
-                      ? 'default'
-                      : 'destructive'
-                  }
-                >
-                  {ticket.priority}
-                </Badge>
+                {ticket.created_at
+                  ? format(new Date(ticket.created_at), 'PPP p')
+                  : 'N/A'}
               </span>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <span className="text-sm font-medium col-span-1">Category:</span>
-              <span className="col-span-3">{getCategoryName(ticket.category_id)}</span>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <span className="text-sm font-medium col-span-1">Created At:</span>
+
+            <div className="grid grid-cols-4 gap-4">
+              <span className="text-sm font-medium">Last Updated:</span>
               <span className="col-span-3">
-                {ticket.created_at ? format(new Date(ticket.created_at), 'PPP p') : 'N/A'}
+                {ticket.updated_at
+                  ? format(new Date(ticket.updated_at), 'PPP p')
+                  : 'N/A'}
               </span>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <span className="text-sm font-medium col-span-1">Last Updated:</span>
-              <span className="col-span-3">
-                {ticket.updated_at ? format(new Date(ticket.updated_at), 'PPP p') : 'N/A'}
-              </span>
-            </div>
-            {/* Add more fields as needed */}
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
-              Edit Ticket
-            </Button>
+            {canManageTickets && (
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(true)}
+              >
+                Edit Ticket
+              </Button>
+            )}
             <Button onClick={onClose}>Close</Button>
           </DialogFooter>
         </DialogContent>

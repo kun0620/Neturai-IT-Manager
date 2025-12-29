@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Session } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 
 export const useAuth = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -22,5 +22,11 @@ export const useAuth = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  return { session, loading };
+  const user: User | null = session?.user ?? null;
+
+  return {
+    session,
+    user,
+    loading,
+  };
 };
