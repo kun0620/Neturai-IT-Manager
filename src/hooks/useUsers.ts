@@ -6,26 +6,21 @@ export type Profile = Database['public']['Tables']['profiles']['Row'];
 
 async function getProfiles(): Promise<Profile[]> {
   const { data, error } = await supabase
-  .from('profiles')
-  .select('id, name, email, role, created_at')
-  .in('role', ['admin', 'it'])
-  .order('name');
+    .from('profiles')
+    .select('id, name, email, role, created_at')
+    .order('name');
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  if (error) throw error;
   return data ?? [];
 }
 
 export function useUsers() {
-  return useQuery<Profile[], Error>({
+  return useQuery({
     queryKey: ['profiles'],
     queryFn: getProfiles,
   });
 }
 
-// ใช้สำหรับ assignment โดยตรง
-export function useUsersForAssignment() {
-  return useUsers();
-}
+
+/** ✅ เพิ่ม export นี้ */
+export const useUsersForAssignment = useUsers;
