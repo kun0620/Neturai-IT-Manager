@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-type UserRole = 'user' | 'it' | 'admin';
+export type UserRole = 'user' | 'it' | 'admin';
+
+type Profile = {
+  id: string;
+  role: UserRole;
+};
 
 export function useCurrentProfile() {
-  const [role, setRole] = useState<UserRole | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,27 +22,34 @@ export function useCurrentProfile() {
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
-          setRole(null);
+          setProfile(null);
           setLoading(false);
           return;
         }
 
-        // 2) ดึง role จากตาราง profiles (id = auth.users.id)
+        // 2) ดึง profile จากตาราง profiles
         const { data, error } = await supabase
           .from('profiles')
-          .select('role')
+          .select('id, role')
           .eq('id', user.id)
           .single();
 
-        if (error) {
+        if (error || !data) {
           console.error('[useCurrentProfile] Failed to load profile:', error);
-          setRole('user'); // fallback ปลอดภัยสุด
+          // fallback ปลอดภัย
+          setProfile({
+            id: user.id,
+            role: 'user',
+          });
         } else {
-          setRole((data?.role as UserRole) ?? 'user');
+          setProfile({
+            id: data.id,
+            role: (data.role as UserRole) ?? 'user',
+          });
         }
       } catch (err) {
         console.error('[useCurrentProfile] Unexpected error:', err);
-        setRole('user');
+        setProfile(null);
       } finally {
         setLoading(false);
       }
@@ -46,7 +58,10 @@ export function useCurrentProfile() {
     loadProfile();
   }, []);
 
+  const role = profile?.role ?? null;
+
   return {
+    profile, // ✅ ตอนนี้มีจริง
     role,
     loading,
     isUser: role === 'user',

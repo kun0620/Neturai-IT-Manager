@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/data-table';
 import {
@@ -7,62 +8,79 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 import { useAdminUsers } from '@/hooks/useAdminUsers';
 import { useUpdateUserRole } from '@/hooks/useUpdateUserRole';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 
-import type { Profile } from '@/hooks/useAdminUsers';
-
-const ROLE_OPTIONS = ['admin', 'it', 'user'] as const;
+type UserRole = 'admin' | 'it' | 'user';
 
 export default function Users() {
-  const { data = [], isLoading } = useAdminUsers();
+  const { data: users, isLoading } = useAdminUsers();
   const { mutate: updateRole } = useUpdateUserRole();
-  const { isAdmin } = useCurrentProfile();
+  const { isAdmin, profile } = useCurrentProfile();
 
-  const columns: ColumnDef<Profile>[] = [
-    {
-      accessorKey: 'name',
-      header: 'Name',
-      cell: ({ row }) => row.original.name || '-',
-    },
-    {
-      accessorKey: 'email',
-      header: 'Email',
-    },
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState<{
+    userId: string;
+    email: string;
+    role: UserRole;
+  } | null>(null);
+
+  const currentUserId = profile?.id;
+
+  const columns: ColumnDef<any>[] = [
+    { accessorKey: 'name', header: 'Name' },
+    { accessorKey: 'email', header: 'Email' },
     {
       accessorKey: 'role',
       header: 'Role',
       cell: ({ row }) => {
         const user = row.original;
+        const isSelf = user.id === currentUserId;
 
-        // 🔒 IT / user เห็นอย่างเดียว
+        // IT → read only
         if (!isAdmin) {
-          return <span className="capitalize">{user.role ?? 'user'}</span>;
+          return <span className="capitalize">{user.role}</span>;
         }
 
-        // 👑 admin แก้ role ได้
+        // Admin ห้ามแก้ตัวเอง
+        if (isSelf) {
+          return (
+            <span className="capitalize text-muted-foreground">
+              {user.role} (you)
+            </span>
+          );
+        }
+
         return (
           <Select
-            value={user.role ?? 'user'}
-            onValueChange={(value) =>
-              updateRole({
+            value={user.role}
+            onValueChange={(value) => {
+              setPending({
                 userId: user.id,
-                role: value as 'admin' | 'it' | 'user',
-              })
-            }
+                email: user.email,
+                role: value as UserRole,
+              });
+              setOpen(true);
+            }}
           >
             <SelectTrigger className="w-[120px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ROLE_OPTIONS.map((role) => (
-                <SelectItem key={role} value={role}>
-                  {role}
-                </SelectItem>
-              ))}
+              <SelectItem value="admin">admin</SelectItem>
+              <SelectItem value="it">it</SelectItem>
+              <SelectItem value="user">user</SelectItem>
             </SelectContent>
           </Select>
         );
@@ -73,9 +91,51 @@ export default function Users() {
   if (isLoading) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-3xl font-bold">User Management</h1>
-      <DataTable columns={columns} data={data} />
-    </div>
+    <>
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold">User Management</h1>
+        <DataTable columns={columns} data={users ?? []} />
+      </div>
+
+      {/* ✅ Confirm Dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm role change</DialogTitle>
+          </DialogHeader>
+
+          <p className="text-sm text-muted-foreground">
+            Change role of <b>{pending?.email}</b> to{' '}
+            <b className="capitalize">{pending?.role}</b> ?
+          </p>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false);
+                setPending(null);
+              }}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              onClick={() => {
+                if (!pending) return;
+                updateRole({
+                  userId: pending.userId,
+                  role: pending.role,
+                });
+                setOpen(false);
+                setPending(null);
+              }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
