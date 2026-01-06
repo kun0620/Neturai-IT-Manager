@@ -1,17 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { UserRole } from '@/constants/roles';
-
-interface UpdateRolePayload {
-  userId: string;
-  role: UserRole;
-}
 
 export const useUpdateUserRole = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, UpdateRolePayload>({
-    mutationFn: async ({ userId, role }) => {
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      role,
+    }: {
+      userId: string;
+      role: 'admin' | 'it' | 'user';
+    }) => {
       const { error } = await supabase
         .from('profiles')
         .update({ role })

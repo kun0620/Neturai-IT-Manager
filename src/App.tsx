@@ -7,7 +7,7 @@ import UpdatePasswordPage from '@/pages/auth/UpdatePasswordPage';
 import Dashboard from '@/pages/Dashboard';
 import { Tickets } from '@/pages/Tickets';
 import { AssetManagement } from '@/pages/AssetManagement';
-import { Users } from '@/pages/Users';
+import Users from '@/pages/Users';
 import Reports from '@/pages/Reports';
 import { SettingsAndLogs } from '@/pages/SettingsAndLogs';
 import { AuthProvider } from '@/context/AuthContext';
@@ -16,7 +16,7 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 function App() {
   return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <BrowserRouter >
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
