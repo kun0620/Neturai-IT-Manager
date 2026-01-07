@@ -24,6 +24,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTickets } from '@/hooks/useTickets'; // Import useTickets to get categories
 import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Import the TicketDetailsDrawer
 
+
 interface RecentTicketsTableProps {
   tickets: Tables<'tickets'>[];
 }

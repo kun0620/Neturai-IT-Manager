@@ -11,13 +11,24 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Import the drawer
 import { useLocation } from 'react-router-dom'; // Import useLocation
+import { useAuth } from '@/hooks/useAuth';
 
 export const Tickets: React.FC = () => {
+  const {
+    role,
+    session,
+  } = useAuth();
+
+  const myUserId = session?.user?.id;
+
+  const canManageTickets = role === 'admin' || role === 'it';
+
+  
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false); // State for drawer
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null); // State for selected ticket ID
   const [searchTerm, setSearchTerm] = useState('');
-
+  
   const location = useLocation(); // Get location object
 
   const { useAllTickets, useTicketCategories } = useTickets;
@@ -36,6 +47,23 @@ export const Tickets: React.FC = () => {
     error: categoriesError,
   } = useTicketCategories();
 
+  const [showMyTickets, setShowMyTickets] = useState(false);
+
+  console.log({
+  myUserId,
+  tickets: tickets?.map(t => ({
+    id: t.id,
+    assigned_to: t.assigned_to,
+  })),
+});
+
+  
+  useEffect(() => {
+    if (!canManageTickets) {
+      setShowMyTickets(true);
+    }
+  }, [canManageTickets]);
+
   // Effect to open drawer if ticketId is passed in location state
   useEffect(() => {
     if (location.state?.ticketId) {
@@ -47,21 +75,47 @@ export const Tickets: React.FC = () => {
   }, [location.state]);
 
   const handleOpenDrawer = (ticketId: string) => {
+  setSelectedTicketId(null);
+
+  // force state change
+  setTimeout(() => {
     setSelectedTicketId(ticketId);
     setIsDrawerOpen(true);
-  };
+  }, 0);
+};
+
 
   const handleCloseDrawer = () => {
-    setIsDrawerOpen(false);
-    setSelectedTicketId(null);
-  };
+  setIsDrawerOpen(false);
+  setSelectedTicketId(null);
+};
 
-  const filteredTickets = tickets?.filter(ticket =>
-    ticket.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ticket.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ticket.status?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    categories?.find(cat => cat.id === ticket.category_id)?.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const categoryMap = React.useMemo(() => {
+  return new Map(categories?.map(cat => [cat.id, cat.name.toLowerCase()]) || []);
+}, [categories]);
+
+const filteredTickets =
+  tickets?.filter(ticket => {
+    const keyword = searchTerm.toLowerCase();
+
+    return (
+      ticket.title?.toLowerCase().includes(keyword) ||
+      ticket.description?.toLowerCase().includes(keyword) ||
+      ticket.status?.toLowerCase().includes(keyword) ||
+      (ticket.category_id
+        ? categoryMap.get(ticket.category_id)?.includes(keyword)
+        : false)
+    );
+  }) || [];
+
+const displayedTickets = showMyTickets && myUserId
+  ? filteredTickets.filter(
+      t =>
+        t.assigned_to === myUserId ||
+        t.created_by === myUserId
+    )
+  : filteredTickets;
+
 
   if (isLoadingTickets || isLoadingCategories) {
     return (
@@ -114,7 +168,25 @@ export const Tickets: React.FC = () => {
           />
         </div>
       </div>
+      {canManageTickets && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant={!showMyTickets ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowMyTickets(false)}
+          >
+            All Tickets
+          </Button>
 
+          <Button
+            variant={showMyTickets ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowMyTickets(true)}
+          >
+            My Tickets
+          </Button>
+        </div>
+      )}
       <Tabs defaultValue="table">
         <TabsList className="grid w-fit grid-cols-2">
           <TabsTrigger value="table">
@@ -125,17 +197,23 @@ export const Tickets: React.FC = () => {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="table">
+          {displayedTickets.length === 0 && (
+            <div className="text-center text-muted-foreground py-12">
+              No tickets found.
+            </div>
+          )}
+
           <TableView
-            tickets={filteredTickets}
+            tickets={displayedTickets}
             categories={categories || []}
-            onOpenDrawer={handleOpenDrawer} // Pass handler to TableView
+            onOpenDrawer={handleOpenDrawer}
           />
         </TabsContent>
         <TabsContent value="kanban">
           <KanbanView
-            tickets={filteredTickets}
+            tickets={displayedTickets}
             categories={categories || []}
-            onOpenDrawer={handleOpenDrawer} // Pass handler to KanbanView
+            onOpenDrawer={handleOpenDrawer}
           />
         </TabsContent>
       </Tabs>
@@ -147,12 +225,14 @@ export const Tickets: React.FC = () => {
       />
 
       {/* Render the TicketDetailsDrawer */}
-      <TicketDetailsDrawer
-        isOpen={isDrawerOpen}
-        onClose={handleCloseDrawer}
-        ticketId={selectedTicketId}
-        categories={categories || []}
-      />
+      {selectedTicketId && (
+  <TicketDetailsDrawer
+    isOpen={isDrawerOpen}
+    onClose={handleCloseDrawer}
+    ticketId={selectedTicketId}
+    categories={categories || []}
+  />
+)}
     </div>
   );
 };

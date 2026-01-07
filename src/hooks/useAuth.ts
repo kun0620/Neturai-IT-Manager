@@ -4,23 +4,59 @@ import { Session } from '@supabase/supabase-js';
 
 export const useAuth = () => {
   const [session, setSession] = useState<Session | null>(null);
+  const [role, setRole] = useState<'admin' | 'it' | 'user' | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+  const loadSessionAndProfile = async () => {
+    const { data } = await supabase.auth.getSession();
+    const session = data.session;
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
+    setSession(session);
 
-    return () => subscription.unsubscribe();
-  }, []);
+    if (session?.user) {
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
 
-  return { session, loading };
+      if (!error && profileData?.role) {
+        if (
+          profileData.role === 'admin' ||
+          profileData.role === 'it' ||
+          profileData.role === 'user'
+        ) {
+          setRole(profileData.role);
+        } else {
+          setRole(null);
+        }
+      } else {
+        setRole(null);
+      }
+    }
+    setLoading(false);
+  };
+
+  loadSessionAndProfile();
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    setSession(session);
+    if (!session) {
+      setRole(null);
+    }
+  });
+
+  return () => subscription.unsubscribe();
+}, []);
+
+  return {
+  session,
+  user: session?.user ?? null,
+  role,
+  loading,
+};
+
 };

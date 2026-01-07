@@ -1,3 +1,4 @@
+import { useAssignableUsers } from '@/hooks/useAssignableUsers';
 import {
   Table,
   TableBody,
@@ -36,12 +37,36 @@ export function TableView({ tickets, categories, onOpenDrawer }: TableViewProps)
     direction: 'ascending' | 'descending';
   } | null>(null);
 
+  const { data: users, isLoading: isUsersLoading } = useAssignableUsers();
+
+  const userMap = new Map<string, string>(
+    (users ?? []).map((u) => [u.id, u.name ?? u.id])
+  );
+
+
+const categoryMap = new Map(
+  categories.map((cat) => [cat.id, cat.name])
+);
+
   const sortedTickets = [...tickets].sort((a, b) => {
     if (!sortConfig) return 0;
 
-    const aValue = a[sortConfig.key];
-    const bValue = b[sortConfig.key];
+    let aValue = a[sortConfig.key];
+    let bValue = b[sortConfig.key];
 
+    if (sortConfig.key === 'category_id') {
+        aValue = a.category_id ? categoryMap.get(a.category_id) ?? null : null;
+        bValue = b.category_id ? categoryMap.get(b.category_id) ?? null : null; 
+      }
+    if (sortConfig.key === 'assigned_to') {
+      aValue = a.assigned_to
+        ? userMap.get(a.assigned_to) ?? null
+        : null;
+      bValue = b.assigned_to
+        ? userMap.get(b.assigned_to) ?? null
+        : null;
+    }
+    
     if (aValue === null || aValue === undefined) return sortConfig.direction === 'ascending' ? 1 : -1;
     if (bValue === null || bValue === undefined) return sortConfig.direction === 'ascending' ? -1 : 1;
 
@@ -55,6 +80,8 @@ export function TableView({ tickets, categories, onOpenDrawer }: TableViewProps)
         ? aValue - bValue
         : bValue - aValue;
     }
+    
+
     // Fallback for other types, or if types are mixed
     return 0;
   });
@@ -112,8 +139,10 @@ export function TableView({ tickets, categories, onOpenDrawer }: TableViewProps)
   };
 
   const getCategoryName = (categoryId: string | null) => {
-    return categories.find((cat) => cat.id === categoryId)?.name || 'N/A';
+  if (!categoryId) return 'N/A';
+  return categoryMap.get(categoryId) || 'N/A';
   };
+
 
   return (
     <motion.div
@@ -158,6 +187,12 @@ export function TableView({ tickets, categories, onOpenDrawer }: TableViewProps)
                 </TableHead>
                 <TableHead
                   className="cursor-pointer"
+                  onClick={() => requestSort('assigned_to')}
+                >
+                  Assigned To {getSortIndicator('assigned_to')}
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer"
                   onClick={() => requestSort('created_at')}
                 >
                   Created At {getSortIndicator('created_at')}
@@ -167,7 +202,11 @@ export function TableView({ tickets, categories, onOpenDrawer }: TableViewProps)
             <TableBody>
               {currentTickets.length > 0 ? (
                 currentTickets.map((ticket) => (
-                  <TableRow key={ticket.id} className="cursor-pointer hover:bg-muted/50" onClick={() => onOpenDrawer(ticket.id)}>
+                  <TableRow
+                    key={ticket.id}
+                    onClick={() => onOpenDrawer(ticket.id)}
+                    className="cursor-pointer transition-colors hover:bg-muted/50 active:bg-muted"
+                  >
                     <TableCell className="font-medium">{ticket.title}</TableCell>
                     <TableCell>{getCategoryName(ticket.category_id)}</TableCell>
                     <TableCell>
@@ -180,6 +219,13 @@ export function TableView({ tickets, categories, onOpenDrawer }: TableViewProps)
                         {ticket.status}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {isUsersLoading
+                        ? 'Loading...'
+                        : ticket.assigned_to
+                          ? userMap.get(ticket.assigned_to) ?? 'Unknown user'
+                          : 'Unassigned'}
+                    </TableCell>
                     <TableCell>
                       {ticket.created_at
                         ? format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')
@@ -189,7 +235,7 @@ export function TableView({ tickets, categories, onOpenDrawer }: TableViewProps)
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No tickets found.
                   </TableCell>
                 </TableRow>

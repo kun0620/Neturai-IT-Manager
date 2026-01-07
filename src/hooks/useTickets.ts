@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database.types';
-import type { Enums } from '@/types/database.types';
 import type { TablesUpdate } from '@/types/database.types';
 
 type Ticket = Database['public']['Tables']['tickets']['Row'];
@@ -193,9 +192,9 @@ interface CreateTicketPayload {
   subject: string;
   description: string;
   category_id: string;
-  priority: Enums<'ticket_priority'>;
-  assignee: string | null;
-  status: Enums<'ticket_status'>;
+  priority: Database['public']['Enums']['ticket_priority'];
+  assignee?: string | null;
+  status: Database['public']['Enums']['ticket_status'];
 }
 
 const useCreateTicket = () => {
