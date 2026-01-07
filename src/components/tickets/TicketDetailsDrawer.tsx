@@ -67,6 +67,13 @@ export function TicketDetailsDrawer({
   const { role, loading: roleLoading } = useCurrentProfile();
   const { data: itUsers, isLoading: isLoadingITUsers } = useITUsers();
   const user = session?.user;
+  const isStaff = role === 'admin' || role === 'it';
+
+  const canAssign = isStaff;
+  const canChangeStatus = isStaff;
+  const canManageTickets = isStaff;
+  const canComment = role !== null;
+
   const itUserMap = new Map(
   (itUsers ?? []).map(u => [u.id, u.name ?? u.id])
 );
@@ -78,7 +85,6 @@ console.log('historyAuthors:', historyAuthors);
 
   const ticketQuery = ticketId ? useTicketById(ticketId) : null;
   const commentsQuery = ticketId ? useTicketComments(ticketId) : null;
-
   const ticket = ticketQuery?.data;
   const isLoadingTicket = ticketQuery?.isLoading;
   const ticketError = ticketQuery?.error;
@@ -149,7 +155,6 @@ useEffect(() => {
     {
       onSuccess: () => {
         toast.success('Ticket assigned');
-        ticketQuery?.refetch();
     },
       onError: (err) => {
         toast.error(err.message);
@@ -218,39 +223,37 @@ useEffect(() => {
 
   const assignableUsers = itUsers ?? [];
 
-  const assignedToSection = !user ? (
-    <p>{ticket?.assigned_to || 'Unassigned'}</p>
-  ) : isLoadingITUsers ? (
-    <p className="text-sm text-muted-foreground">
-      Loading IT users...
-    </p>
-  ) : (
+  let assignedToSection: React.ReactNode;
+
+if (!user) {
+  assignedToSection = <p>{ticket?.assigned_to || 'Unassigned'}</p>;
+} else if (isLoadingITUsers) {
+  assignedToSection = (
+    <p className="text-sm text-muted-foreground">Loading IT users...</p>
+  );
+} else {
+  assignedToSection = (
     <Select
       value={assignedUser}
       onValueChange={handleAssignUser}
       disabled={isUpdatingTicket}
     >
-    <SelectTrigger className="w-[180px]">
-      <SelectValue placeholder="Unassigned" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="">Unassigned</SelectItem>
-
-      {assignableUsers.map((u) => (
-        <SelectItem key={u.id} value={u.id}>
-          {u.name || u.id}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-);
-
-
+      <SelectTrigger className="w-[180px]">
+        <SelectValue placeholder="Unassigned" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="">Unassigned</SelectItem>
+        {assignableUsers.map((u) => (
+          <SelectItem key={u.id} value={u.id}>
+            {u.name || u.id}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
   /* ---------------- render ---------------- */
-const canAssign = role === 'it' || role === 'admin';
-const canChangeStatus = role === 'it' || role === 'admin';
-const canComment = role !== null;
 
   return (
     <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -380,13 +383,15 @@ const canComment = role !== null;
                             )}
 
                             {h.change_type === 'assigned_to_change' && (
-                              <>
-                                Assigned changed
-                              </>
-                            )}
+                                <>
+                                  Assigned changed from{' '}
+                                  <b>{itUserMap.get(h.old_value ?? '') || 'Unassigned'}</b> →{' '}
+                                  <b>{itUserMap.get(h.new_value ?? '') || 'Unassigned'}</b>
+                                </>
+                              )}
                           </p>
 
-                          {author && (
+                          {author && canManageTickets && (
                             <div className="text-xs text-muted-foreground mt-1">
                               by {author.name || author.email}
                             </div>
