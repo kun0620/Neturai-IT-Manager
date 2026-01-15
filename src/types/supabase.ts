@@ -18,5 +18,5 @@ export type TicketComment = Tables<'ticket_comments'>;
 export type TicketHistory = Tables<'ticket_history'>;
 export type Asset = Tables<'assets'>;
 export type Repair = Tables<'repairs'>;
-export type User = Tables<'users'>;
+export type User = Tables<'profiles'>;
 export type Profile = Tables<'profiles'>;

@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 
 interface SummaryCardProps {
   title: string;
@@ -8,7 +10,12 @@ interface SummaryCardProps {
   icon: LucideIcon;
   description?: string;
   color?: string;
-  onClick?: () => void; // Add onClick prop
+  trend?: {
+    value: number;
+    label?: string;
+  };
+  onClick?: () => void;
+  className?: string;
 }
 
 export function SummaryCard({
@@ -17,26 +24,64 @@ export function SummaryCard({
   icon: Icon,
   description,
   color = 'text-primary',
-  onClick, // Destructure onClick
+  trend,
+  onClick,
+  className,
 }: SummaryCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className={onClick ? 'cursor-pointer' : ''} // Apply cursor-pointer if onClick is present
-      whileHover={onClick ? { scale: 1.02, boxShadow: '0 8px 16px rgba(0,0,0,0.1)' } : {}} // Add hover effect
-      onClick={onClick} // Attach onClick handler
+      transition={{ duration: 0.4 }}
+      className={cn(onClick && 'cursor-pointer')}
+      whileHover={onClick ? { scale: 1.02 } : undefined}
+      onClick={onClick}
     >
-      <Card className="hover:shadow-lg transition-shadow duration-300">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
-          <Icon className={`h-4 w-4 ${color}`} />
+      <Card
+        className={cn(
+          'h-full min-h-[140px] transition-shadow hover:shadow-md',
+          className
+        )}
+      >
+        <CardHeader className="flex flex-row items-start justify-between pb-1">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            {title}
+          </CardTitle>
+          <Icon className={cn('h-4 w-4', color)} />
         </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{value}</div>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
+
+        <CardContent className="flex h-[88px] flex-col justify-between pt-0">
+          <div className="text-3xl font-semibold leading-tight">
+            {value}
+          </div>
+
+          {description ? (
+            <p className="text-xs text-muted-foreground leading-snug">
+              {description}
+            </p>
+          ) : (
+            <div className="h-[16px]" />
+          )}
+
+          {trend && (
+            <div
+              className={`mt-1 flex items-center gap-1 text-xs ${
+                trend.value > 0
+                  ? 'text-green-600'
+                  : trend.value < 0
+                  ? 'text-red-600'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              {trend.value > 0 && <ArrowUp className="h-3 w-3" />}
+              {trend.value < 0 && <ArrowDown className="h-3 w-3" />}
+
+              <span>
+                {trend.value === 0
+                  ? 'No change'
+                  : `${Math.abs(trend.value)} ${trend.label ?? 'since yesterday'}`}
+              </span>
+            </div>
           )}
         </CardContent>
       </Card>

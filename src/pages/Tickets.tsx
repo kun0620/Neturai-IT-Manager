@@ -10,8 +10,9 @@ import { useTickets } from '@/hooks/useTickets';
 import { ErrorState } from '@/components/common/ErrorState';
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Import the drawer
-import { useLocation } from 'react-router-dom'; // Import useLocation
 import { useAuth } from '@/hooks/useAuth';
+import { useTicketDrawer } from '@/context/TicketDrawerContext';
+
 
 export const Tickets: React.FC = () => {
   const {
@@ -22,14 +23,10 @@ export const Tickets: React.FC = () => {
   const myUserId = session?.user?.id;
 
   const canManageTickets = role === 'admin' || role === 'it';
-
+  const { openDrawer } = useTicketDrawer();
   
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false); // State for drawer
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null); // State for selected ticket ID
   const [searchTerm, setSearchTerm] = useState('');
-  
-  const location = useLocation(); // Get location object
 
   const { useAllTickets, useTicketCategories } = useTickets;
 
@@ -64,31 +61,6 @@ export const Tickets: React.FC = () => {
     }
   }, [canManageTickets]);
 
-  // Effect to open drawer if ticketId is passed in location state
-  useEffect(() => {
-    if (location.state?.ticketId) {
-      setSelectedTicketId(location.state.ticketId);
-      setIsDrawerOpen(true);
-      // Clear the state so it doesn't reopen on subsequent visits
-      window.history.replaceState({}, document.title);
-    }
-  }, [location.state]);
-
-  const handleOpenDrawer = (ticketId: string) => {
-  setSelectedTicketId(null);
-
-  // force state change
-  setTimeout(() => {
-    setSelectedTicketId(ticketId);
-    setIsDrawerOpen(true);
-  }, 0);
-};
-
-
-  const handleCloseDrawer = () => {
-  setIsDrawerOpen(false);
-  setSelectedTicketId(null);
-};
 
   const categoryMap = React.useMemo(() => {
   return new Map(categories?.map(cat => [cat.id, cat.name.toLowerCase()]) || []);
@@ -162,9 +134,9 @@ const displayedTickets = showMyTickets && myUserId
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search tickets..."
-            className="pl-9"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
           />
         </div>
       </div>
@@ -206,14 +178,12 @@ const displayedTickets = showMyTickets && myUserId
           <TableView
             tickets={displayedTickets}
             categories={categories || []}
-            onOpenDrawer={handleOpenDrawer}
           />
         </TabsContent>
         <TabsContent value="kanban">
           <KanbanView
             tickets={displayedTickets}
             categories={categories || []}
-            onOpenDrawer={handleOpenDrawer}
           />
         </TabsContent>
       </Tabs>
@@ -225,14 +195,7 @@ const displayedTickets = showMyTickets && myUserId
       />
 
       {/* Render the TicketDetailsDrawer */}
-      {selectedTicketId && (
-  <TicketDetailsDrawer
-    isOpen={isDrawerOpen}
-    onClose={handleCloseDrawer}
-    ticketId={selectedTicketId}
-    categories={categories || []}
-  />
-)}
+      {categories && <TicketDetailsDrawer categories={categories} />}
     </div>
   );
 };

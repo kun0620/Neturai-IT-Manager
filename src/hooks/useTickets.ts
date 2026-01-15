@@ -8,33 +8,29 @@ type TicketCategory = Database['public']['Tables']['ticket_categories']['Row'];
 type TicketComment = Database['public']['Tables']['ticket_comments']['Row'];
 type TicketHistory = Database['public']['Tables']['ticket_history']['Row'];
 type Profile = Database['public']['Tables']['profiles']['Row'];
+
 type RecentTicket = Pick<
   Ticket,
   'id' | 'title' | 'category_id' | 'priority' | 'status' | 'created_at'
 >;
 
-// Hook สำหรับดึงข้อมูลสรุป (จำนวน Tickets ทั้งหมด, จำนวน Assets ทั้งหมด)
-const useDashboardSummary = () => {
-  return useQuery({
+/* ---------------- Dashboard ---------------- */
+
+const useDashboardSummary = () =>
+  useQuery({
     queryKey: ['dashboardSummary'],
     queryFn: async () => {
-      // ดึงจำนวน Tickets ทั้งหมด
       const { count: totalTickets, error: ticketsError } = await supabase
         .from('tickets')
         .select('*', { count: 'exact', head: true });
 
-      if (ticketsError) {
-        throw new Error(ticketsError.message);
-      }
+      if (ticketsError) throw new Error(ticketsError.message);
 
-      // ดึงจำนวน Assets ทั้งหมด
       const { count: totalAssets, error: assetsError } = await supabase
         .from('assets')
         .select('*', { count: 'exact', head: true });
 
-      if (assetsError) {
-        throw new Error(assetsError.message);
-      }
+      if (assetsError) throw new Error(assetsError.message);
 
       return {
         totalTickets: totalTickets || 0,
@@ -42,56 +38,147 @@ const useDashboardSummary = () => {
       };
     },
   });
-};
 
-// Hook สำหรับดึงจำนวน Open Tickets
-const useOpenTicketsCount = () => {
-  return useQuery<number, Error>({
+const useOpenTicketsCount = () =>
+  useQuery<number>({
     queryKey: ['openTicketsCount'],
     queryFn: async () => {
       const { count, error } = await supabase
         .from('tickets')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'Open');
+        .eq('status', 'open');
       if (error) throw new Error(error.message);
       return count || 0;
     },
   });
-};
 
-// Hook สำหรับดึงจำนวน In Progress Tickets
-const useInProgressTicketsCount = () => {
-  return useQuery<number, Error>({
+const useInProgressTicketsCount = () =>
+  useQuery<number>({
     queryKey: ['inProgressTicketsCount'],
     queryFn: async () => {
       const { count, error } = await supabase
         .from('tickets')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'In Progress');
+        .eq('status', 'in_progress');
       if (error) throw new Error(error.message);
       return count || 0;
     },
   });
-};
 
-// Hook สำหรับดึงจำนวน Closed Tickets
-const useClosedTicketsCount = () => {
-  return useQuery<number, Error>({
+const useClosedTicketsCount = () =>
+  useQuery<number>({
     queryKey: ['closedTicketsCount'],
     queryFn: async () => {
       const { count, error } = await supabase
         .from('tickets')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'Closed');
+        .eq('status', 'closed');
       if (error) throw new Error(error.message);
       return count || 0;
     },
   });
+
+const useTodayTicketsCount = () => {
+  return useQuery({
+    queryKey: ['tickets', 'today-count'],
+    queryFn: async () => {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const { count, error } = await supabase
+        .from('tickets')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startOfDay.toISOString());
+
+      if (error) throw error;
+
+      return count ?? 0;
+    },
+  });
 };
 
-// Hook สำหรับดึง Recent Tickets 5 รายการ
-const useRecentTickets = () => {
-  return useQuery<RecentTicket[], Error>({
+const useOverdueTicketsCount = () => {
+  return useQuery({
+    queryKey: ['tickets', 'overdue-count'],
+    queryFn: async () => {
+      const now = new Date().toISOString();
+
+      const { count, error } = await supabase
+        .from('tickets')
+        .select('*', { count: 'exact', head: true })
+        .lt('due_at', now)
+        .neq('status', 'closed');
+
+      if (error) throw error;
+
+      return count ?? 0;
+    },
+  });
+};
+
+const useAvgResolutionTime = () => {
+  return useQuery({
+    queryKey: ['tickets', 'avg-resolution-time'],
+    queryFn: async () => {
+      // 1. ดึง ticket ที่ถูกปิด (จาก history)
+      const { data: history, error: historyError } = await supabase
+        .from('ticket_history')
+        .select('ticket_id, created_at')
+        .eq('change_type', 'status_change')
+        .eq('new_value', 'closed');
+
+      if (historyError) throw historyError;
+      if (!history || history.length === 0) return null;
+
+      const ticketIds = history.map(h => h.ticket_id);
+
+      // 2. ดึง created_at ของ ticket เหล่านั้น
+      const { data: tickets, error: ticketError } = await supabase
+        .from('tickets')
+        .select('id, created_at')
+        .in('id', ticketIds);
+
+      if (ticketError) throw ticketError;
+
+      const ticketMap = new Map<string, number>();
+
+      tickets.forEach(t => {
+        if (t.created_at) {
+          ticketMap.set(t.id, new Date(t.created_at).getTime());
+        }
+      });
+
+      // 3. คำนวณเวลาที่ใช้
+      let totalMs = 0;
+      let count = 0;
+
+      history.forEach(h => {
+        const createdAt = ticketMap.get(h.ticket_id);
+        const closedAt = h.created_at
+          ? new Date(h.created_at).getTime()
+          : null;
+
+
+        if (createdAt && closedAt && closedAt > createdAt) {
+          totalMs += closedAt - createdAt;
+          count++;
+        }
+      });
+
+      if (count === 0) return null;
+
+      const avgMs = totalMs / count;
+      const avgHours = avgMs / (1000 * 60 * 60);
+
+      return Math.round(avgHours * 10) / 10;
+    },
+  });
+};
+
+/* ---------------- Tickets ---------------- */
+
+const useRecentTickets = () =>
+  useQuery<RecentTicket[]>({
     queryKey: ['recentTickets', 5],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -104,12 +191,9 @@ const useRecentTickets = () => {
       return data ?? [];
     },
   });
-};
 
-
-// Hook สำหรับดึง Tickets ทั้งหมด
-const useAllTickets = () => {
-  return useQuery<Ticket[], Error>({
+const useAllTickets = () =>
+  useQuery<Ticket[]>({
     queryKey: ['allTickets'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -117,17 +201,13 @@ const useAllTickets = () => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
       return data || [];
     },
   });
-};
 
-// Hook สำหรับดึง Ticket ตาม ID (ไม่มีการ Join)
-const useTicketById = (ticketId: string) => {
-  return useQuery<Ticket, Error>({
+const useTicketById = (ticketId: string) =>
+  useQuery<Ticket>({
     queryKey: ['ticket', ticketId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -136,41 +216,14 @@ const useTicketById = (ticketId: string) => {
         .eq('id', ticketId)
         .single();
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
       return data;
     },
-    enabled: !!ticketId, // Only run query if ticketId is available
+    enabled: !!ticketId,
   });
-};
 
-// Hook สำหรับดึงข้อมูลผู้ใช้ตาม ID (สำหรับ created_by และ assigned_to)
-const useUserById = (userId: string | null) => {
-  return useQuery<
-    Pick<Profile, 'id' | 'name' | 'email'> | null,
-    Error
-  >({
-    queryKey: ['profile', userId],
-    queryFn: async () => {
-      if (!userId) return null;
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, name, email')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!userId,
-  });
-};
-
-// Hook สำหรับดึง Ticket Categories ทั้งหมด
-const useTicketCategories = () => {
-  return useQuery<TicketCategory[], Error>({
+const useTicketCategories = () =>
+  useQuery<TicketCategory[]>({
     queryKey: ['ticketCategories'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -178,137 +231,133 @@ const useTicketCategories = () => {
         .select('*')
         .order('name', { ascending: true });
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
       return data || [];
     },
   });
-};
 
-// Hook สำหรับสร้าง Ticket ใหม่
+/* ---------------- Update Ticket ---------------- */
 interface CreateTicketPayload {
   user_id: string;
   subject: string;
   description: string;
   category_id: string;
-  priority: Database['public']['Enums']['ticket_priority'];
-  assignee?: string | null;
-  status: Database['public']['Enums']['ticket_status'];
+  priority: string;
+  status: 'open' | 'in_progress' | 'closed';
 }
 
 const useCreateTicket = () => {
   const queryClient = useQueryClient();
-  return useMutation<Ticket, Error, CreateTicketPayload>({
-    mutationFn: async (newTicket) => {
+
+  return useMutation({
+    mutationFn: async (payload: CreateTicketPayload) => {
       const { data, error } = await supabase
         .from('tickets')
         .insert([
           {
-            created_by: newTicket.user_id, // Changed from user_id to created_by
-            title: newTicket.subject,
-            description: newTicket.description,
-            category_id: newTicket.category_id,
-            priority: newTicket.priority,
-            assigned_to: newTicket.assignee,
-            status: newTicket.status,
+            created_by: payload.user_id,
+            title: payload.subject,
+            description: payload.description,
+            category_id: payload.category_id,
+            priority: payload.priority,
+            assigned_to: null,
+            status: payload.status, // 'open'
           },
         ])
         .select()
         .single();
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw error;
       return data;
     },
+
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
-      queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
       queryClient.invalidateQueries({ queryKey: ['allTickets'] });
-      queryClient.invalidateQueries({ queryKey: ['openTicketsCount'] });
-      queryClient.invalidateQueries({ queryKey: ['inProgressTicketsCount'] });
-      queryClient.invalidateQueries({ queryKey: ['closedTicketsCount'] });
     },
   });
 };
 
-// Hook สำหรับอัปเดต Ticket
 interface UpdateTicketPayload {
   id: string;
   updates: TablesUpdate<'tickets'>;
-  userId: string; // User performing the update
+  userId: string;
 }
 
 const useUpdateTicket = () => {
   const queryClient = useQueryClient();
+
   return useMutation<Ticket, Error, UpdateTicketPayload>({
     mutationFn: async ({ id, updates, userId }) => {
-      // 1. Fetch current ticket to get old values for history
       const { data: oldTicket, error: fetchError } = await supabase
         .from('tickets')
-        .select('status, priority, assigned_to') // Select relevant fields for history
+        .select('status, assigned_to, due_at')
         .eq('id', id)
         .single();
 
-      if (fetchError) {
-        throw new Error(`Failed to fetch old ticket data: ${fetchError.message}`);
-      }
+      if (fetchError) throw new Error(fetchError.message);
 
-      // 2. Perform the update
-      const { data, error } = await supabase
+      const { data: updatedTicket, error: updateError } = await supabase
         .from('tickets')
         .update(updates)
         .eq('id', id)
         .select()
         .single();
 
-      if (error) {
-        throw new Error(error.message);
+      if (updateError) throw new Error(updateError.message);
+
+      type ChangeValue = string | null;
+      const normalize = (v?: string | null): ChangeValue => v ?? null;
+
+      const changes: Record<string, { from: ChangeValue; to: ChangeValue }> = {};
+
+      if (updates.status && oldTicket.status !== updates.status) {
+        changes.status = {
+          from: normalize(oldTicket.status),
+          to: normalize(updates.status),
+        };
       }
 
-      // 3. Record history if status changed
-      if (updates.status && oldTicket?.status !== updates.status) {
-        const { error: historyError } = await supabase
-          .from('ticket_history')
-          .insert({
-            ticket_id: id,
-            user_id: userId,
-            change_type: 'status_change',
-            old_value: oldTicket?.status || null,
-            new_value: updates.status,
-          });
-
-        if (historyError) {
-          console.error('Failed to insert ticket history (status):', historyError.message);
-          // Don't throw, as the ticket update itself was successful
-        }
+      if (
+        updates.assigned_to !== undefined &&
+        oldTicket.assigned_to !== updates.assigned_to
+      ) {
+        changes.assigned_to = {
+          from: normalize(oldTicket.assigned_to),
+          to: normalize(updates.assigned_to),
+        };
       }
 
-      // 4. Record history if assigned_to changed
-      if (updates.assigned_to !== undefined && oldTicket?.assigned_to !== updates.assigned_to) {
-        const { error: historyError } = await supabase
-          .from('ticket_history')
-          .insert({
-            ticket_id: id,
-            user_id: userId,
-            change_type: 'assigned_to_change',
-            old_value: oldTicket?.assigned_to || null,
-            new_value: updates.assigned_to || null,
-          });
-
-        if (historyError) {
-          console.error('Failed to insert ticket history (assigned_to):', historyError.message);
-        }
+      if ('due_at' in updates && oldTicket.due_at !== updates.due_at) {
+        changes.due_at = {
+          from: normalize(oldTicket.due_at),
+          to: normalize(updates.due_at),
+        };
       }
 
-      return data;
+      if (Object.keys(changes).length > 0) {
+        await supabase.from('ticket_history').insert({
+          ticket_id: id,
+          user_id: userId,
+          change_type: 'bulk_update',
+          changes,
+        });
+      }
+
+      await supabase.rpc('notify_ticket_updated', {
+        p_ticket_ids: [id],
+        p_message: 'สถานะ Ticket ถูกอัปเดต',
+      });
+
+      return updatedTicket;
     },
+
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['allTickets'] });
       queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
       queryClient.invalidateQueries({ queryKey: ['ticket', variables.id] });
-      queryClient.invalidateQueries({ queryKey: ['ticketHistory', variables.id] }); // Invalidate history
+      queryClient.invalidateQueries({
+        queryKey: ['ticketHistory', variables.id],
+      });
       queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
       queryClient.invalidateQueries({ queryKey: ['openTicketsCount'] });
       queryClient.invalidateQueries({ queryKey: ['inProgressTicketsCount'] });
@@ -317,27 +366,22 @@ const useUpdateTicket = () => {
   });
 };
 
-// Hook สำหรับดึงคอมเมนต์ของ Ticket (ไม่มีการ Join)
 const useTicketComments = (ticketId: string) => {
   return useQuery<TicketComment[], Error>({
     queryKey: ['ticketComments', ticketId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ticket_comments')
-        .select('*') // Removed 'users(name, email)' join
+        .select('*')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
       return data || [];
     },
     enabled: !!ticketId,
   });
 };
-
-// Hook สำหรับเพิ่มคอมเมนต์ใหม่
 interface AddTicketCommentPayload {
   ticket_id: string;
   user_id: string;
@@ -348,16 +392,14 @@ const useAddTicketComment = () => {
   const queryClient = useQueryClient();
 
   return useMutation<TicketComment, Error, AddTicketCommentPayload>({
-    mutationFn: async (newComment) => {
+    mutationFn: async (payload) => {
       const { data, error } = await supabase
         .from('ticket_comments')
-        .insert([newComment])
+        .insert(payload)
         .select()
         .single();
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
       return data;
     },
     onSuccess: (_, variables) => {
@@ -367,40 +409,6 @@ const useAddTicketComment = () => {
     },
   });
 };
-
-
-// Hook สำหรับดึงข้อมูลผู้เขียนคอมเมนต์
-const useCommentAuthors = (comments: TicketComment[] | undefined) => {
-  const uniqueUserIds = Array.from(
-    new Set(comments?.map(c => c.user_id).filter(Boolean) as string[] || [])
-  );
-
-  return useQuery<Record<string, Pick<Profile, 'id' | 'name' | 'email'>>, Error>({
-    queryKey: ['commentAuthors', uniqueUserIds.join(',')],
-    queryFn: async () => {
-      if (uniqueUserIds.length === 0) return {};
-
-      const result: Record<string, Pick<Profile, 'id' | 'name' | 'email'>> = {};
-
-      await Promise.all(
-        uniqueUserIds.map(async (id) => {
-          const { data } = await supabase
-            .from('profiles')
-            .select('id, name, email')
-            .eq('id', id)
-            .maybeSingle();
-
-          if (data) result[id] = data;
-        })
-      );
-
-      return result;
-    },
-    enabled: uniqueUserIds.length > 0,
-  });
-};
-
-// Hook สำหรับดึงประวัติ Ticket
 const useTicketHistory = (ticketId: string) => {
   return useQuery<TicketHistory[], Error>({
     queryKey: ['ticketHistory', ticketId],
@@ -411,30 +419,26 @@ const useTicketHistory = (ticketId: string) => {
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
       return data || [];
     },
     enabled: !!ticketId,
   });
 };
-
-// Hook สำหรับดึงข้อมูลผู้เขียนประวัติ
 const useHistoryAuthors = (history: TicketHistory[] | undefined) => {
-  const uniqueUserIds = Array.from(
+  const userIds = Array.from(
     new Set(history?.map(h => h.user_id).filter(Boolean) as string[] || [])
   );
 
   return useQuery<Record<string, Pick<Profile, 'id' | 'name' | 'email'>>, Error>({
-    queryKey: ['historyAuthors', uniqueUserIds.join(',')],
+    queryKey: ['historyAuthors', userIds.join(',')],
     queryFn: async () => {
-      if (uniqueUserIds.length === 0) return {};
+      if (userIds.length === 0) return {};
 
       const result: Record<string, Pick<Profile, 'id' | 'name' | 'email'>> = {};
 
       await Promise.all(
-        uniqueUserIds.map(async (id) => {
+        userIds.map(async (id) => {
           const { data } = await supabase
             .from('profiles')
             .select('id, name, email')
@@ -447,28 +451,33 @@ const useHistoryAuthors = (history: TicketHistory[] | undefined) => {
 
       return result;
     },
-    enabled: uniqueUserIds.length > 0,
+    enabled: userIds.length > 0,
   });
 };
 
+/* ---------------- Export ---------------- */
 
-
-// Export all hooks as a single object named 'useTickets'
 export const useTickets = {
   useDashboardSummary,
   useRecentTickets,
   useAllTickets,
-  useCreateTicket,
   useTicketById,
-  useUserById,
   useTicketCategories,
   useUpdateTicket,
+
+  useCreateTicket,
+
   useTicketComments,
   useAddTicketComment,
-  useCommentAuthors,
-  useTicketHistory, // Add useTicketHistory
-  useHistoryAuthors, // Add useHistoryAuthors
-  useOpenTicketsCount, // Add new hook
-  useInProgressTicketsCount, // Add new hook
-  useClosedTicketsCount, // Add new hook
+  useTicketHistory,
+  useHistoryAuthors,
+
+  useOpenTicketsCount,
+  useInProgressTicketsCount,
+  useClosedTicketsCount,
+
+  useTodayTicketsCount,
+  useOverdueTicketsCount,
+  useAvgResolutionTime,
 };
+

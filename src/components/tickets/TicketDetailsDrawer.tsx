@@ -1,3 +1,6 @@
+import { Calendar } from '@/components/ui/calendar';
+import { Clock, User, ArrowRightLeft } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useEffect, useState } from 'react';
 import { useITUsers } from '@/hooks/useITUsers';
 import {
@@ -28,23 +31,22 @@ import { useTickets } from '@/hooks/useTickets';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 import type { Database } from '@/types/database.types';
+import { useTicketDrawer } from '@/context/TicketDrawerContext';
 
 type Ticket = Database['public']['Tables']['tickets']['Row'];
 type TicketCategory = Database['public']['Tables']['ticket_categories']['Row'];
 
 interface TicketDetailsDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  ticketId: string | null;
   categories: TicketCategory[];
 }
 
-export function TicketDetailsDrawer({
-  isOpen,
-  onClose,
-  ticketId,
-  categories,
-}: TicketDetailsDrawerProps) {
+export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
+  /* ================= Drawer Context ================= */
+  const { ticketId, isOpen, closeDrawer } = useTicketDrawer();
+
+  if (!ticketId) return null;
+
+  /* ================= hooks ================= */
   const {
     useTicketById,
     useUpdateTicket,
@@ -54,18 +56,31 @@ export function TicketDetailsDrawer({
     useHistoryAuthors,
   } = useTickets;
 
+  const ticketQuery = useTicketById(ticketId);
+  const commentsQuery = useTicketComments(ticketId);
+  const historyQuery = useTicketHistory(ticketId);
 
-  const historyQuery = ticketId
-  ? useTicketHistory(ticketId)
-  : null;
+  const ticket = ticketQuery.data;
+  const comments = commentsQuery.data ?? [];
+  const history = historyQuery.data ?? [];
 
-  const history = historyQuery?.data;
-  const isLoadingHistory = historyQuery?.isLoading;
+  const isLoadingTicket = ticketQuery.isLoading;
+  const isLoadingComments = commentsQuery.isLoading;
+  const isLoadingHistory = historyQuery.isLoading;
+  const ticketError = ticketQuery.error;
+
   const historyAuthorsQuery = useHistoryAuthors(history);
   const historyAuthors = historyAuthorsQuery.data ?? {};
+
+  const { mutate: updateTicket, isPending: isUpdatingTicket } =
+    useUpdateTicket();
+  const { mutate: addComment, isPending: isAddingComment } =
+    useAddTicketComment();
+
   const { session } = useAuth();
-  const { role, loading: roleLoading } = useCurrentProfile();
+  const { role } = useCurrentProfile();
   const { data: itUsers, isLoading: isLoadingITUsers } = useITUsers();
+
   const user = session?.user;
   const isStaff = role === 'admin' || role === 'it';
 
@@ -74,98 +89,62 @@ export function TicketDetailsDrawer({
   const canManageTickets = isStaff;
   const canComment = role !== null;
 
-  const itUserMap = new Map(
-  (itUsers ?? []).map(u => [u.id, u.name ?? u.id])
-);
-  console.log('history:', history);
-console.log('historyAuthors:', historyAuthors);
-
-
-  /* ---------------- data ---------------- */
-
-  const ticketQuery = ticketId ? useTicketById(ticketId) : null;
-  const commentsQuery = ticketId ? useTicketComments(ticketId) : null;
-  const ticket = ticketQuery?.data;
-  const isLoadingTicket = ticketQuery?.isLoading;
-  const ticketError = ticketQuery?.error;
-
-  const comments = commentsQuery?.data;
-  const isLoadingComments = commentsQuery?.isLoading;
-
-  const { mutate: updateTicket, isPending: isUpdatingTicket } =
-    useUpdateTicket();
-
-  const { mutate: addComment, isPending: isAddingComment } =
-    useAddTicketComment();
-
-  /* ---------------- state ---------------- */
-
+  /* ================= state ================= */
   const [newCommentText, setNewCommentText] = useState('');
   const [selectedStatus, setSelectedStatus] =
-  useState<Ticket['status'] | ''>('');
+    useState<Ticket['status'] | ''>('');
+  const [assignedUser, setAssignedUser] = useState<string>('');
+  const [draftDueDate, setDraftDueDate] = useState<Date | undefined>();
+  const [draftDueTime, setDraftDueTime] = useState('09:00');
 
   useEffect(() => {
-  if (ticket?.status) {
-    setSelectedStatus(ticket.status);
-  }
-}, [ticket?.status]);
+    if (ticket?.status) setSelectedStatus(ticket.status);
+  }, [ticket?.status]);
 
-useEffect(() => {
-  if (ticket?.assigned_to) {
-    setAssignedUser(ticket.assigned_to);
-  } else {
-    setAssignedUser('');
-  }
-}, [ticket?.assigned_to]);
+  useEffect(() => {
+    setAssignedUser(ticket?.assigned_to ?? '');
+  }, [ticket?.assigned_to]);
 
-  /* ---------------- handlers ---------------- */
+  useEffect(() => {
+    if (ticket?.due_at) {
+      const d = new Date(ticket.due_at);
+      setDraftDueDate(d);
+      setDraftDueTime(d.toISOString().slice(11, 16));
+    } else {
+      setDraftDueDate(undefined);
+      setDraftDueTime('09:00');
+    }
+  }, [ticket?.due_at]);
 
+  /* ================= handlers ================= */
   const handleStatusChange = (status: Ticket['status']) => {
-    if (!ticketId || !user?.id) return;
+    if (!user?.id) return;
 
     updateTicket(
+      { id: ticketId, updates: { status }, userId: user.id },
       {
-        id: ticketId,
-        updates: { status },
-        userId: user.id,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Status updated');
-        },
-        onError: (err) => {
-          toast.error(err.message);
-        },
+        onSuccess: () => toast.success('Status updated'),
+        onError: (err) => toast.error(err.message),
       }
     );
   };
 
-  const [assignedUser, setAssignedUser] = useState<string>('');
   const handleAssignUser = (userId: string) => {
-  if (!ticketId || !user?.id) return;
-    
-  setAssignedUser(userId);
+    if (!user?.id) return;
 
-  updateTicket(
-    {
-      id: ticketId,
-      updates: { assigned_to: userId },
-      userId: user.id,
-    },
-    {
-      onSuccess: () => {
-        toast.success('Ticket assigned');
-    },
-      onError: (err) => {
-        toast.error(err.message);
-      },
+    setAssignedUser(userId);
+
+    updateTicket(
+      { id: ticketId, updates: { assigned_to: userId }, userId: user.id },
+      {
+        onSuccess: () => toast.success('Ticket assigned'),
+        onError: (err) => toast.error(err.message),
       }
     );
   };
-
 
   const handleAddComment = () => {
-    if (!ticketId || !user?.id || !newCommentText.trim()) return;
+    if (!user?.id || !newCommentText.trim()) return;
 
     addComment(
       {
@@ -178,85 +157,50 @@ useEffect(() => {
           setNewCommentText('');
           toast.success('Comment added');
         },
-        onError: (err) => {
-          toast.error(err.message);
-        },
+        onError: (err) => toast.error(err.message),
       }
     );
   };
 
-  /* ---------------- helpers ---------------- */
+  const handleConfirmDueDate = () => {
+    if (!ticket || !user?.id || !draftDueDate) return;
 
-  const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+    const [h, m] = draftDueTime.split(':').map(Number);
+    const due = new Date(draftDueDate);
+    due.setHours(h);
+    due.setMinutes(m);
+    due.setSeconds(0);
 
-  const getCategoryName = (categoryId: string | null) =>
-    categoryId ? categoryMap.get(categoryId) ?? 'N/A' : 'N/A';
-
-  const getPriorityBadgeVariant = (priority: Ticket['priority']) => {
-    switch (priority) {
-      case 'Low':
-        return 'outline';
-      case 'Medium':
-        return 'secondary';
-      case 'High':
-      case 'Critical':
-        return 'destructive';
-      default:
-        return 'outline';
-    }
-  };
-  const getUserStatusMessage = (status: Ticket['status']) => {
-    switch (status) {
-      case 'Open':
-        return 'Your ticket has been received.';
-      case 'In Progress':
-        return 'Our IT team is currently working on your ticket.';
-      case 'Resolved':
-        return 'Waiting for your response.';
-      case 'Closed':
-        return 'This ticket has been resolved.';
-      default:
-        return '';
-    }
+    updateTicket(
+      {
+        id: ticket.id,
+        updates: { due_at: due.toISOString() },
+        userId: user.id,
+      },
+      {
+        onSuccess: () => toast.success('Due date updated'),
+        onError: (err) => toast.error(err.message),
+      }
+    );
   };
 
+  /* ================= helpers ================= */
+  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+  const getCategoryName = (id: string | null) =>
+    id ? categoryMap.get(id) ?? 'N/A' : 'N/A';
 
-  const assignableUsers = itUsers ?? [];
+  const isOverdue =
+    !!ticket?.due_at &&
+    new Date(ticket.due_at).getTime() < Date.now() &&
+    ticket.status !== 'closed';
 
-  let assignedToSection: React.ReactNode;
-
-if (!user) {
-  assignedToSection = <p>{ticket?.assigned_to || 'Unassigned'}</p>;
-} else if (isLoadingITUsers) {
-  assignedToSection = (
-    <p className="text-sm text-muted-foreground">Loading IT users...</p>
+  const itUserMap = new Map(
+    (itUsers ?? []).map((u) => [u.id, u.name ?? u.id])
   );
-} else {
-  assignedToSection = (
-    <Select
-      value={assignedUser}
-      onValueChange={handleAssignUser}
-      disabled={isUpdatingTicket}
-    >
-      <SelectTrigger className="w-[180px]">
-        <SelectValue placeholder="Unassigned" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="">Unassigned</SelectItem>
-        {assignableUsers.map((u) => (
-          <SelectItem key={u.id} value={u.id}>
-            {u.name || u.id}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
 
-  /* ---------------- render ---------------- */
-
+  /* ================= render ================= */
   return (
-    <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Drawer open={isOpen} onOpenChange={(o) => !o && closeDrawer()}>
       <DrawerContent className="h-[90%] mt-24">
         <ScrollArea className="h-full">
           <div className="mx-auto w-full max-w-3xl p-4">
@@ -275,20 +219,16 @@ if (!user) {
               </p>
             ) : (
               <>
-                {/* header */}
-                <h2 className="text-xl font-bold mb-2">{ticket.title}</h2>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Ticket ID: {ticket.id.slice(0, 8)}
-                </p>
+                <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+                  {ticket.title}
+                  {isOverdue && (
+                    <Badge variant="destructive">Overdue</Badge>
+                  )}
+                </h2>
 
                 <Separator />
-                  {role === 'user' && (
-                    <div className="mt-2 rounded-md bg-muted p-3 text-sm text-muted-foreground">
-                      {getUserStatusMessage(ticket.status)}
-                    </div>
-                  )}
 
-                {/* info */}
+                {/* ===== BASIC INFO ===== */}
                 <div className="grid grid-cols-2 gap-4 my-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Description</p>
@@ -301,127 +241,140 @@ if (!user) {
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground">Priority</p>
-                    <Badge variant={getPriorityBadgeVariant(ticket.priority)}>
-                      {ticket.priority}
-                    </Badge>
+                    <p className="text-sm text-muted-foreground">Created At</p>
+                    <p className="text-muted-foreground">
+                      {ticket.created_at
+                        ? format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')
+                        : '—'}
+                    </p>
                   </div>
+                </div>
 
+                <Separator />
+
+                {/* ===== STATUS & ASSIGN ===== */}
+                <div className="grid grid-cols-2 gap-4 my-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Status</p>
                     <Select
-                       value={selectedStatus}
-                        onValueChange={(v) => handleStatusChange(v as Ticket['status'])}
-                        disabled={!canChangeStatus || isUpdatingTicket}
+                      value={selectedStatus}
+                      onValueChange={(v) =>
+                        handleStatusChange(v as Ticket['status'])
+                      }
+                      disabled={!canChangeStatus || isUpdatingTicket}
                     >
                       <SelectTrigger className="w-[180px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Open">Open</SelectItem>
-                        <SelectItem value="In Progress">
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="in_progress">
                           In Progress
                         </SelectItem>
-                        <SelectItem value="Closed">Closed</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground">Created At</p>
-                    <p>
-                      {ticket.created_at
-                        ? format(
-                            new Date(ticket.created_at),
-                            'MMM dd, yyyy HH:mm'
-                          )
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  {role !== 'user' && (
-                  <div>
                     <p className="text-sm text-muted-foreground">Assigned To</p>
                     {canAssign ? (
-                    assignedToSection
-                  ) : (
-                    <p>
-                    {ticket.assigned_to
-                      ? itUserMap.get(ticket.assigned_to) ?? ticket.assigned_to
-                      : 'Unassigned'}
-                  </p>
-                  )}
+                      <Select
+                        value={assignedUser}
+                        onValueChange={handleAssignUser}
+                      >
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Unassigned" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Unassigned</SelectItem>
+                          {(itUsers ?? []).map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.name || u.id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p>
+                        {ticket.assigned_to
+                          ? itUserMap.get(ticket.assigned_to)
+                          : 'Unassigned'}
+                      </p>
+                    )}
                   </div>
-                  )}
-
-
                 </div>
-                <Separator className="my-6" />
 
-                <h3 className="font-semibold mb-2">History</h3>
+                <Separator />
 
-                {isLoadingHistory ? (
-                  <Skeleton className="h-20 w-full" />
-                ) : history && history.length > 0 ? (
-                  <div className="space-y-3">
-                    {history.map((h) => {
-                      const author = h.user_id
-                        ? historyAuthors[h.user_id]
-                        : null;
+                {/* ===== DUE DATE ===== */}
+                <div className="my-4">
+                  <p className="text-sm text-muted-foreground mb-1">Due Date</p>
+                  {canManageTickets ? (
+                    <div className="flex items-center gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            {draftDueDate
+                              ? format(draftDueDate, 'MMM dd, yyyy')
+                              : 'Pick date'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={draftDueDate}
+                            onSelect={setDraftDueDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
 
-                      return (
-                        <div key={h.id} className="text-sm">
-                          <p className="text-muted-foreground">
-                            {format(new Date(h.created_at), 'MMM dd, yyyy HH:mm')}
-                          </p>
+                      <input
+                        type="time"
+                        value={draftDueTime}
+                        onChange={(e) => setDraftDueTime(e.target.value)}
+                        className="
+                          h-9
+                          rounded-md
+                          border
+                          bg-background
+                          px-2
+                          text-sm
+                          text-foreground
+                          shadow-sm
+                          focus:outline-none
+                          focus:ring-2
+                          focus:ring-ring
+                          focus:ring-offset-2
+                        "
+                      />
 
-                          <p>
-                            {h.change_type === 'status_change' && (
-                              <>
-                                Status changed from <b>{h.old_value}</b> →{' '}
-                                <b>{h.new_value}</b>
-                              </>
-                            )}
 
-                            {h.change_type === 'assigned_to_change' && (
-                                <>
-                                  Assigned changed from{' '}
-                                  <b>{itUserMap.get(h.old_value ?? '') || 'Unassigned'}</b> →{' '}
-                                  <b>{itUserMap.get(h.new_value ?? '') || 'Unassigned'}</b>
-                                </>
-                              )}
-                          </p>
+                      <Button size="sm" onClick={handleConfirmDueDate}>
+                        Save
+                      </Button>
+                    </div>
+                  ) : (
+                    <p>{ticket.due_at ? format(new Date(ticket.due_at), 'MMM dd, yyyy') : 'N/A'}</p>
+                  )}
+                </div>
 
-                          {author && canManageTickets && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              by {author.name || author.email}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No history yet.
-                  </p>
-                )}
+                <Separator />
 
-                <Separator className="my-4" />
-
-                {/* comments */}
+                {/* ===== COMMENTS ===== */}
                 <h3 className="font-semibold mb-2">Comments</h3>
 
                 {isLoadingComments ? (
                   <Skeleton className="h-20 w-full" />
-                ) : comments && comments.length > 0 ? (
+                ) : comments.length > 0 ? (
                   <div className="space-y-3 mb-4">
                     {comments.map((c) => (
                       <div key={c.id} className="text-sm">
                         <p className="text-muted-foreground">
-                          {format(
-                            new Date(c.created_at),
-                            'MMM dd, yyyy HH:mm'
-                          )}
+                          {c.created_at
+                            ? format(new Date(c.created_at), 'MMM dd, yyyy HH:mm')
+                            : '—'}
                         </p>
                         <p>{c.comment_text}</p>
                       </div>
@@ -442,8 +395,8 @@ if (!user) {
 
                 <Button
                   onClick={handleAddComment}
-                  disabled={!canComment || isAddingComment || !newCommentText.trim()}
-                >       
+                  disabled={!canComment || isAddingComment}
+                >
                   Add Comment
                 </Button>
               </>

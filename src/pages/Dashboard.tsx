@@ -1,39 +1,42 @@
 import React, { useState } from 'react';
 import {
-  Activity,
-  Ticket,
-  HardDrive, // Icon for assets
+  HardDrive,
   LayoutDashboard,
-  CircleDot, // Icon for Open tickets
-  Hourglass, // Icon for In Progress tickets
-  CheckCircle, // Icon for Closed tickets
-  Plus, // Icon for New Ticket
-  ListTodo, // Icon for View All Tickets
-  PackagePlus, // Icon for Add Asset
+  CircleDot,
+  Hourglass,
+  CheckCircle,
+  Plus,
+  ListTodo,
+  PackagePlus,
+  Activity,
+  AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import { SummaryCard } from '@/components/dashboard/SummaryCard';
-import {
-  useTickets, // Import the single useTickets object
-} from '@/hooks/useTickets';
+import { useTickets } from '@/hooks/useTickets';
 import { ErrorState } from '@/components/common/ErrorState';
-import { RecentTicketsTable } from '@/components/dashboard/RecentTicketsTable'; // Import the component
-import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'; // Import LoadingSkeleton
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
-import { Button } from '@/components/ui/button'; // Import Button component
-import { CreateTicketDialog } from '@/components/tickets/CreateTicketDialog'; // Import CreateTicketDialog
+import { RecentTicketsTable } from '@/components/dashboard/RecentTicketsTable';
+import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { CreateTicketDialog } from '@/components/tickets/CreateTicketDialog';
+import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer';
 
 const Dashboard: React.FC = () => {
-  const navigate = useNavigate(); // Initialize useNavigate
-  const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
-
-  // Destructure individual hooks from the useTickets object
+  const navigate = useNavigate();
+  const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] =
+  useState(false);
+  
   const {
     useDashboardSummary,
     useRecentTickets,
     useOpenTicketsCount,
     useInProgressTicketsCount,
     useClosedTicketsCount,
-    useTicketCategories, // Add useTicketCategories
+    useTicketCategories,
+    useTodayTicketsCount,
+    useOverdueTicketsCount,
+    useAvgResolutionTime,
   } = useTickets;
 
   const {
@@ -41,7 +44,7 @@ const Dashboard: React.FC = () => {
     isLoading: isLoadingSummary,
     isError: isErrorSummary,
     error: errorSummary,
-  } = useDashboardSummary(); // Use the new summary hook
+  } = useDashboardSummary();
 
   const {
     data: openTicketsCount,
@@ -76,7 +79,22 @@ const Dashboard: React.FC = () => {
     isLoading: isLoadingCategories,
     isError: isErrorCategories,
     error: errorCategories,
-  } = useTicketCategories(); // Fetch categories for CreateTicketDialog
+  } = useTicketCategories();
+
+  const {
+      data: todayTicketsCount,
+      isLoading: isLoadingTodayTickets,
+    } = useTodayTicketsCount();
+
+  const {
+      data: overdueTicketsCount,
+      isLoading: isLoadingOverdueTickets,
+    } = useOverdueTicketsCount();
+
+  const {
+      data: avgResolutionHours,
+      isLoading: isLoadingAvgResolution,
+    } = useAvgResolutionTime();
 
   const isLoadingAny =
     isLoadingSummary ||
@@ -84,7 +102,10 @@ const Dashboard: React.FC = () => {
     isLoadingInProgressTickets ||
     isLoadingClosedTickets ||
     isLoadingRecentTickets ||
-    isLoadingCategories; // Include categories loading
+    isLoadingTodayTickets ||
+    isLoadingOverdueTickets ||
+    isLoadingAvgResolution ||
+    isLoadingCategories;
 
   const isErrorAny =
     isErrorSummary ||
@@ -92,25 +113,16 @@ const Dashboard: React.FC = () => {
     isErrorInProgressTickets ||
     isErrorClosedTickets ||
     isErrorRecentTickets ||
-    isErrorCategories; // Include categories error
+    isErrorCategories;
 
   if (isLoadingAny) {
     return (
       <div className="flex flex-col gap-6 p-4 md:p-6">
-        <div className="h-8 w-1/2 bg-muted rounded animate-pulse"></div>
-        <div className="h-6 w-3/4 bg-muted rounded animate-pulse"></div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <LoadingSkeleton />
           <LoadingSkeleton />
           <LoadingSkeleton />
           <LoadingSkeleton />
-        </div>
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6 animate-pulse">
-          <div className="h-6 w-1/3 bg-muted rounded mb-4"></div>
-          <div className="h-4 w-full bg-muted rounded mb-2"></div>
-          <div className="h-4 w-full bg-muted rounded mb-2"></div>
-          <div className="h-4 w-full bg-muted rounded mb-2"></div>
-          <div className="h-4 w-full bg-muted rounded"></div>
         </div>
       </div>
     );
@@ -126,7 +138,7 @@ const Dashboard: React.FC = () => {
           errorInProgressTickets?.message ||
           errorClosedTickets?.message ||
           errorRecentTickets?.message ||
-          errorCategories?.message || // Include categories error message
+          errorCategories?.message ||
           'An unknown error occurred.'
         }
       />
@@ -135,22 +147,35 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
-      <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
-        <LayoutDashboard className="h-8 w-8" /> Welcome to your Dashboard!
+      <h1 className="text-3xl font-bold flex items-center gap-2">
+        <LayoutDashboard className="h-8 w-8" />
+        Dashboard
       </h1>
-      <p className="text-muted-foreground text-lg">
-        This is where you'll see an overview of your IT operations.
+      <p className="text-muted-foreground">
+        Track, manage, and resolve IT tickets at a glance
       </p>
-
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-3">
-        <Button onClick={() => setIsCreateTicketDialogOpen(true)} className="flex items-center gap-2">
+        <Button
+          onClick={() => setIsCreateTicketDialogOpen(true)}
+          className="flex items-center gap-2"
+        >
           <Plus className="h-4 w-4" /> New Ticket
         </Button>
-        <Button onClick={() => navigate('/tickets')} variant="outline" className="flex items-center gap-2">
+
+        <Button
+          onClick={() => navigate('/tickets')}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
           <ListTodo className="h-4 w-4" /> View All Tickets
         </Button>
-        <Button onClick={() => navigate('/assets/new')} variant="outline" className="flex items-center gap-2">
+
+        <Button
+          onClick={() => navigate('/assets/new')}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
           <PackagePlus className="h-4 w-4" /> Add Asset
         </Button>
       </div>
@@ -163,7 +188,7 @@ const Dashboard: React.FC = () => {
           icon={CircleDot}
           color="text-green-500"
           description="Tickets awaiting action"
-          onClick={() => navigate('/tickets?status=Open')}
+          onClick={() => navigate('/tickets?status=open')}
         />
         <SummaryCard
           title="In Progress Tickets"
@@ -171,7 +196,7 @@ const Dashboard: React.FC = () => {
           icon={Hourglass}
           color="text-yellow-500"
           description="Tickets currently being worked on"
-          onClick={() => navigate('/tickets?status=In%20Progress')}
+          onClick={() => navigate('/tickets?status=in_progress')}
         />
         <SummaryCard
           title="Closed Tickets"
@@ -179,27 +204,64 @@ const Dashboard: React.FC = () => {
           icon={CheckCircle}
           color="text-red-500"
           description="Tickets that have been resolved"
-          onClick={() => navigate('/tickets?status=Closed')}
+          onClick={() => navigate('/tickets?status=closed')}
         />
         <SummaryCard
           title="Total Assets"
           value={summaryData?.totalAssets || 0}
-          icon={HardDrive} // Using HardDrive icon for assets
+          icon={HardDrive}
           color="text-blue-500"
           description="All IT assets managed"
           onClick={() => navigate('/assets')}
         />
+        <SummaryCard
+          title="Tickets Today"
+          value={todayTicketsCount || 0}
+          icon={Activity}
+          color="text-indigo-500"
+          description="New tickets created today"
+          className="border-indigo-200"
+        />
+        <SummaryCard
+          title="Overdue Tickets"
+          value={overdueTicketsCount || 0}
+          icon={AlertTriangle}
+          color="text-red-500"
+          description="Tickets past their due date"
+          className="border-red-200"
+          onClick={() => navigate('/tickets?filter=overdue')}
+        />
+        <SummaryCard
+          title="Avg Resolution Time"
+          value={avgResolutionHours !== null ? `${avgResolutionHours} hrs` : '—'}
+          icon={Clock}
+          color="text-emerald-500"
+          description="Average time to resolve tickets"
+        />
+        <SummaryCard
+          title="Open Tickets"
+          value={openTicketsCount || 0}
+          icon={CircleDot}
+          description="Tickets awaiting action"
+          onClick={() => navigate('/tickets?status=open')}
+        />
       </div>
 
-      {/* Recent Tickets Table */}
-      <RecentTicketsTable tickets={recentTickets || []} />
+      {/* Recent Tickets */}
+      <RecentTicketsTable
+        tickets={recentTickets || []}
+        isLoading={isLoadingRecentTickets}
+      />
 
-      {/* Create Ticket Dialog */}
-      {categories && (
+      {/* Drawer (state comes from Context) */}
+      {categories && <TicketDetailsDrawer categories={categories} />}
+
+      {/* Create Ticket */}
+      {isCreateTicketDialogOpen && (
         <CreateTicketDialog
           isOpen={isCreateTicketDialogOpen}
           onClose={() => setIsCreateTicketDialogOpen(false)}
-          categories={categories}
+          categories={categories || []}
         />
       )}
     </div>

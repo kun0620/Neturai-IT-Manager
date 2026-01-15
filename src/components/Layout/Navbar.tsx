@@ -44,7 +44,7 @@ const Navbar: React.FC<NavbarProps> = ({
   const displayRole = role ? role.toUpperCase() : 'USER';
 
   return (
-    <nav className="bg-card-light dark:bg-card-dark p-4 shadow-lg dark:shadow-2xl-dark flex items-center justify-between sticky top-0 z-30 w-full">
+    <nav className="sticky top-0 z-30 w-full bg-background border-b p-4 flex items-center justify-between">
       {/* Mobile Sidebar Toggle */}
       <div className="flex items-center md:hidden">
         <button

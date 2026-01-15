@@ -1,22 +1,22 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { Tables } from '@/types/database.types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TICKET_STATUS_OPTIONS } from '@/constants/enums';
 import { format } from 'date-fns';
+import { useTicketDrawer } from '@/context/TicketDrawerContext';
+
 
 interface KanbanViewProps {
   tickets: Tables<'tickets'>[];
   categories: Tables<'ticket_categories'>[];
-  onOpenDrawer: (ticketId: string) => void; // New prop to open the drawer
 }
 
-export function KanbanView({ tickets, categories, onOpenDrawer }: KanbanViewProps) {
+export function KanbanView({ tickets, categories }: KanbanViewProps) {
   const getCategoryName = (categoryId: string | null) => {
     return categories.find((cat) => cat.id === categoryId)?.name || 'N/A';
   };
-
+  const { openDrawer } = useTicketDrawer();
   const getPriorityBadgeVariant = (priority: Tables<'tickets'>['priority']) => {
     switch (priority) {
       case 'Low':
@@ -63,7 +63,10 @@ export function KanbanView({ tickets, categories, onOpenDrawer }: KanbanViewProp
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
                   className="border rounded-lg p-3 bg-background shadow-sm cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => onOpenDrawer(ticket.id)} // Open drawer on click
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('button,a')) return;
+                    openDrawer(ticket.id);
+                  }}
                 >
                   <h4 className="font-medium text-sm mb-1">{ticket.title}</h4>
                   <p className="text-xs text-muted-foreground mb-2 line-clamp-2">

@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+
 import {
   Dialog,
   DialogContent,
@@ -18,176 +21,202 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useTickets } from '@/hooks/useTickets'; // Import the single useTickets object
-import { useAuth } from '@/context/AuthContext'; // Corrected import path for useAuth
+
+import { useTickets } from '@/hooks/useTickets';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import type { Database, Tables } from '@/types/database.types';
 
+import type { Tables } from '@/types/database.types';
 
 interface CreateTicketDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  categories: Tables<'ticket_categories'>[]; // Accept categories as prop
+  categories: Tables<'ticket_categories'>[];
 }
 
-export function CreateTicketDialog({ isOpen, onClose, categories }: CreateTicketDialogProps) {
-  const { user } = useAuth();
+export function CreateTicketDialog({
+  isOpen,
+  onClose,
+  categories,
+}: CreateTicketDialogProps) {
   const { useCreateTicket } = useTickets;
   const createTicketMutation = useCreateTicket();
-  
-  const [step, setStep] = useState(1);
+
+  /* ---------------- State ---------------- */
+
+  const [step, setStep] = useState<1 | 2>(1);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || ''); // Use category ID
-  const [priority, setPriority] = useState<
-  Database['public']['Enums']['ticket_priority']
->('Low');
+  const [categoryId, setCategoryId] = useState<string>(
+    categories[0]?.id ?? ''
+  );
+  const [priority, setPriority] = useState<string>('Low');
 
-  
-  // Set initial category if categories are loaded
-  useState(() => {
-    if (categories.length > 0 && !selectedCategoryId) {
-      setSelectedCategoryId(categories[0].id);
-    }
+  /* ---------------- Load priorities ---------------- */
+
+  const { data: priorities = [] } = useQuery({
+    queryKey: ['ticket_priorities'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ticket_priorities')
+        .select('id, name');
+
+      if (error) throw error;
+
+      // ✅ เรียงเอง: ต่ำ → สูง
+      const order = ['Low', 'Medium', 'High', 'Critical'];
+
+      return (data ?? []).sort(
+        (a, b) => order.indexOf(a.name) - order.indexOf(b.name)
+      );
+    },
   });
+
+  /* ---------------- Helpers ---------------- */
 
   const resetForm = () => {
     setStep(1);
     setSubject('');
     setDescription('');
-    setSelectedCategoryId(categories[0]?.id || '');
+    setCategoryId(categories[0]?.id ?? '');
     setPriority('Low');
   };
-
+  
   const handleNext = () => {
-    if (step === 1 && !subject.trim()) {
-      toast.error('Subject cannot be empty.');
+    if (!subject.trim()) {
+      toast.error('Subject is required');
       return;
     }
-    setStep((prev) => prev + 1);
-  };
-
-  const handleBack = () => {
-    setStep((prev) => prev - 1);
+    setStep(2);
   };
 
   const handleSubmit = async () => {
-    if (!user?.id) {
-      toast.error('You must be logged in to create a ticket.');
-      return;
-    }
-
-    if (!selectedCategoryId) {
-      toast.error('Please select a valid category.');
-      return;
-    }
-
     try {
-      await createTicketMutation.mutateAsync({
-  user_id: user.id,
-  subject,
-  description,
-  category_id: selectedCategoryId,
-  priority,
-  status: 'Open',
-});
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      toast.success('Ticket created successfully!');
-      onClose();
+      if (!user) {
+        toast.error('You must be logged in');
+        return;
+      }
+
+      if (!categoryId) {
+        toast.error('Please select a category');
+        return;
+      }
+
+      if (!priority) {
+        toast.error('Please select a priority');
+        return;
+      }
+
+      await createTicketMutation.mutateAsync({
+        user_id: user.id,
+        subject,
+        description,
+        category_id: categoryId,
+        priority,
+        status: 'open',
+      });
+
+      toast.success('Ticket created successfully');
       resetForm();
-    } catch (error: any) {
-      toast.error(`Failed to create ticket: ${error.message}`);
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to create ticket');
     }
   };
 
+  /* ---------------- Render ---------------- */
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
           <DialogTitle>Create New Ticket</DialogTitle>
           <DialogDescription>
-            Fill in the details to create a new support ticket.
+            Fill in the details to create a support ticket.
           </DialogDescription>
         </DialogHeader>
 
+        {/* STEP 1 */}
         {step === 1 && (
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="subject">Subject</Label>
               <Input
                 id="subject"
-                placeholder="Brief summary of the issue"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                required
+                placeholder="Brief summary of the issue"
               />
             </div>
+
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
-                placeholder="Detailed explanation of the problem"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                placeholder="Detailed explanation of the problem"
                 rows={5}
               />
             </div>
           </div>
         )}
 
+        {/* STEP 2 */}
         {step === 2 && (
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={selectedCategoryId}
-                onValueChange={(value: string) => setSelectedCategoryId(value)}
-              >
-                <SelectTrigger id="category">
+              <Label>Category</Label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
             <div className="grid gap-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select
-                value={priority}
-                onValueChange={(value) => setPriority(value as Database['public']['Enums']['ticket_priority'])}
-              >
-                <SelectTrigger id="priority">
+              <Label>Priority</Label>
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger>
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
-                  {['Low', 'Medium', 'High', 'Critical'].map((prio) => (
-                    <SelectItem key={prio} value={prio}>
-                      {prio}
+                  {priorities.map((p) => (
+                    <SelectItem key={p.id} value={p.name}>
+                      {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            
           </div>
         )}
 
         <DialogFooter className="flex justify-between">
-          {step > 1 && (
-            <Button variant="outline" onClick={handleBack}>
+          {step === 2 && (
+            <Button variant="outline" onClick={() => setStep(1)}>
               Back
             </Button>
           )}
-          {step < 2 ? (
+
+          {step === 1 ? (
             <Button onClick={handleNext}>Next</Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={createTicketMutation.isPending}>
+            <Button
+              onClick={handleSubmit}
+              disabled={createTicketMutation.isPending}
+            >
               {createTicketMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
