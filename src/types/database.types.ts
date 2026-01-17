@@ -14,9 +14,161 @@ export type Database = {
   }
   public: {
     Tables: {
+      asset_field_values: {
+        Row: {
+          asset_id: string
+          field_id: string
+          id: string
+          value_date: string | null
+          value_json: Json | null
+          value_number: number | null
+          value_text: string | null
+        }
+        Insert: {
+          asset_id: string
+          field_id: string
+          id?: string
+          value_date?: string | null
+          value_json?: Json | null
+          value_number?: number | null
+          value_text?: string | null
+        }
+        Update: {
+          asset_id?: string
+          field_id?: string
+          id?: string
+          value_date?: string | null
+          value_json?: Json | null
+          value_number?: number | null
+          value_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_field_values_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_field_values_field_id_fkey"
+            columns: ["field_id"]
+            isOneToOne: false
+            referencedRelation: "asset_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asset_fields: {
+        Row: {
+          asset_type_id: string
+          created_at: string | null
+          field_key: string
+          field_label: string
+          field_type: string
+          id: string
+          is_required: boolean | null
+          options: Json | null
+        }
+        Insert: {
+          asset_type_id: string
+          created_at?: string | null
+          field_key: string
+          field_label: string
+          field_type: string
+          id?: string
+          is_required?: boolean | null
+          options?: Json | null
+        }
+        Update: {
+          asset_type_id?: string
+          created_at?: string | null
+          field_key?: string
+          field_label?: string
+          field_type?: string
+          id?: string
+          is_required?: boolean | null
+          options?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_fields_asset_type_id_fkey"
+            columns: ["asset_type_id"]
+            isOneToOne: false
+            referencedRelation: "asset_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asset_histories: {
+        Row: {
+          action: string
+          asset_id: string
+          changed_by: string | null
+          created_at: string | null
+          id: string
+          new_value: Json | null
+          old_value: Json | null
+        }
+        Insert: {
+          action: string
+          asset_id: string
+          changed_by?: string | null
+          created_at?: string | null
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+        }
+        Update: {
+          action?: string
+          asset_id?: string
+          changed_by?: string | null
+          created_at?: string | null
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_histories_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      asset_types: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          key: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          key: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          key?: string
+          name?: string
+        }
+        Relationships: []
+      }
       assets: {
         Row: {
           asset_code: string
+          asset_type_id: string | null
           assigned_to: string | null
           category: Database["public"]["Enums"]["asset_category"]
           category_id: string | null
@@ -33,6 +185,7 @@ export type Database = {
         }
         Insert: {
           asset_code: string
+          asset_type_id?: string | null
           assigned_to?: string | null
           category?: Database["public"]["Enums"]["asset_category"]
           category_id?: string | null
@@ -49,6 +202,7 @@ export type Database = {
         }
         Update: {
           asset_code?: string
+          asset_type_id?: string | null
           assigned_to?: string | null
           category?: Database["public"]["Enums"]["asset_category"]
           category_id?: string | null
@@ -390,7 +544,7 @@ export type Database = {
           id: string
           priority: string
           resolved_at: string | null
-          status: string
+          status: Database["public"]["Enums"]["ticket_status"]
           subject: string
           title: string
           updated_at: string | null
@@ -405,7 +559,7 @@ export type Database = {
           id?: string
           priority?: string
           resolved_at?: string | null
-          status?: string
+          status?: Database["public"]["Enums"]["ticket_status"]
           subject?: string
           title?: string
           updated_at?: string | null
@@ -420,7 +574,7 @@ export type Database = {
           id?: string
           priority?: string
           resolved_at?: string | null
-          status?: string
+          status?: Database["public"]["Enums"]["ticket_status"]
           subject?: string
           title?: string
           updated_at?: string | null
@@ -523,7 +677,7 @@ export type Database = {
       is_technician: { Args: never; Returns: boolean }
       jwt_custom_claims: { Args: { event: Json }; Returns: Json }
       notify_ticket_updated: {
-        Args: { p_message: string; p_ticket_ids: string[] }
+        Args: { p_body: string; p_ticket_ids: string[]; p_title: string }
         Returns: undefined
       }
     }

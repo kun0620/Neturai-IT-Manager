@@ -33,7 +33,7 @@ export function SummaryCard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className={cn(onClick && 'cursor-pointer')}
+      className={cn(onClick && 'cursor-pointer', "print:scale-100")}
       whileHover={onClick ? { scale: 1.02 } : undefined}
       onClick={onClick}
     >

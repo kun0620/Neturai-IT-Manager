@@ -18,7 +18,7 @@ import { useTicketDrawer } from '@/context/TicketDrawerContext';
 
 
 
-export function TopBar() {
+export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { openDrawer } = useTicketDrawer();

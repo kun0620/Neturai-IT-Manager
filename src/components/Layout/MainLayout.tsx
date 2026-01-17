@@ -45,7 +45,6 @@ export const MainLayout: React.FC = () => {
           title="Authentication Required"
           message="Please log in to access the application."
         />
-
         <div className="mt-4">
           <Link to="/login">
             <Button>Go to Login</Button>
@@ -61,7 +60,8 @@ export const MainLayout: React.FC = () => {
         {/* ================= Sidebar (Desktop) ================= */}
         <aside className="hidden border-r bg-muted/40 md:block">
           <div className="flex h-full max-h-screen flex-col">
-            <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+            {/* Sidebar Header (สูง = TopBar) */}
+            <div className="flex h-14 items-center border-b px-4 lg:h-14 lg:px-6">
               <Link to="/" className="flex items-center gap-2 font-semibold">
                 <HardHat className="h-6 w-6" />
                 <span>Neturai IT Manager</span>
@@ -93,59 +93,46 @@ export const MainLayout: React.FC = () => {
         </aside>
 
         {/* ================= Main Area ================= */}
-        <div className="flex flex-col overflow-visible">
-          {/* ===== Top Bar ===== */}
-          <TopBar />
+        <div className="flex flex-col">
+          {/* ===== Top Bar (HEADER เดียว) ===== */}
+          <TopBar
+            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          />
 
-          {/* ===== Mobile Sidebar ===== */}
-          <div className="flex items-center gap-2 border-b bg-muted/40 px-4 md:hidden">
-            <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <Menu className="h-5 w-5" />
-                  <span className="sr-only">Toggle navigation</span>
-                </Button>
-              </SheetTrigger>
+          {/* ===== Mobile Sidebar (Sheet) ===== */}
+          <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+            <SheetContent side="left" className="flex flex-col md:hidden">
+              <nav className="grid gap-2 text-lg font-medium">
+                <Link
+                  to="/"
+                  className="mb-4 flex items-center gap-2 text-lg font-semibold"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <HardHat className="h-6 w-6" />
+                  <span>Neturai IT Manager</span>
+                </Link>
 
-              <SheetContent side="left" className="flex flex-col">
-                <nav className="grid gap-2 text-lg font-medium">
+                {navItems.map((item) => (
                   <Link
-                    to="/"
-                    className="mb-4 flex items-center gap-2 text-lg font-semibold"
+                    key={item.name}
+                    to={item.href}
+                    className={`flex items-center gap-4 rounded-xl px-3 py-2 ${
+                      location.pathname.startsWith(item.href)
+                        ? 'bg-muted text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <HardHat className="h-6 w-6" />
-                    <span>Neturai IT Manager</span>
+                    <item.icon className="h-5 w-5" />
+                    {item.name}
                   </Link>
-
-                  {navItems.map((item) => (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={`flex items-center gap-4 rounded-xl px-3 py-2 ${
-                        location.pathname.startsWith(item.href)
-                          ? 'bg-muted text-foreground'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <item.icon className="h-5 w-5" />
-                      {item.name}
-                    </Link>
-                  ))}
-                </nav>
-              </SheetContent>
-            </Sheet>
-
-            <Input
-              type="search"
-              placeholder="Search..."
-              className="my-2 w-full bg-background"
-            />
-          </div>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
 
           {/* ===== Page Content ===== */}
-          <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 overflow-visible">
+          <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
             <Outlet />
           </main>
         </div>
@@ -153,3 +140,4 @@ export const MainLayout: React.FC = () => {
     </TicketDrawerProvider>
   );
 };
+

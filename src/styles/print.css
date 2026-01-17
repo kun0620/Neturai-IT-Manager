@@ -1,0 +1,87 @@
+@media print {
+  /* ซ่อนทุกอย่างก่อน */
+  body * {
+    visibility: hidden;
+  }
+
+  /* แสดงเฉพาะ report */
+  #report-print,
+  #report-print * {
+    visibility: visible;
+  }
+
+  /* ตำแหน่ง report */
+  #report-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* ซ่อนปุ่ม */
+  header,
+  nav,
+  button,
+  input,
+  .no-print {
+    display: none !important;
+  }
+
+  /* ปรับ card */
+  .shadow,
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* สีให้คม */
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-grid-2 {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+    page-break-inside: avoid;
+  }
+
+  .print-grid-2 > * {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+}
+
+/* Page setup */
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  /* ===== FIX SUMMARY GRID ===== */
+  .print-summary-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 12px !important;
+    page-break-inside: avoid;
+  }
+
+  .print-summary-grid > * {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Card look in print */
+  .print-card {
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+  }
+
+

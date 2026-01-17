@@ -12,6 +12,7 @@ import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Import the drawer
 import { useAuth } from '@/hooks/useAuth';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
+import { useSearchParams } from 'react-router-dom';
 
 
 export const Tickets: React.FC = () => {
@@ -27,6 +28,8 @@ export const Tickets: React.FC = () => {
   
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchParams] = useSearchParams();
+  const slaFilter = searchParams.get('sla'); // 'breach' | null
 
   const { useAllTickets, useTicketCategories } = useTickets;
 
@@ -66,19 +69,40 @@ export const Tickets: React.FC = () => {
   return new Map(categories?.map(cat => [cat.id, cat.name.toLowerCase()]) || []);
 }, [categories]);
 
+const SLA_HOURS: Record<string, number> = {
+    Low: 72,
+    Medium: 48,
+    High: 24,
+    Critical: 8,
+  };
+
 const filteredTickets =
   tickets?.filter(ticket => {
     const keyword = searchTerm.toLowerCase();
 
-    return (
+    const matchKeyword =
       ticket.title?.toLowerCase().includes(keyword) ||
       ticket.description?.toLowerCase().includes(keyword) ||
-      ticket.status?.toLowerCase().includes(keyword) ||
-      (ticket.category_id
-        ? categoryMap.get(ticket.category_id)?.includes(keyword)
-        : false)
-    );
+      ticket.status?.toLowerCase().includes(keyword);
+
+    if (slaFilter !== 'breach') return matchKeyword;
+
+    // SLA breach logic
+    if (!ticket.created_at || !ticket.priority) return false;
+
+    const sla = SLA_HOURS[ticket.priority];
+    if (!sla) return false;
+
+    const start = new Date(ticket.created_at).getTime();
+    const end = ticket.updated_at
+      ? new Date(ticket.updated_at).getTime()
+      : Date.now();
+
+    const hours = (end - start) / (1000 * 60 * 60);
+
+    return hours > sla && ticket.status !== 'closed';
   }) || [];
+
 
 const displayedTickets = showMyTickets && myUserId
   ? filteredTickets.filter(
@@ -121,6 +145,11 @@ const displayedTickets = showMyTickets && myUserId
     <div className="flex flex-col gap-6 p-4 md:p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-foreground">Ticket Management</h1>
+        {slaFilter === 'breach' && (
+          <div className="text-sm text-red-600">
+            Showing SLA breached tickets
+          </div>
+        )}
         <Button onClick={() => setIsCreateTicketDialogOpen(true)}>
           <PlusCircle className="mr-2 h-4 w-4" /> New Ticket
         </Button>
