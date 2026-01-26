@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { AssetWithType, AssetType } from '@/types/asset';
+import { AssetWithType } from '@/types/asset';
 
 async function getAssets(): Promise<AssetWithType[]> {
   const { data, error } = await supabase
@@ -23,19 +23,18 @@ async function getAssets(): Promise<AssetWithType[]> {
       )
     `);
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw error;
 
-  // map เพื่อให้ type ชัด และไม่พึ่ง Supabase join typing
   return (data ?? []).map((row: any): AssetWithType => ({
     id: row.id,
     name: row.name,
     asset_code: row.asset_code,
     category: row.category,
     status: row.status,
+    serial_number: row.serial_number,
     location: row.location,
     assigned_to: row.assigned_to,
+    last_service_date: row.last_service_date,
     created_at: row.created_at,
     updated_at: row.updated_at,
     asset_type: row.asset_type
@@ -55,19 +54,3 @@ export function useAssets() {
     queryFn: getAssets,
   });
 }
-
-export const fetchTotalAssets = async (): Promise<number> => {
-  const { count, error } = await supabase
-    .from('assets')
-    .select('id', { count: 'exact' });
-
-  if (error) throw new Error(error.message);
-  return count || 0;
-};
-
-export const useTotalAssets = () => {
-  return useQuery<number, Error>({
-    queryKey: ['totalAssets'],
-    queryFn: fetchTotalAssets,
-  });
-};

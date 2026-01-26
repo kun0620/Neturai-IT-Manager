@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+
 import {
   Dialog,
   DialogContent,
@@ -20,28 +21,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
-import { TablesInsert, Tables } from '@/types/supabase'; // Removed Enums
-import { UserProfile } from '@/hooks/useUsers'; // Assuming UserProfile type is defined here
 
-// Manually define runtime enums for Zod validation
-const AssetCategoryEnum = {
-  Laptop: 'Laptop',
-  Desktop: 'Desktop',
-  Monitor: 'Monitor',
-  Printer: 'Printer',
-  NetworkDevice: 'Network Device',
-  SoftwareLicense: 'Software License',
-  Other: 'Other',
-} as const;
+import { format } from 'date-fns';
+import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { supabase } from '@/lib/supabase';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+import { AssetWithType } from '@/types/asset';
+import { UserProfile } from '@/hooks/useUsers';
+import { useAssetTypes } from '@/hooks/useAssetTypes';
+import { useAssetFields } from '@/hooks/useAssetFields';
+import { useAssetFieldValues } from '@/hooks/useAssetFieldValues';
+import { saveAssetFieldValues } from '@/hooks/useSaveAssetFieldValues';
+import { DynamicAssetFields } from './DynamicAssetFields';
+
+/* ================= ENUM ================= */
 
 const AssetStatusEnum = {
   Available: 'Available',
@@ -51,307 +47,240 @@ const AssetStatusEnum = {
   Lost: 'Lost',
 } as const;
 
+type AssetStatus =
+  (typeof AssetStatusEnum)[keyof typeof AssetStatusEnum];
+
+/* ================= SCHEMA ================= */
+
 const assetFormSchema = z.object({
-  name: z.string().min(1, { message: 'Asset name is required.' }),
-  asset_code: z.string().min(1, { message: 'Asset code is required.' }),
-  category: z.nativeEnum(AssetCategoryEnum, { message: 'Please select a category.' }),
-  status: z.nativeEnum(AssetStatusEnum, { message: 'Please select a status.' }),
+  name: z.string().min(1),
+  asset_code: z.string().min(1),
+  asset_type_id: z.string().uuid(),
+  status: z.nativeEnum(AssetStatusEnum),
   assigned_to: z.string().uuid().nullable().optional(),
   serial_number: z.string().nullable().optional(),
   location: z.string().nullable().optional(),
   last_service_date: z.date().nullable().optional(),
+  custom: z.record(z.string(), z.string()).optional(),
 });
 
 type AssetFormValues = z.infer<typeof assetFormSchema>;
-type Asset = Tables<'assets'>; // Use Tables type from supabase.ts
+
+/* ================= PROPS ================= */
 
 interface AssetFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  asset?: Asset | null;
+  asset?: AssetWithType | null;
   users: UserProfile[];
 }
 
-export const AssetFormDialog: React.FC<AssetFormDialogProps> = ({
+/* ================= COMPONENT ================= */
+
+export function AssetFormDialog({
   isOpen,
   onClose,
   asset,
   users,
-}) => {
+}: AssetFormDialogProps) {
   const queryClient = useQueryClient();
+  const { data: assetTypes = [] } = useAssetTypes();
+
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetFormSchema),
     defaultValues: {
-      name: asset?.name || '',
-      asset_code: asset?.asset_code || '',
-      category: asset?.category || AssetCategoryEnum.Other, // Use runtime enum
-      status: asset?.status || AssetStatusEnum.Available, // Use runtime enum
-      assigned_to: asset?.assigned_to || null,
-      serial_number: asset?.serial_number || '',
-      location: asset?.location || '',
-      last_service_date: asset?.last_service_date ? new Date(asset.last_service_date) : null,
+      name: '',
+      asset_code: '',
+      asset_type_id: '',
+      status: AssetStatusEnum.Available,
+      assigned_to: null,
+      serial_number: '',
+      location: '',
+      last_service_date: null,
+      custom: {},
     },
   });
 
+  /* ---------- dynamic ---------- */
+
+  const assetTypeId = form.watch('asset_type_id');
+  const { data: assetFields = [] } = useAssetFields(assetTypeId);
+  const { data: customValues } = useAssetFieldValues(asset?.id);
+
+  /* ---------- RESET (สำคัญที่สุด) ---------- */
+
   useEffect(() => {
+    if (!isOpen) return;
+
     if (asset) {
       form.reset({
         name: asset.name,
         asset_code: asset.asset_code,
-        category: asset.category,
-        status: asset.status,
-        assigned_to: asset.assigned_to,
-        serial_number: asset.serial_number,
-        location: asset.location,
-        last_service_date: asset.last_service_date ? new Date(asset.last_service_date) : null,
+        asset_type_id: asset.asset_type?.id ?? '',
+        status: asset.status as AssetStatus,
+        assigned_to: asset.assigned_to ?? null,
+        serial_number: asset.serial_number ?? '',
+        location: asset.location ?? '',
+        last_service_date:
+          typeof asset.last_service_date === 'string'
+            ? new Date(asset.last_service_date)
+            : null,
+        custom: {}, // ❗ reset เปล่าเสมอ
       });
     } else {
-      form.reset({
-        name: '',
-        asset_code: '',
-        category: AssetCategoryEnum.Other,
-        status: AssetStatusEnum.Available,
-        assigned_to: null,
-        serial_number: '',
-        location: '',
-        last_service_date: null,
-      });
+      form.reset();
     }
-  }, [asset, form]);
+  }, [asset, isOpen, form]);
 
-  const createAssetMutation = useMutation<void, Error, TablesInsert<'assets'>>({
-    mutationFn: async (newAsset) => {
-      const { error } = await supabase.from('assets').insert(newAsset);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assets'] });
-      toast.success('Asset Created', {
-        description: 'The new asset has been successfully added.',
-      });
-      onClose();
-    },
-    onError: (error) => {
-      toast.error('Failed to Create Asset', {
-        description: error.message,
-      });
-    },
-  });
+  /* ---------- APPLY CUSTOM VALUES ทีหลัง ---------- */
 
-  const updateAssetMutation = useMutation<void, Error, TablesInsert<'assets'>>({
-    mutationFn: async (updatedAsset) => {
-      if (!asset?.id) throw new Error('Asset ID is missing for update.');
-      const { error } = await supabase.from('assets').update(updatedAsset).eq('id', asset.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assets'] });
-      toast.success('Asset Updated', {
-        description: 'The asset details have been successfully updated.',
-      });
-      onClose();
-    },
-    onError: (error) => {
-      toast.error('Failed to Update Asset', {
-        description: error.message,
-      });
-    },
-  });
+  useEffect(() => {
+    if (!customValues) return;
 
-  const onSubmit = (values: AssetFormValues) => {
-    const assetData: TablesInsert<'assets'> = {
-      name: values.name,
-      asset_code: values.asset_code,
-      category: values.category,
-      status: values.status,
-      assigned_to: values.assigned_to,
-      serial_number: values.serial_number,
-      location: values.location,
-      last_service_date: values.last_service_date ? format(values.last_service_date, 'yyyy-MM-dd') : null,
-    };
+    Object.entries(customValues).forEach(([key, value]) => {
+      form.setValue(`custom.${key}`, value ?? '');
+    });
+  }, [customValues, form]);
 
-    if (asset) {
-      updateAssetMutation.mutate(assetData);
-    } else {
-      createAssetMutation.mutate(assetData);
-    }
+  /* ================= MUTATION ================= */
+
+  type AssetPayload = {
+    name: string;
+    asset_code: string;
+    asset_type_id: string;
+    status: AssetStatus;
+    assigned_to: string | null;
+    serial_number: string | null;
+    location: string | null;
+    last_service_date: string | null;
   };
 
-  const assetCategories = Object.values(AssetCategoryEnum);
-  const assetStatuses = Object.values(AssetStatusEnum);
+  const saveAssetMutation = useMutation<string, Error, AssetFormValues>({
+    mutationFn: async (values) => {
+      const payload: AssetPayload = {
+        name: values.name,
+        asset_code: values.asset_code,
+        asset_type_id: values.asset_type_id,
+        status: values.status,
+        assigned_to: values.assigned_to ?? null,
+        serial_number: values.serial_number ?? null,
+        location: values.location ?? null,
+        last_service_date: values.last_service_date
+          ? format(values.last_service_date, 'yyyy-MM-dd')
+          : null,
+      };
+
+      let id: string;
+
+      if (asset) {
+        const { error } = await supabase
+          .from('assets')
+          .update(payload)
+          .eq('id', asset.id);
+        if (error) throw error;
+        id = asset.id;
+      } else {
+        const { data, error } = await supabase
+          .from('assets')
+          .insert(payload)
+          .select('id')
+          .single();
+        if (error) throw error;
+        id = data.id;
+      }
+
+      await saveAssetFieldValues({
+        assetId: id,
+        values: values.custom ?? {},
+        fields: assetFields,
+      });
+
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      toast.success(
+        asset ? 'Asset updated successfully' : 'Asset created successfully'
+      );
+
+      form.reset();
+      onClose(); // ✅ ปิดจากตรงนี้เท่านั้น
+    },
+  });
+  /* ================= UI ================= */
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>{asset ? 'Edit Asset' : 'Add New Asset'}</DialogTitle>
+          <DialogTitle>
+            {asset ? 'Edit Asset' : 'Add New Asset'}
+          </DialogTitle>
           <DialogDescription>
-            {asset ? 'Update the details of the asset.' : 'Fill in the details to add a new asset.'}
+            Manage asset information
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
-              Name
-            </Label>
-            <Input
-              id="name"
-              {...form.register('name')}
-              className="col-span-3"
-            />
-            {form.formState.errors.name && (
-              <p className="col-span-4 text-right text-sm text-red-500">
-                {form.formState.errors.name.message}
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="asset_code" className="text-right">
-              Asset Code
-            </Label>
-            <Input
-              id="asset_code"
-              {...form.register('asset_code')}
-              className="col-span-3"
-            />
-            {form.formState.errors.asset_code && (
-              <p className="col-span-4 text-right text-sm text-red-500">
-                {form.formState.errors.asset_code.message}
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="category" className="text-right">
-              Category
-            </Label>
-            <Select
-              onValueChange={(value: typeof AssetCategoryEnum[keyof typeof AssetCategoryEnum]) => form.setValue('category', value)}
-              value={form.watch('category')}
-            >
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a category" />
+
+        <form onSubmit={form.handleSubmit((v) => saveAssetMutation.mutate(v))} className="grid gap-4 py-4">
+          <FormRow label="Name">
+            <Input {...form.register('name')} />
+          </FormRow>
+
+          <FormRow label="Asset Code">
+            <Input {...form.register('asset_code')} />
+          </FormRow>
+
+          <FormRow label="Asset Type">
+            <Select value={assetTypeId} onValueChange={(v) => form.setValue('asset_type_id', v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select asset type" />
               </SelectTrigger>
               <SelectContent>
-                {assetCategories.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
+                {assetTypes.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {form.formState.errors.category && (
-              <p className="col-span-4 text-right text-sm text-red-500">
-                {form.formState.errors.category.message}
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="status" className="text-right">
-              Status
-            </Label>
-            <Select
-              onValueChange={(value: typeof AssetStatusEnum[keyof typeof AssetStatusEnum]) => form.setValue('status', value)}
-              value={form.watch('status')}
-            >
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a status" />
+          </FormRow>
+
+          <FormRow label="Status">
+            <Select value={form.watch('status')} onValueChange={(v) => form.setValue('status', v as AssetStatus)}>
+              <SelectTrigger>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {assetStatuses.map((stat) => (
-                  <SelectItem key={stat} value={stat}>
-                    {stat}
-                  </SelectItem>
+                {Object.values(AssetStatusEnum).map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {form.formState.errors.status && (
-              <p className="col-span-4 text-right text-sm text-red-500">
-                {form.formState.errors.status.message}
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="assigned_to" className="text-right">
-              Assigned To
-            </Label>
-            <Select
-              onValueChange={(value) => form.setValue('assigned_to', value === 'null' ? null : value)}
-              value={form.watch('assigned_to') || 'null'}
-            >
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a user" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="null">Unassigned</SelectItem>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.full_name || user.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.formState.errors.assigned_to && (
-              <p className="col-span-4 text-right text-sm text-red-500">
-                {form.formState.errors.assigned_to.message}
-              </p>
-            )}
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="serial_number" className="text-right">
-              Serial Number
-            </Label>
-            <Input
-              id="serial_number"
-              {...form.register('serial_number')}
-              className="col-span-3"
+          </FormRow>
+
+          {assetTypeId && (
+            <DynamicAssetFields
+              key={assetTypeId}
+              fields={assetFields}
+              control={form.control}
             />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="location" className="text-right">
-              Location
-            </Label>
-            <Input
-              id="location"
-              {...form.register('location')}
-              className="col-span-3"
-            />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="last_service_date" className="text-right">
-              Last Service Date
-            </Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={'outline'}
-                  className={cn(
-                    'col-span-3 justify-start text-left font-normal',
-                    !form.watch('last_service_date') && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {form.watch('last_service_date') ? (
-                    format(form.watch('last_service_date')!, 'PPP')
-                  ) : (
-                    <span>Pick a date</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={form.watch('last_service_date') || undefined}
-                  onSelect={(date) => form.setValue('last_service_date', date || null)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-          <DialogFooter>
+          )}
+
+          <DialogFooter className="flex justify-between">
             <Button
-              type="submit"
-              disabled={createAssetMutation.isPending || updateAssetMutation.isPending}
+              type="button"
+              variant="outline"
+              onClick={() => {
+                form.reset();
+                onClose();
+              }}
             >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saveAssetMutation.isPending}>
+              {saveAssetMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               {asset ? 'Save Changes' : 'Add Asset'}
             </Button>
           </DialogFooter>
@@ -359,4 +288,15 @@ export const AssetFormDialog: React.FC<AssetFormDialogProps> = ({
       </DialogContent>
     </Dialog>
   );
-};
+}
+
+/* ================= HELPER ================= */
+
+function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-4 items-center gap-4">
+      <Label className="text-right">{label}</Label>
+      <div className="col-span-3">{children}</div>
+    </div>
+  );
+}

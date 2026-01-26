@@ -2,7 +2,7 @@ export type AssetType = {
   id: string;
   key: string;
   name: string;
-  icon: string | null;
+  icon: string | null; // ✅ แก้ตรงนี้
 };
 
 export type AssetWithType = {
@@ -11,9 +11,11 @@ export type AssetWithType = {
   asset_code: string;
   category: string;
   status: string;
-  location: string | null;
-  assigned_to: string | null;
-  created_at: string;
-  updated_at: string;
+  serial_number: string | null;
+  location: string | null;     // (ถ้ายังไม่แก้)
+  assigned_to: string | null;  // (ถ้ายังไม่แก้)
+  last_service_date: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   asset_type: AssetType | null;
 };
