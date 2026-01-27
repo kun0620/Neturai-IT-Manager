@@ -14,7 +14,8 @@ import {
 
 /* 👇 เปลี่ยนจาก const columns เป็น function */
 export function getColumns(
-  onEdit: (asset: AssetWithType) => void
+  onEdit: (asset: AssetWithType) => void,
+  onView: (asset: AssetWithType) => void
 ): ColumnDef<AssetWithType>[] {
   return [
     {
@@ -78,7 +79,7 @@ export function getColumns(
       },
     },
     {
-      accessorKey: 'category',
+      id: 'category',
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -92,9 +93,14 @@ export function getColumns(
       ),
       cell: ({ row }) => (
         <div className="capitalize">
-          {row.getValue('category')}
+          {row.original.category?.name ?? '—'}
         </div>
       ),
+      sortingFn: (a, b) => {
+        const aName = a.original.category?.name ?? '';
+        const bName = b.original.category?.name ?? '';
+        return aName.localeCompare(bName);
+      },
     },
     {
       accessorKey: 'status',
@@ -139,6 +145,9 @@ export function getColumns(
                 Copy Asset ID
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onView(asset)}>
+                View Details
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEdit(asset)}>
                 Edit
               </DropdownMenuItem>

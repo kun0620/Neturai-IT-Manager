@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
 import { AssetFormDialog } from '@/components/assets/AssetFormDialog';
@@ -6,23 +6,44 @@ import { useAssets } from '@/hooks/useAssets';
 import { useUsersForAssignment } from '@/hooks/useUsers';
 import { getColumns } from '@/components/assets/columns';
 import { AssetWithType } from '@/types/asset';
+import { AssetDrawer } from '@/features/assets/components/AssetDrawer';
+import { useAuth } from '@/context/AuthContext';
 
 
 export function AssetManagement() {
   // ✅ hooks ต้องอยู่ใน component เท่านั้น
   const { data: assets = [], isLoading, isError, error } = useAssets();
+  const { user } = useAuth();
   const {
     data: users = [],
     isLoading: usersLoading,
     isError: usersError,
   } = useUsersForAssignment();
-
+  const assignmentUsers = users
+    .filter((u) => u.name) // ตัด user ที่ไม่มีชื่อ
+    .map((u) => ({
+      id: u.id,
+      name: u.name!, // safe เพราะ filter แล้ว
+    }));
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<AssetWithType | null>(null);
   const handleEditAsset = (asset: AssetWithType) => {
     setSelectedAsset(asset);
     setIsFormOpen(true);
   };
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedAssetForDrawer, setSelectedAssetForDrawer] =
+  useState<AssetWithType | null>(null);
+
+  const handleViewAsset = (asset: AssetWithType) => {
+    setSelectedAssetForDrawer(asset);
+    setIsDrawerOpen(true);
+  };
+
+  const updateDrawerAsset = (next: AssetWithType) => {
+  setSelectedAssetForDrawer(next);
+};
+
 
 
   /* ---------------- Loading / Error ---------------- */
@@ -90,7 +111,7 @@ export function AssetManagement() {
 
       <div className="rounded-md border">
         <DataTable
-          columns={getColumns(handleEditAsset)}
+          columns={getColumns(handleEditAsset, handleViewAsset)}
           data={assets}
           filterColumnId="name"
           filterPlaceholder="Filter assets by name..."
@@ -105,6 +126,17 @@ export function AssetManagement() {
         onClose={() => {
           setIsFormOpen(false);
           setSelectedAsset(null);
+        }}
+      />
+      <AssetDrawer
+        asset={selectedAssetForDrawer}
+        open={isDrawerOpen}
+        users={assignmentUsers}
+        performedBy={user?.id ?? null}
+        onLocalUpdate={updateDrawerAsset}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          setSelectedAssetForDrawer(null);
         }}
       />
     </div>
