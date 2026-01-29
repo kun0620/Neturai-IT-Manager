@@ -13,17 +13,17 @@ import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; 
 import { useAuth } from '@/hooks/useAuth';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import { useSearchParams } from 'react-router-dom';
-
+import { hasPermission } from '@/lib/permissions';
 
 export const Tickets: React.FC = () => {
   const {
     role,
     session,
   } = useAuth();
-
+  
   const myUserId = session?.user?.id;
 
-  const canManageTickets = role === 'admin' || role === 'it';
+  const canManageTickets = hasPermission(role, 'ticket.manage');
   const { openDrawer } = useTicketDrawer();
   
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);

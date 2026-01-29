@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { hasPermission } from '@/lib/permissions';
 
 export type UserRole = 'user' | 'it' | 'admin';
 
@@ -68,5 +69,8 @@ export function useCurrentProfile() {
     isIT: role === 'it',
     isAdmin: role === 'admin',
     canManageTickets: role === 'it' || role === 'admin',
+    // ✅ ใหม่ (แนะนำให้ใช้)
+    can: (permission: Parameters<typeof hasPermission>[1]) =>
+      hasPermission(role, permission),
   };
 }

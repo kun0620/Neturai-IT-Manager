@@ -24,7 +24,7 @@ export async function updateAsset(
   after: AssetUpdate,
   performedBy: string | null
 ) {
-  // 1️⃣ Update asset (type-safe)
+  // 1️⃣ Update asset
   const { error } = await supabase
     .from('assets')
     .update(after)
@@ -32,14 +32,22 @@ export async function updateAsset(
 
   if (error) throw error;
 
-  // 2️⃣ Diff (ใช้ before + after)
+  // 2️⃣ Merge เพื่อ diff
+  const merged = {
+    ...before,
+    ...after,
+  };
+
   const diffs = diffAsset(
-    before as Record<string, any>,
-    { ...before, ...after } as Record<string, any>,
-    LOG_FIELDS as string[]
+    before as Record<keyof AssetRow, unknown>,
+    merged as Record<keyof AssetRow, unknown>,
+    LOG_FIELDS
   );
 
-  // 3️⃣ Write logs
+  // 3️⃣ ไม่มี diff → ไม่ต้อง log
+  if (diffs.length === 0) return;
+
+  // 4️⃣ Write logs (intent-based)
   await insertAssetLogs(
     diffs.map((d) => ({
       assetId,
@@ -51,3 +59,4 @@ export async function updateAsset(
     }))
   );
 }
+

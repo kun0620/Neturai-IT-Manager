@@ -21,14 +21,14 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAdminUsers } from '@/hooks/useAdminUsers';
 import { useUpdateUserRole } from '@/hooks/useUpdateUserRole';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
-
-type UserRole = 'admin' | 'it' | 'user';
+import { hasPermission } from '@/lib/permissions';
+import type { UserRole } from '@/lib/permissions';
 
 export default function Users() {
   const { data: users, isLoading } = useAdminUsers();
   const { mutate: updateRole } = useUpdateUserRole();
   const { isAdmin, profile } = useCurrentProfile();
-
+  const canChangeRole = hasPermission(profile?.role, 'user.role.change');
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<{
     userId: string;
@@ -49,9 +49,10 @@ export default function Users() {
         const isSelf = user.id === currentUserId;
 
         // IT → read only
-        if (!isAdmin) {
+        if (!canChangeRole) {
           return <span className="capitalize">{user.role}</span>;
         }
+
 
         // Admin ห้ามแก้ตัวเอง
         if (isSelf) {

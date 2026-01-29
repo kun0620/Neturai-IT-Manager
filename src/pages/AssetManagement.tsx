@@ -41,8 +41,22 @@ export function AssetManagement() {
   };
 
   const updateDrawerAsset = (next: AssetWithType) => {
-  setSelectedAssetForDrawer(next);
-};
+    setSelectedAssetForDrawer(next);
+  };
+
+  // เพิ่ม handler ให้ครบ
+  const handleCloseDrawer = () => {
+    setIsDrawerOpen(false);
+    setSelectedAssetForDrawer(null);
+  };
+
+  const handleEditFromDrawer = (asset: AssetWithType) => {
+    setIsDrawerOpen(false);
+    setSelectedAssetForDrawer(null);
+
+    setSelectedAsset(asset);
+    setIsFormOpen(true);
+  };
 
 
 
@@ -111,10 +125,13 @@ export function AssetManagement() {
 
       <div className="rounded-md border">
         <DataTable
-          columns={getColumns(handleEditAsset, handleViewAsset)}
+          columns={getColumns()}
           data={assets}
           filterColumnId="name"
-          filterPlaceholder="Filter assets by name..."
+          onRowClick={(asset) => {
+            setSelectedAssetForDrawer(asset);
+            setIsDrawerOpen(true);
+          }}
         />
       </div>
 
@@ -131,14 +148,11 @@ export function AssetManagement() {
       <AssetDrawer
         asset={selectedAssetForDrawer}
         open={isDrawerOpen}
+        onClose={handleCloseDrawer}
+        onEdit={handleEditFromDrawer}
         users={assignmentUsers}
-        performedBy={user?.id ?? null}
-        onLocalUpdate={updateDrawerAsset}
-        onClose={() => {
-          setIsDrawerOpen(false);
-          setSelectedAssetForDrawer(null);
-        }}
       />
+
     </div>
   );
 }

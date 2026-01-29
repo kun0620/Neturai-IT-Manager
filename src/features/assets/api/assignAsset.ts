@@ -11,7 +11,10 @@ export async function assignAsset(
   newUserId: string | null,
   performedBy: string | null
 ) {
-  const update: AssetUpdate = { assigned_to: newUserId };
+  const update: AssetUpdate = {
+    assigned_to: newUserId,
+    status: newUserId ? 'Assigned' : 'Available',
+  };
 
   const { error } = await supabase
     .from('assets')
@@ -27,6 +30,14 @@ export async function assignAsset(
       field: 'assigned_to',
       oldValue: oldUserId,
       newValue: newUserId,
+      performedBy,
+    },
+    {
+      assetId,
+      action: 'status_change',
+      field: 'status',
+      oldValue: oldUserId ? 'Assigned' : 'Available',
+      newValue: newUserId ? 'Assigned' : 'Available',
       performedBy,
     },
   ]);

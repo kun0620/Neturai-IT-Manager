@@ -12,11 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-/* 👇 เปลี่ยนจาก const columns เป็น function */
-export function getColumns(
-  onEdit: (asset: AssetWithType) => void,
-  onView: (asset: AssetWithType) => void
-): ColumnDef<AssetWithType>[] {
+export function getColumns(): ColumnDef<AssetWithType>[] {
   return [
     {
       accessorKey: 'name',
@@ -32,7 +28,9 @@ export function getColumns(
         </Button>
       ),
       cell: ({ row }) => (
-        <div className="capitalize">{row.getValue('name')}</div>
+        <div className="capitalize font-medium">
+          {row.getValue('name')}
+        </div>
       ),
     },
     {
@@ -49,72 +47,43 @@ export function getColumns(
         </Button>
       ),
       cell: ({ row }) => (
-        <div className="lowercase">
+        <div className="text-muted-foreground">
           {row.getValue('asset_code')}
         </div>
       ),
     },
     {
       id: 'asset_type',
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === 'asc')
-          }
-        >
-          Type
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      ),
+      header: 'Type',
       cell: ({ row }) => (
-        <div className="capitalize">
-          {row.original.asset_type?.name ?? '—'}
-        </div>
+        <div>{row.original.asset_type?.name ?? '—'}</div>
       ),
-      sortingFn: (a, b) => {
-        const aName = a.original.asset_type?.name ?? '';
-        const bName = b.original.asset_type?.name ?? '';
-        return aName.localeCompare(bName);
-      },
+      sortingFn: (a, b) =>
+        (a.original.asset_type?.name ?? '').localeCompare(
+          b.original.asset_type?.name ?? ''
+        ),
     },
     {
       id: 'category',
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === 'asc')
-          }
-        >
-          Category
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      ),
+      header: 'Category',
       cell: ({ row }) => (
-        <div className="capitalize">
-          {row.original.category?.name ?? '—'}
-        </div>
+        <div>{row.original.category?.name ?? '—'}</div>
       ),
-      sortingFn: (a, b) => {
-        const aName = a.original.category?.name ?? '';
-        const bName = b.original.category?.name ?? '';
-        return aName.localeCompare(bName);
-      },
+      sortingFn: (a, b) =>
+        (a.original.category?.name ?? '').localeCompare(
+          b.original.category?.name ?? ''
+        ),
+    },
+    {
+      accessorKey: 'location',
+      header: 'Location',
+      cell: ({ row }) => (
+        <div>{row.getValue('location') || '—'}</div>
+      ),
     },
     {
       accessorKey: 'status',
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === 'asc')
-          }
-        >
-          Status
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      ),
+      header: 'Status',
       cell: ({ row }) => (
         <div className="capitalize">
           {row.getValue('status')}
@@ -131,7 +100,6 @@ export function getColumns(
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -144,13 +112,8 @@ export function getColumns(
               >
                 Copy Asset ID
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onView(asset)}>
-                View Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onEdit(asset)}>
-                Edit
-              </DropdownMenuItem>
+              {/*<DropdownMenuSeparator />
+               เผื่ออนาคต: Archive / Delete */}
             </DropdownMenuContent>
           </DropdownMenu>
         );

@@ -9,6 +9,8 @@ type SavePayload = {
   }[];
 };
 
+
+
 export async function saveAssetFieldValues({
   assetId,
   values,
@@ -31,4 +33,5 @@ export async function saveAssetFieldValues({
     });
 
   if (error) throw error;
+  
 }

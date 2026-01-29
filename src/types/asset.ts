@@ -1,3 +1,8 @@
+import { Database } from '@/types/supabase';
+
+type AssetStatus =
+  Database['public']['Enums']['asset_status'];
+
 export type AssetType = {
   id: string;
   key: string;
@@ -17,7 +22,7 @@ export type AssetWithType = {
 
   category: AssetCategory | null; // ✅ แก้ตรงนี้
 
-  status: string;
+  status: AssetStatus;
   serial_number: string | null;
   location: string | null;
   assigned_to: string | null;
