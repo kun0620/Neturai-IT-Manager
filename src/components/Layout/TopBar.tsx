@@ -47,9 +47,9 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
-            type="button"
-            className="relative flex h-9 w-9 items-center justify-center rounded-md border bg-background hover:bg-accent"
-          >
+          type="button"
+          className="relative flex h-9 w-9 items-center justify-center rounded-md bg-transparent hover:bg-muted"
+        >
             <Bell className="h-5 w-5" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
@@ -60,12 +60,12 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
         </DropdownMenuTrigger>
 
         <DropdownMenuContent
-            align="end"
-            sideOffset={8}
-            className="w-80 max-h-96 overflow-y-auto"
-          >
+          align="end"
+          sideOffset={8}
+          className="w-80 max-h-96 overflow-y-auto bg-card border border-border shadow-xl"
+        >
 
-          <DropdownMenuLabel className="flex items-center justify-between">
+          <DropdownMenuLabel className="flex items-center justify-between px-4 py-2">
             <span>Notifications</span>
 
             {unreadCount > 0 && (
@@ -77,7 +77,7 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
               </button>
             )}
           </DropdownMenuLabel>
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="bg-border" />
 
           {notifications.length === 0 && (
             <div className="px-4 py-6 text-sm text-muted-foreground text-center">
@@ -94,8 +94,9 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
                   }
                 }}
                 className={clsx(
-                  'flex flex-col gap-1 items-start cursor-pointer',
-                  !n.is_read && 'bg-muted font-medium'
+                  'flex flex-col gap-1 items-start cursor-pointer px-4 py-2',
+                  !n.is_read &&
+                    'border-l-2 border-primary bg-muted/50 font-medium'
                 )}
               >
                 {/* Title */}
@@ -119,7 +120,7 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full border bg-background hover:bg-accent"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-transparent hover:bg-muted"
           >
             <User className="h-5 w-5" />
           </button>
@@ -128,9 +129,9 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
         <DropdownMenuContent
           align="end"
           sideOffset={8}
-          className="z-[9999] w-48"
+          className="z-[9999] w-48 bg-card border border-border shadow-xl"
         >
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel className="flex items-center justify-between px-4 py-2">My Account</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
           <DropdownMenuItem asChild>

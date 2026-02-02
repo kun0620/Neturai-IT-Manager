@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'it' | 'user';
 
-type Permission =
+export type Permission =
   | 'asset.view'
   | 'asset.edit'
   | 'asset.assign'
@@ -8,7 +8,9 @@ type Permission =
   | 'asset.history.view'
   | 'user.role.change'
   | 'ticket.view'
-  | 'ticket.manage';
+  | 'ticket.manage'
+  | 'user.view'
+  | 'user.role.update';;
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
@@ -20,6 +22,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'user.role.change',
     'ticket.view',
     'ticket.manage',
+    'user.view',
+    'user.role.update',
   ],
   it: [
     'asset.view',
@@ -29,6 +33,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'asset.history.view',
     'ticket.view',
     'ticket.manage',
+    'user.view',
   ],
   user: [
     'asset.view',

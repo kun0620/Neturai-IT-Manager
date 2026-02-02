@@ -103,8 +103,9 @@ function KanbanTicketCard({
       <p className="mt-2 text-[11px] text-muted-foreground">
         Created{' '}
         {ticket.created_at
-          ? format(new Date(ticket.created_at), 'dd MMM')
-          : ''}
+          ? format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')
+          : '—'
+        }
       </p>
     </motion.div>
   );
@@ -150,8 +151,9 @@ function KanbanOverlayCard({
       <p className="mt-2 text-[11px] text-muted-foreground">
         Created{' '}
         {ticket.created_at
-          ? format(new Date(ticket.created_at), 'dd MMM')
-          : ''}
+            ? format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')
+            : '—'
+          }
       </p>
     </div>
   );

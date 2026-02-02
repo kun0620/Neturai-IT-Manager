@@ -239,11 +239,10 @@ const Dashboard: React.FC = () => {
           description="Average time to resolve tickets"
         />
         <SummaryCard
-          title="Open Tickets"
-          value={openTicketsCount || 0}
-          icon={CircleDot}
-          description="Tickets awaiting action"
-          onClick={() => navigate('/tickets?status=open')}
+          title="Total Tickets"
+          value={summaryData?.totalTickets || 0}
+          icon={ListTodo}
+          description="All tickets in the system"
         />
       </div>
 

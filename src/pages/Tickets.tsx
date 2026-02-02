@@ -49,14 +49,6 @@ export const Tickets: React.FC = () => {
 
   const [showMyTickets, setShowMyTickets] = useState(false);
 
-  console.log({
-  myUserId,
-  tickets: tickets?.map(t => ({
-    id: t.id,
-    assigned_to: t.assigned_to,
-  })),
-});
-
   
   useEffect(() => {
     if (!canManageTickets) {

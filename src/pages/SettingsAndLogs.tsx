@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,16 +11,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious, PaginationLink } from '@/components/ui/pagination';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/context/AuthContext';
-import { useTheme } from '@/components/theme-provider';
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationLink,
+} from '@/components/ui/pagination';
 import { useSettings } from '@/hooks/useSettings';
 import { useCategories } from '@/hooks/useCategories';
 import { useSLAPolicies } from '@/hooks/useSLAPolicies';
@@ -30,228 +26,370 @@ import { useUsersForAssignment } from '@/hooks/useUsers';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Search } from 'lucide-react';
-import { Tables } from '@/types/supabase';
 import { format } from 'date-fns';
+import { mapLogToText } from '@/features/logs/mapLogToText';
+
+
+/* ================= PAGE ================= */
 
 export const SettingsAndLogs: React.FC = () => {
-  const { user } = useAuth();
-  const { theme, setTheme } = useTheme(); // Keep setTheme for displaying current theme
-  const { toast } = useToast();
-
   const { data: settings, isLoading: isLoadingSettings } = useSettings();
   const { data: categories, isLoading: isLoadingCategories } = useCategories();
   const { data: slaPolicies, isLoading: isLoadingSLAPolicies } = useSLAPolicies();
-  const { data: usersForAssignment, isLoading: isLoadingUsersForAssignment } = useUsersForAssignment();
+  const { data: usersForAssignment, isLoading: isLoadingUsers } =
+    useUsersForAssignment();
 
-  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(false);
-  const [defaultAssigneeName, setDefaultAssigneeName] = useState<string | null>(null);
-  const [defaultThemeDisplay, setDefaultThemeDisplay] = useState<string>('system');
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] =
+    useState(false);
+  const [defaultAssigneeName, setDefaultAssigneeName] =
+    useState<string>('—');
+  const [defaultThemeDisplay, setDefaultThemeDisplay] =
+    useState<string>('system');
 
   const [logSearchTerm, setLogSearchTerm] = useState('');
   const [logPage, setLogPage] = useState(1);
   const logsPerPage = 10;
-  const { data: logs, isLoading: isLoadingLogs, refetch: refetchLogs } = useLogs(logPage, logsPerPage, logSearchTerm);
+
+  const {
+    data: logs,
+    isLoading: isLoadingLogs,
+    refetch: refetchLogs,
+  } = useLogs(logPage, logsPerPage, logSearchTerm);
 
   useEffect(() => {
-    if (settings) {
-      setEmailNotificationsEnabled(settings.find(s => s.key === 'email_notifications_enabled')?.value === 'true');
-      const assigneeId = settings.find(s => s.key === 'default_assignee_id')?.value;
-      if (assigneeId && usersForAssignment) {
-        const assignee = usersForAssignment.find(u => u.id === assigneeId);
-        setDefaultAssigneeName(assignee ? (assignee.name || assignee.email) : 'Unknown User');
-      } else {
-        setDefaultAssigneeName('No Default');
-      }
-      setDefaultThemeDisplay(settings.find(s => s.key === 'theme_default')?.value || 'system');
+    if (!settings) return;
+
+    setEmailNotificationsEnabled(
+      settings.find(s => s.key === 'email_notifications_enabled')?.value ===
+        'true'
+    );
+
+    const assigneeId = settings.find(
+      s => s.key === 'default_assignee_id'
+    )?.value;
+
+    if (assigneeId && usersForAssignment) {
+      const u = usersForAssignment.find(u => u.id === assigneeId);
+      setDefaultAssigneeName(u?.name || u?.email || '—');
     }
+
+    setDefaultThemeDisplay(
+      settings.find(s => s.key === 'theme_default')?.value || 'system'
+    );
   }, [settings, usersForAssignment]);
 
   const handleLogSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setLogPage(1); // Reset to first page on new search
-    refetchLogs();
+    setLogPage(1);
   };
 
-  const totalLogPages = logs ? Math.ceil(logs.count / logsPerPage) : 0;
+  const totalLogPages = logs
+    ? Math.ceil(logs.count / logsPerPage)
+    : 0;
 
-  if (isLoadingSettings || isLoadingCategories || isLoadingSLAPolicies || isLoadingUsersForAssignment || isLoadingLogs) {
+  if (
+    isLoadingSettings ||
+    isLoadingCategories ||
+    isLoadingSLAPolicies ||
+    isLoadingUsers ||
+    isLoadingLogs
+  ) {
     return <LoadingSpinner className="h-full" />;
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-bold">Settings & System Logs</h1>
+    <div className="space-y-6">
+      {/* ===== Page Header ===== */}
+      <div>
+        <h1 className="text-2xl font-bold">Settings & Logs</h1>
+        <p className="text-muted-foreground">
+          Manage system configuration and audit activity
+        </p>
+      </div>
 
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="general">
+        <TabsList className="bg-muted/40 p-1 rounded-lg w-fit">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="sla">SLA Policies</TabsTrigger>
           <TabsTrigger value="logs">System Logs</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="mt-4 p-4 border rounded-md bg-card text-card-foreground shadow-sm">
-          <h2 className="text-2xl font-semibold mb-4">General Settings</h2>
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="email-notifications" className="text-base">
-                Email Notifications
-                <p className="text-sm text-muted-foreground">Enable or disable email notifications for ticket updates.</p>
-              </Label>
-              <span className="font-medium">
-                {emailNotificationsEnabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
+        {/* ===== GENERAL ===== */}
+        <TabsContent value="general" className="mt-6">
+          <SettingsSection
+            title="General Settings"
+            description="Basic system configuration"
+          >
+            <div className="space-y-6 max-w-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">
+                    Email Notifications
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Receive ticket updates by email
+                  </div>
+                </div>
+                <span className="font-medium">
+                  {emailNotificationsEnabled
+                    ? 'Enabled'
+                    : 'Disabled'}
+                </span>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="default-assignee" className="text-base">
-                Default Assignee
-                <p className="text-sm text-muted-foreground">Automatically assign new tickets to this user.</p>
-              </Label>
-              <span className="font-medium block">
-                {defaultAssigneeName}
-              </span>
-            </div>
+              <div>
+                <div className="font-medium">Default Assignee</div>
+                <div className="text-sm text-muted-foreground">
+                  Automatically assigned user
+                </div>
+                <div className="mt-1">{defaultAssigneeName}</div>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="default-theme" className="text-base">
-                Default Theme
-                <p className="text-sm text-muted-foreground">Set the default theme for the application.</p>
-              </Label>
-              <span className="font-medium block">
-                {defaultThemeDisplay.charAt(0).toUpperCase() + defaultThemeDisplay.slice(1)}
-              </span>
+              <div>
+                <div className="font-medium">Default Theme</div>
+                <div className="text-sm text-muted-foreground">
+                  Application appearance
+                </div>
+                <div className="mt-1 capitalize">
+                  {defaultThemeDisplay}
+                </div>
+              </div>
             </div>
-          </div>
+          </SettingsSection>
         </TabsContent>
 
-        <TabsContent value="categories" className="mt-4 p-4 border rounded-md bg-card text-card-foreground shadow-sm">
-          <h2 className="text-2xl font-semibold mb-4">Issue Categories</h2>
-          {categories && categories.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Category Name</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categories.map((category) => (
-                  <TableRow key={category.id}>
-                    <TableCell className="font-medium">
-                      {category.name}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <EmptyState
-              title="No Categories Found"
-              description="No issue categories have been defined."
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="sla" className="mt-4 p-4 border rounded-md bg-card text-card-foreground shadow-sm">
-          <h2 className="text-2xl font-semibold mb-4">SLA Policies</h2>
-          {slaPolicies && slaPolicies.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Response Time (Hours)</TableHead>
-                  <TableHead>Resolution Time (Hours)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {slaPolicies.map((policy) => (
-                  <TableRow key={policy.id}>
-                    <TableCell className="font-medium">{policy.priority}</TableCell>
-                    <TableCell>{policy.response_time_hours}</TableCell>
-                    <TableCell>{policy.resolution_time_hours}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <EmptyState
-              title="No SLA Policies Found"
-              description="SLA policies define response and resolution times based on ticket priority."
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="logs" className="mt-4 p-4 border rounded-md bg-card text-card-foreground shadow-sm">
-          <h2 className="text-2xl font-semibold mb-4">System Logs</h2>
-          <form onSubmit={handleLogSearch} className="flex space-x-2 mb-4">
-            <Input
-              placeholder="Search logs..."
-              value={logSearchTerm}
-              onChange={(e) => setLogSearchTerm(e.target.value)}
-              className="flex-1"
-            />
-            <Button type="submit">
-              <Search className="mr-2 h-4 w-4" /> Search
-            </Button>
-          </form>
-
-          {logs && logs.data.length > 0 ? (
-            <>
+        {/* ===== CATEGORIES ===== */}
+        <TabsContent value="categories" className="mt-6">
+          <SettingsSection
+            title="Issue Categories"
+            description="Ticket classification"
+          >
+            {categories?.length ? (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Details</TableHead>
+                    <TableHead>Name</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {logs.data.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>{format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss')}</TableCell>
-                      <TableCell>{log.users?.name || log.users?.email || 'N/A'}</TableCell>
-                      <TableCell>{log.action}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{log.details}</TableCell>
+                  {categories.map(c => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">
+                        {c.name}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              <Pagination className="mt-4">
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={() => setLogPage(prev => Math.max(1, prev - 1))}
-                      disabled={logPage === 1}
-                    />
-                  </PaginationItem>
-                  {Array.from({ length: totalLogPages }, (_, i) => (
-                    <PaginationItem key={i}>
-                      <PaginationLink
-                        onClick={() => setLogPage(i + 1)}
-                        isActive={logPage === i + 1}
-                      >
-                        {i + 1}
-                      </PaginationLink>
-                    </PaginationItem>
+            ) : (
+              <EmptyState
+                title="No Categories"
+                message="No issue categories defined"
+              />
+            )}
+          </SettingsSection>
+        </TabsContent>
+
+        {/* ===== SLA ===== */}
+        <TabsContent value="sla" className="mt-6">
+          <SettingsSection
+            title="SLA Policies"
+            description="Response & resolution targets"
+          >
+            {slaPolicies?.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Response (hrs)</TableHead>
+                    <TableHead>Resolution (hrs)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {slaPolicies.map(p => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">
+                        {p.priority}
+                      </TableCell>
+                      <TableCell>
+                        {p.response_time_hours}
+                      </TableCell>
+                      <TableCell>
+                        {p.resolution_time_hours}
+                      </TableCell>
+                    </TableRow>
                   ))}
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={() => setLogPage(prev => Math.min(totalLogPages, prev + 1))}
-                      disabled={logPage === totalLogPages}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </>
-          ) : (
-            <EmptyState
-              title="No System Logs Found"
-              description="System logs will appear here when actions are performed."
-            />
-          )}
+                </TableBody>
+              </Table>
+            ) : (
+              <EmptyState
+                title="No SLA Policies"
+                message="Define SLA rules per priority"
+              />
+            )}
+          </SettingsSection>
+        </TabsContent>
+
+        {/* ===== LOGS ===== */}
+        <TabsContent value="logs" className="mt-6 space-y-4">
+          <SettingsSection
+            title="System Logs"
+            description="Audit trail of system activity"
+          >
+            <form
+              onSubmit={handleLogSearch}
+              className="flex gap-2 mb-4"
+            >
+              <Input
+                placeholder="Search logs..."
+                value={logSearchTerm}
+                onChange={e =>
+                  setLogSearchTerm(e.target.value)
+                }
+              />
+              <Button type="submit" variant="secondary">
+                <Search className="h-4 w-4 mr-1" />
+                Search
+              </Button>
+            </form>
+
+            {logs?.data.length ? (
+              <>
+                <div className="rounded-md border max-h-[420px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Time</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>Details</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {logs.data.map(log => (
+                        <TableRow key={log.id}>
+                          <TableCell>
+                            {log.created_at
+                              ? format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss')
+                              : '—'}
+                          </TableCell>
+                          <TableCell>
+                            {log.profiles?.name || log.profiles?.email || '—'}
+                          </TableCell>
+                          <TableCell>
+                            {log.action}
+                          </TableCell>
+                          <TableCell className="space-y-1">
+                            {(() => {
+                              const { title, description } = mapLogToText(
+                                log.action,
+                                log.details as any
+                              );
+
+                              return (
+                                <>
+                                  <div className="font-medium">{title}</div>
+                                  {description && (
+                                    <div className="text-sm text-muted-foreground whitespace-pre-line">
+                                      {description}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {totalLogPages > 1 && (
+                  <Pagination className="mt-4">
+                    <PaginationContent>
+                      {/* Previous */}
+                      <PaginationItem>
+                        <PaginationPrevious
+                          aria-disabled={logPage <= 1}
+                          className={
+                            logPage <= 1
+                              ? 'pointer-events-none opacity-50'
+                              : ''
+                          }
+                          onClick={() => {
+                            if (logPage <= 1) return;
+                            setLogPage(prev => prev - 1);
+                          }}
+                        />
+                      </PaginationItem>
+
+                      {/* Page numbers */}
+                      {Array.from({ length: totalLogPages }, (_, i) => (
+                        <PaginationItem key={i}>
+                          <PaginationLink
+                            isActive={logPage === i + 1}
+                            onClick={() => setLogPage(i + 1)}
+                          >
+                            {i + 1}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+
+                      {/* Next */}
+                      <PaginationItem>
+                        <PaginationNext
+                          aria-disabled={logPage >= totalLogPages}
+                          className={
+                            logPage >= totalLogPages
+                              ? 'pointer-events-none opacity-50'
+                              : ''
+                          }
+                          onClick={() => {
+                            if (logPage >= totalLogPages) return;
+                            setLogPage(prev => prev + 1);
+                          }}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
+              </>
+            ) : (
+              <EmptyState
+                title="No Logs"
+                message="No system activity recorded"
+              />
+            )}
+          </SettingsSection>
         </TabsContent>
       </Tabs>
     </div>
   );
 };
+
+/* ================= SECTION ================= */
+
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border bg-card">
+      <div className="border-b px-6 py-4">
+        <h2 className="font-semibold">{title}</h2>
+        {description && (
+          <p className="text-sm text-muted-foreground">
+            {description}
+          </p>
+        )}
+      </div>
+      <div className="px-6 py-4">{children}</div>
+    </section>
+  );
+}

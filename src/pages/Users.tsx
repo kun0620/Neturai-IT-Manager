@@ -21,14 +21,17 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAdminUsers } from '@/hooks/useAdminUsers';
 import { useUpdateUserRole } from '@/hooks/useUpdateUserRole';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
-import { hasPermission } from '@/lib/permissions';
+import { toast } from 'sonner';
 import type { UserRole } from '@/lib/permissions';
 
 export default function Users() {
   const { data: users, isLoading } = useAdminUsers();
   const { mutate: updateRole } = useUpdateUserRole();
-  const { isAdmin, profile } = useCurrentProfile();
-  const canChangeRole = hasPermission(profile?.role, 'user.role.change');
+  const { can, profile, loading: profileLoading } = useCurrentProfile();
+
+  const canViewUsers = can('user.view');
+  const canUpdateRole = can('user.role.update');
+
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<{
     userId: string;
@@ -37,6 +40,19 @@ export default function Users() {
   } | null>(null);
 
   const currentUserId = profile?.id;
+
+  // ✅ loading ต้องมาก่อน permission
+  if (isLoading || profileLoading) {
+    return <LoadingSpinner />;
+  }
+
+  if (!canViewUsers) {
+    return (
+      <div className="p-6 text-muted-foreground">
+        You do not have permission to view users.
+      </div>
+    );
+  }
 
   const columns: ColumnDef<any>[] = [
     { accessorKey: 'name', header: 'Name' },
@@ -48,13 +64,12 @@ export default function Users() {
         const user = row.original;
         const isSelf = user.id === currentUserId;
 
-        // IT → read only
-        if (!canChangeRole) {
+        // ไม่มีสิทธิ์แก้ role → read only
+        if (!canUpdateRole) {
           return <span className="capitalize">{user.role}</span>;
         }
 
-
-        // Admin ห้ามแก้ตัวเอง
+        // ห้ามแก้ role ตัวเอง
         if (isSelf) {
           return (
             <span className="capitalize text-muted-foreground">
@@ -89,8 +104,6 @@ export default function Users() {
     },
   ];
 
-  if (isLoading) return <LoadingSpinner />;
-
   return (
     <>
       <div className="space-y-4">
@@ -98,7 +111,7 @@ export default function Users() {
         <DataTable columns={columns} data={users ?? []} />
       </div>
 
-      {/* ✅ Confirm Dialog */}
+      {/* Confirm Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -124,10 +137,21 @@ export default function Users() {
             <Button
               onClick={() => {
                 if (!pending) return;
+
+                if (!canUpdateRole) {
+                  toast.warning(
+                    'You do not have permission to update user role'
+                  );
+                  setOpen(false);
+                  setPending(null);
+                  return;
+                }
+
                 updateRole({
                   userId: pending.userId,
                   role: pending.role,
                 });
+
                 setOpen(false);
                 setPending(null);
               }}
