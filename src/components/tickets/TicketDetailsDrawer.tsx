@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select';
 
 import { format } from 'date-fns';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 import { useTickets } from '@/hooks/useTickets';
 import { useAuth } from '@/hooks/useAuth';
@@ -161,8 +161,8 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
     updateTicket(
       { id: ticketId, updates: { status }, userId: user.id },
       {
-        onSuccess: () => toast.success('Status updated'),
-        onError: (err) => toast.error(err.message),
+        onSuccess: () => notifySuccess('Status updated'),
+        onError: (err) => notifyError(err.message),
       }
     );
   };
@@ -175,8 +175,8 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
     updateTicket(
       { id: ticketId, updates: { assigned_to: userId }, userId: user.id },
       {
-        onSuccess: () => toast.success('Ticket assigned'),
-        onError: (err) => toast.error(err.message),
+        onSuccess: () => notifySuccess('Ticket assigned'),
+        onError: (err) => notifyError(err.message),
       }
     );
   };
@@ -193,9 +193,9 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
       {
         onSuccess: () => {
           setNewCommentText('');
-          toast.success('Comment added');
+          notifySuccess('Comment added');
         },
-        onError: (err) => toast.error(err.message),
+        onError: (err) => notifyError(err.message),
       }
     );
   };
@@ -214,8 +214,8 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
         userId: user.id,
       },
       {
-        onSuccess: () => toast.success('Due date updated'),
-        onError: (err) => toast.error(err.message),
+        onSuccess: () => notifySuccess('Due date updated'),
+        onError: (err) => notifyError(err.message),
       }
     );
   };

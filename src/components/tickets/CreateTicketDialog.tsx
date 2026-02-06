@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 
 import { useTickets } from '@/hooks/useTickets';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 import { Loader2 } from 'lucide-react';
 
 import type { Tables } from '@/types/database.types';
@@ -84,7 +84,7 @@ export function CreateTicketDialog({
   
   const handleNext = () => {
     if (!subject.trim()) {
-      toast.error('Subject is required');
+      notifyError('Subject is required');
       return;
     }
     setStep(2);
@@ -97,17 +97,17 @@ export function CreateTicketDialog({
       } = await supabase.auth.getUser();
 
       if (!user) {
-        toast.error('You must be logged in');
+        notifyError('You must be logged in');
         return;
       }
 
       if (!categoryId) {
-        toast.error('Please select a category');
+        notifyError('Please select a category');
         return;
       }
 
       if (!priority) {
-        toast.error('Please select a priority');
+        notifyError('Please select a priority');
         return;
       }
 
@@ -120,11 +120,11 @@ export function CreateTicketDialog({
         status: 'open',
       });
 
-      toast.success('Ticket created successfully');
+      notifySuccess('Ticket created successfully');
       resetForm();
       onClose();
     } catch (err: any) {
-      toast.error(err.message ?? 'Failed to create ticket');
+      notifyError(err.message ?? 'Failed to create ticket');
     }
   };
 

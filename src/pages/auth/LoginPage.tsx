@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -49,13 +49,12 @@ const LoginPage: React.FC = () => {
     });
 
     if (error) {
-      toast.error('Login Failed', {
-        description: error.message,
-      });
+      notifyError('Login Failed', error.message);
     } else {
-      toast.success('Login Successful', {
-        description: 'You have been logged in successfully.',
-      });
+      notifySuccess(
+        'Login Successful',
+        'You have been logged in successfully.'
+      );
       navigate('/'); // Redirect to dashboard
     }
   };

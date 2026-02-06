@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, User } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/lib/supabase';
 
 const Register: React.FC = () => {
   const [email, setEmail] = useState('');

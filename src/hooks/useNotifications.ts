@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { notifyError } from '@/lib/notify';
 
 export type Notification = {
   id: string;
@@ -30,6 +31,10 @@ export function useNotifications(userId?: string) {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20);
+
+      if (error) {
+        notifyError('Failed to load notifications', error.message);
+      }
 
       if (!error && data) {
         setNotifications(
@@ -69,6 +74,34 @@ export function useNotifications(userId?: string) {
         setNotifications(prev => [newNoti, ...prev]);
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        payload => {
+          const updated = payload.new as Notification;
+          setNotifications(prev =>
+            prev.map(n => (n.id === updated.id ? { ...n, ...updated } : n))
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        payload => {
+          const removed = payload.old as Notification;
+          setNotifications(prev => prev.filter(n => n.id !== removed.id));
+        }
+      )
       .subscribe();
 
     return () => {
@@ -78,10 +111,15 @@ export function useNotifications(userId?: string) {
 
   // mark read
   const markAsRead = async (id: string) => {
-    await supabase
+    const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
       .eq('id', id);
+
+    if (error) {
+      notifyError('Failed to mark notification as read', error.message);
+      return;
+    }
 
     setNotifications(prev =>
       prev.map(n => (n.id === id ? { ...n, is_read: true } : n))
@@ -91,11 +129,16 @@ export function useNotifications(userId?: string) {
   const markAllAsRead = async () => {
     if (!userId) return;
 
-    await supabase
+    const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
       .eq('user_id', userId)
       .eq('is_read', false);
+
+    if (error) {
+      notifyError('Failed to mark all as read', error.message);
+      return;
+    }
 
     setNotifications(prev =>
       prev.map(n => ({ ...n, is_read: true }))

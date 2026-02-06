@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -59,18 +59,20 @@ const UpdatePasswordPage: React.FC = () => {
         refresh_token: refreshToken,
       }).then(({ error }) => {
         if (error) {
-          toast.error('Invalid Token', {
-            description: 'The password reset link is invalid or expired.',
-          });
+          notifyError(
+            'Invalid Token',
+            'The password reset link is invalid or expired.'
+          );
           navigate('/forgot-password');
         } else {
           setIsValidToken(true);
         }
       });
     } else {
-      toast.error('Missing Token', {
-        description: 'No password reset token found. Please use the link from your email.',
-      });
+      notifyError(
+        'Missing Token',
+        'No password reset token found. Please use the link from your email.'
+      );
       navigate('/forgot-password');
     }
   }, [searchParams, navigate]);
@@ -81,13 +83,12 @@ const UpdatePasswordPage: React.FC = () => {
     });
 
     if (error) {
-      toast.error('Password Update Failed', {
-        description: error.message,
-      });
+      notifyError('Password Update Failed', error.message);
     } else {
-      toast.success('Password Updated', {
-        description: 'Your password has been updated successfully. You can now log in.',
-      });
+      notifySuccess(
+        'Password Updated',
+        'Your password has been updated successfully. You can now log in.'
+      );
       navigate('/login');
     }
   };

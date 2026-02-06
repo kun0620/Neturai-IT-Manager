@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { useTickets } from '@/hooks/useTickets';
 import { useUsersForAssignment } from '@/hooks/useUsers'; // Assuming this hook exists for fetching users
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 import { Loader2 } from 'lucide-react';
 import { Enums, Tables } from '@/types/database.types';
 
@@ -57,12 +57,12 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      toast.error('Title cannot be empty.');
+      notifyError('Title cannot be empty.');
       return;
     }
 
     if (!selectedCategoryId) {
-      toast.error('Please select a category.');
+      notifyError('Please select a category.');
       return;
     }
 
@@ -79,10 +79,10 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
           updated_at: new Date().toISOString(), // Ensure updated_at is set
         },
       });
-      toast.success('Ticket updated successfully!');
+      notifySuccess('Ticket updated successfully!');
       onClose();
     } catch (error: any) {
-      toast.error(`Failed to update ticket: ${error.message}`);
+      notifyError('Failed to update ticket', error.message);
     }
   };
 
@@ -103,13 +103,13 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
   }
 
   if (ticketError) {
-    toast.error(`Error loading ticket: ${ticketError.message}`);
+    notifyError('Error loading ticket', ticketError.message);
     onClose();
     return null;
   }
 
   if (!ticket) {
-    toast.error('Ticket not found.');
+    notifyError('Ticket not found.');
     onClose();
     return null;
   }

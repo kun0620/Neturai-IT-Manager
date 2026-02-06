@@ -17,11 +17,12 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { DeleteUserDialog } from '@/components/users/DeleteUserDialog';
 
 import { useAdminUsers } from '@/hooks/useAdminUsers';
 import { useUpdateUserRole } from '@/hooks/useUpdateUserRole';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
-import { toast } from 'sonner';
+import { notifyWarning } from '@/lib/notify';
 import type { UserRole } from '@/lib/permissions';
 
 export default function Users() {
@@ -31,12 +32,18 @@ export default function Users() {
 
   const canViewUsers = can('user.view');
   const canUpdateRole = can('user.role.update');
+  const canDeleteUsers = can('user.delete');
 
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<{
     userId: string;
     email: string;
     role: UserRole;
+  } | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    userId: string;
+    userName: string;
   } | null>(null);
 
   const currentUserId = profile?.id;
@@ -102,6 +109,33 @@ export default function Users() {
         );
       },
     },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const user = row.original;
+        const isSelf = user.id === currentUserId;
+
+        if (!canDeleteUsers) return null;
+
+        return (
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={isSelf}
+            onClick={() => {
+              setDeleteTarget({
+                userId: user.id,
+                userName: user.name ?? user.email ?? 'User',
+              });
+              setDeleteOpen(true);
+            }}
+          >
+            Delete
+          </Button>
+        );
+      },
+    },
   ];
 
   return (
@@ -139,7 +173,7 @@ export default function Users() {
                 if (!pending) return;
 
                 if (!canUpdateRole) {
-                  toast.warning(
+                  notifyWarning(
                     'You do not have permission to update user role'
                   );
                   setOpen(false);
@@ -161,6 +195,21 @@ export default function Users() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Dialog */}
+      <DeleteUserDialog
+        isOpen={deleteOpen}
+        onClose={() => {
+          setDeleteOpen(false);
+          setDeleteTarget(null);
+        }}
+        userId={deleteTarget?.userId ?? ''}
+        userName={deleteTarget?.userName ?? ''}
+        onSuccess={() => {
+          setDeleteOpen(false);
+          setDeleteTarget(null);
+        }}
+      />
     </>
   );
 }

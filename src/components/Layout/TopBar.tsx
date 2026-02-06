@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { notifyError } from '@/lib/notify';
 import { Bell, User } from 'lucide-react';
 import {
   DropdownMenu,
@@ -28,7 +29,7 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
     if (!error) {
       navigate('/login');
     } else {
-      console.error('Logout failed', error.message);
+      notifyError('Logout failed', error.message);
     }
   };
 
@@ -38,6 +39,34 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
     markAsRead,
     markAllAsRead,
   } = useNotifications(user?.id);
+
+  const getNotificationTitle = (n: typeof notifications[number]) => {
+    if (n.title) return n.title;
+    switch (n.type) {
+      case 'status_change':
+        return 'Ticket status changed';
+      case 'priority_change':
+        return 'Ticket priority changed';
+      case 'new_ticket':
+        return 'New ticket';
+      default:
+        return 'Notification';
+    }
+  };
+
+  const getNotificationMeta = (n: typeof notifications[number]) => {
+    switch (n.type) {
+      case 'status_change':
+        return { label: 'Status', color: 'bg-yellow-500/20 text-yellow-700' };
+      case 'priority_change':
+        return { label: 'Priority', color: 'bg-red-500/20 text-red-700' };
+      case 'new_ticket':
+        return { label: 'New', color: 'bg-blue-500/20 text-blue-700' };
+      case 'info':
+      default:
+        return { label: 'Info', color: 'bg-gray-500/20 text-gray-700' };
+    }
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-end gap-4 border-b bg-background px-4">
@@ -100,9 +129,20 @@ export function TopBar({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void }) 
                 )}
               >
                 {/* Title */}
-                <span className="text-sm">
-                  🆕 New ticket: {n.title}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getNotificationMeta(n).color}`}
+                  >
+                    {getNotificationMeta(n).label}
+                  </span>
+                  <span className="text-sm">{getNotificationTitle(n)}</span>
+                </div>
+
+                {n.body && (
+                  <span className="text-xs text-muted-foreground">
+                    {n.body}
+                  </span>
+                )}
 
                 {/* Time */}
                 <span className="text-xs text-muted-foreground">

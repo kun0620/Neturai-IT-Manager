@@ -1,22 +1,14 @@
-import type { Database } from '@/types/supabase';
+// asset/mapAssetLogToText.ts
+import { AssetLog } from '@/types/asset-log';
 
-type AssetLog =
-  Database['public']['Tables']['asset_logs']['Row'];
-
-export function logMessage(
-  log: AssetLog,
-  actorName?: string | null
-) {
-  const actor =
-    actorName ?? (log.performed_by ? 'User' : 'System');
+export function mapAssetLogToText(log: AssetLog) {
+  const actor = log.performed_by ? 'User' : 'System';
 
   switch (log.action) {
     case 'create':
       return `${actor} created the asset`;
     case 'assign':
-      return `${actor} assigned the asset to ${
-        log.new_value ?? 'a user'
-      }`;
+      return `${actor} assigned the asset to ${log.new_value ?? 'a user'}`;
     case 'unassign':
       return `${actor} unassigned the asset`;
     case 'status_change':
@@ -29,6 +21,7 @@ export function logMessage(
       }"`;
     case 'custom_field_update':
       return `${actor} updated ${log.field}`;
+
     default:
       return `${actor} updated the asset`;
   }

@@ -10,7 +10,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast'; // Corrected import path
+import { notifyError, notifySuccess } from '@/lib/notify';
 import { supabase } from '@/lib/supabase';
 
 interface ResetPasswordDialogProps {
@@ -28,7 +28,6 @@ export const ResetPasswordDialog: React.FC<ResetPasswordDialogProps> = ({
   userName,
   onSuccess,
 }) => {
-  const { toast } = useToast();
   const [isSending, setIsSending] = React.useState(false);
 
   const handleResetPassword = async () => {
@@ -41,19 +40,17 @@ export const ResetPasswordDialog: React.FC<ResetPasswordDialogProps> = ({
       if (edgeFunctionError) throw edgeFunctionError;
       if (data.error) throw new Error(data.error);
 
-      toast({
-        title: 'Success',
-        description: `Password reset email sent to "${userEmail}" for user "${userName}".`,
-      });
+      notifySuccess(
+        'Password reset email sent',
+        `Sent to "${userEmail}" for "${userName}".`
+      );
       onSuccess();
       onClose();
     } catch (error: any) {
-      console.error('Error sending password reset:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to send password reset email.',
-        variant: 'destructive',
-      });
+      notifyError(
+        'Failed to send password reset email',
+        error.message
+      );
     } finally {
       setIsSending(false);
     }

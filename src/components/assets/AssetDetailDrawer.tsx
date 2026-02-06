@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Asset } from '@/types/supabase';
 import { UserProfile } from '@/hooks/useUsers';
+import { AssetHistoryTimeline } from '@/features/assets/components/AssetHistoryTimeline';
+
 
 type AssetWithUser = Asset & {
   users: { name: string } | null; // Changed from profiles to users
@@ -92,9 +94,22 @@ export const AssetDetailDrawer: React.FC<AssetDetailDrawerProps> = ({
 
               <Separator className="my-6" />
 
-              <h3 className="text-lg font-semibold mb-4">Repair History</h3>
-              {/* Placeholder for repair history - will fetch from 'repairs' table later */}
-              <p className="text-muted-foreground">No repair history available yet.</p>
+                <h3 className="text-lg font-semibold mb-4">
+                  Activity
+                </h3>
+
+                <AssetHistoryTimeline assetId={asset.id} />
+
+                <Separator className="my-6" />
+
+                <h3 className="text-lg font-semibold mb-4">
+                  Repair History
+                </h3>
+
+                <p className="text-muted-foreground">
+                  No repair history available yet.
+                </p>
+
             </div>
           </div>
         </ScrollArea>

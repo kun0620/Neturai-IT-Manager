@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -42,13 +42,12 @@ const ForgotPasswordPage: React.FC = () => {
     });
 
     if (error) {
-      toast.error('Password Reset Failed', {
-        description: error.message,
-      });
+      notifyError('Password Reset Failed', error.message);
     } else {
-      toast.success('Password Reset Email Sent', {
-        description: 'Please check your email for instructions to reset your password.',
-      });
+      notifySuccess(
+        'Password Reset Email Sent',
+        'Please check your email for instructions to reset your password.'
+      );
     }
   };
 

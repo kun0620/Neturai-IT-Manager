@@ -18,6 +18,6 @@ export async function createLog({
   });
 
   if (error) {
-    console.error('[createLog]', error.message);
+    // best-effort: ignore log failures
   }
 }

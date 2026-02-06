@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -18,7 +26,7 @@ import {
   PaginationPrevious,
   PaginationLink,
 } from '@/components/ui/pagination';
-import { useSettings } from '@/hooks/useSettings';
+import { useSettings, useUpdateSetting } from '@/hooks/useSettings';
 import { useCategories } from '@/hooks/useCategories';
 import { useSLAPolicies } from '@/hooks/useSLAPolicies';
 import { useLogs } from '@/hooks/useLogs';
@@ -28,12 +36,14 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { mapLogToText } from '@/features/logs/mapLogToText';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 
 /* ================= PAGE ================= */
 
 export const SettingsAndLogs: React.FC = () => {
   const { data: settings, isLoading: isLoadingSettings } = useSettings();
+  const updateSetting = useUpdateSetting();
   const { data: categories, isLoading: isLoadingCategories } = useCategories();
   const { data: slaPolicies, isLoading: isLoadingSLAPolicies } = useSLAPolicies();
   const { data: usersForAssignment, isLoading: isLoadingUsers } =
@@ -41,10 +51,13 @@ export const SettingsAndLogs: React.FC = () => {
 
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] =
     useState(false);
-  const [defaultAssigneeName, setDefaultAssigneeName] =
-    useState<string>('—');
+  const [defaultAssigneeId, setDefaultAssigneeId] =
+    useState<string | null>(null);
   const [defaultThemeDisplay, setDefaultThemeDisplay] =
     useState<string>('system');
+  const [savingKey, setSavingKey] = useState<string | null>(
+    null
+  );
 
   const [logSearchTerm, setLogSearchTerm] = useState('');
   const [logPage, setLogPage] = useState(1);
@@ -68,15 +81,30 @@ export const SettingsAndLogs: React.FC = () => {
       s => s.key === 'default_assignee_id'
     )?.value;
 
-    if (assigneeId && usersForAssignment) {
-      const u = usersForAssignment.find(u => u.id === assigneeId);
-      setDefaultAssigneeName(u?.name || u?.email || '—');
-    }
+    setDefaultAssigneeId(assigneeId ?? null);
 
     setDefaultThemeDisplay(
       settings.find(s => s.key === 'theme_default')?.value || 'system'
     );
   }, [settings, usersForAssignment]);
+
+  const handleUpdateSetting = async (
+    key: string,
+    value: string,
+    onRollback?: () => void,
+    successMessage?: string
+  ) => {
+    setSavingKey(key);
+    try {
+      await updateSetting.mutateAsync({ key, value });
+      notifySuccess(successMessage ?? 'Setting updated');
+    } catch (err: any) {
+      notifyError('Failed to update setting', err?.message);
+      onRollback?.();
+    } finally {
+      setSavingKey(null);
+    }
+  };
 
   const handleLogSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,11 +159,20 @@ export const SettingsAndLogs: React.FC = () => {
                     Receive ticket updates by email
                   </div>
                 </div>
-                <span className="font-medium">
-                  {emailNotificationsEnabled
-                    ? 'Enabled'
-                    : 'Disabled'}
-                </span>
+                <Switch
+                  checked={emailNotificationsEnabled}
+                  disabled={savingKey === 'email_notifications_enabled'}
+                  onCheckedChange={(checked) => {
+                    const previous = emailNotificationsEnabled;
+                    setEmailNotificationsEnabled(checked);
+                    handleUpdateSetting(
+                      'email_notifications_enabled',
+                      checked ? 'true' : 'false',
+                      () => setEmailNotificationsEnabled(previous),
+                      'Email notifications updated'
+                    );
+                  }}
+                />
               </div>
 
               <div>
@@ -143,7 +180,35 @@ export const SettingsAndLogs: React.FC = () => {
                 <div className="text-sm text-muted-foreground">
                   Automatically assigned user
                 </div>
-                <div className="mt-1">{defaultAssigneeName}</div>
+                <div className="mt-2 max-w-sm">
+                  <Select
+                    value={defaultAssigneeId ?? ''}
+                    onValueChange={(value) => {
+                      const previous = defaultAssigneeId;
+                      const next = value || null;
+                      setDefaultAssigneeId(next);
+                      handleUpdateSetting(
+                        'default_assignee_id',
+                        value || '',
+                        () => setDefaultAssigneeId(previous),
+                        'Default assignee updated'
+                      );
+                    }}
+                    disabled={savingKey === 'default_assignee_id'}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select assignee" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" sideOffset={6}>
+                      <SelectItem value="">Unassigned</SelectItem>
+                      {usersForAssignment?.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.name || u.email || u.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div>
@@ -151,8 +216,30 @@ export const SettingsAndLogs: React.FC = () => {
                 <div className="text-sm text-muted-foreground">
                   Application appearance
                 </div>
-                <div className="mt-1 capitalize">
-                  {defaultThemeDisplay}
+                <div className="mt-2 max-w-xs">
+                  <Select
+                    value={defaultThemeDisplay}
+                    onValueChange={(value) => {
+                      const previous = defaultThemeDisplay;
+                      setDefaultThemeDisplay(value);
+                      handleUpdateSetting(
+                        'theme_default',
+                        value,
+                        () => setDefaultThemeDisplay(previous),
+                        'Default theme updated'
+                      );
+                    }}
+                    disabled={savingKey === 'theme_default'}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select theme" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" sideOffset={6}>
+                      <SelectItem value="system">System</SelectItem>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>

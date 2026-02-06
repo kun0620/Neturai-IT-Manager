@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
-import { toast } from 'sonner';
+import { notifyInfo } from '@/lib/notify';
 
 interface ExportButtonProps {
   onExport: (format: 'pdf' | 'csv') => void;
@@ -10,7 +10,7 @@ interface ExportButtonProps {
 
 export function ExportButton({ onExport, isLoading }: ExportButtonProps) {
   const handleExport = (format: 'pdf' | 'csv') => {
-    toast.info(`Exporting data as ${format.toUpperCase()}... (Placeholder)`);
+    notifyInfo(`Exporting data as ${format.toUpperCase()}... (Placeholder)`);
     onExport(format);
   };
 

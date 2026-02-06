@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
 import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -62,15 +62,14 @@ const RegisterPage: React.FC = () => {
     });
 
     if (error) {
-      toast.error('Registration failed', {
-        description: error.message,
-      });
+      notifyError('Registration failed', error.message);
       return;
     }
 
-    toast.success('Registration successful', {
-      description: 'Please check your email to confirm your account.',
-    });
+    notifySuccess(
+      'Registration successful',
+      'Please check your email to confirm your account.'
+    );
 
     navigate('/login');
   };

@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { useAssetCategories } from '@/hooks/useAssetCategories';
 import { useAssetTypes } from '@/hooks/useAssetTypes';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 
 type Props = {
@@ -112,13 +112,13 @@ export function AssetInfoSection({
         qc.invalidateQueries({ queryKey: ['asset-logs', asset.id] }),
       ]);
 
-      toast.success('Asset Code updated');
+      notifySuccess('Asset Code updated');
     } catch (e: any) {
       // 🔥 กรณีซ้ำ
       if (e?.message?.includes('duplicate')) {
-        toast.error('Asset Code already exists');
+        notifyError('Asset Code already exists');
       } else {
-        toast.error('Failed to update Asset Code');
+        notifyError('Failed to update Asset Code');
       }
     }
   }

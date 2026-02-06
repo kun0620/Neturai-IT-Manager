@@ -18,7 +18,10 @@ const ACTION_META: Record<
   unassign: { icon: UserMinus, color: 'text-gray-500' },
   status_change: { icon: RefreshCcw, color: 'text-blue-600' },
   update: { icon: Edit3, color: 'text-muted-foreground' },
-  custom_field_update: {icon: Sliders,color: 'text-orange-600',},
+  custom_field_update: {
+    icon: Sliders,
+    color: 'text-orange-600',
+  },
 };
 
 type Props = {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/lib/supabase';
+import { notifyError } from '@/lib/notify';
 import { Tables, TablesUpdate } from '../types/supabase';
 
 interface EditAssetModalProps {
@@ -60,7 +61,7 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onAsse
         if (error) throw error;
         setProfiles(data);
       } catch (err: any) {
-        console.error('Error fetching profiles:', err.message);
+        notifyError('Failed to load profiles', err.message);
         setError('Failed to load profiles for assignment.');
       } finally {
         setLoading(false);
@@ -116,7 +117,7 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onAsse
       onAssetUpdated(); // Notify parent to refresh list
       setTimeout(onClose, 1500); // Close modal after a short delay
     } catch (err: any) {
-      console.error('Error updating asset:', err.message);
+      notifyError('Failed to update asset', err.message);
       setError(`Failed to update asset: ${err.message}`);
     } finally {
       setLoading(false);

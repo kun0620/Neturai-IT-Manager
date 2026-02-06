@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select';
 
 import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 import { Tables } from '@/types/supabase';
 import { useRoles } from '@/hooks/useRoles';
 
@@ -89,13 +89,11 @@ export const UserFormDialog: React.FC<UserFormDialogProps> = ({
       .eq('id', user.id);
 
     if (error) {
-      toast.error('Update Failed', {
-        description: error.message,
-      });
+      notifyError('Update Failed', error.message);
       return;
     }
 
-    toast.success('User Updated');
+    notifySuccess('User Updated');
     onSuccess();
     onClose();
   };

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Menu, UserCircle, LogOut } from 'lucide-react';
 import ThemeToggle from '../ThemeToggle';
-import { useAuth } from '../../lib/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { notifyError } from '@/lib/notify';
 import { useNavigate } from 'react-router-dom';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 
@@ -14,7 +15,6 @@ const Navbar: React.FC<NavbarProps> = ({
   onToggleSidebar,
   isSidebarCollapsed,
 }) => {
-  const { signOut } = useAuth();
   const navigate = useNavigate();
 
   const {
@@ -26,12 +26,11 @@ const Navbar: React.FC<NavbarProps> = ({
   } = useCurrentProfile();
 
   const handleLogout = async () => {
-    const { error } = await signOut();
+    const { error } = await supabase.auth.signOut();
     if (!error) {
       navigate('/login');
     } else {
-      console.error('Logout error:', error.message);
-      alert('Failed to log out. Please try again.');
+      notifyError('Failed to log out', error.message);
     }
   };
 

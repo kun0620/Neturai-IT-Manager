@@ -1,7 +1,10 @@
-import { HistoryItem, HistoryAction } from '../types/history';
+import type { Database } from '@/types/supabase';
+import { HistoryItem } from '../types/history';
+
+type AssetLog = Database['public']['Tables']['asset_logs']['Row'];
 
 export function mapAssetLog(
-  log: any,
+  log: AssetLog,
   resolveUserName?: (id?: string | null) => string | null
 ): HistoryItem {
   const actor =
@@ -14,52 +17,65 @@ export function mapAssetLog(
     actor,
   };
 
-  switch (log.action as HistoryAction) {
+  switch (log.action) {
     case 'create':
       return {
         ...base,
         action: 'create',
-        title: 'Asset created',
+        title: `${actor} created the asset`,
       };
 
     case 'status_change':
       return {
         ...base,
         action: 'status_change',
-        title: 'Status changed',
+        title: `${actor} changed status`,
         description: `${log.old_value ?? '—'} → ${log.new_value ?? '—'}`,
       };
 
     case 'assign':
-      return {
-        ...base,
-        action: 'assign',
-        title: 'Assigned asset',
-        description: `Assigned to ${
-          resolveUserName?.(log.new_value) ?? 'User'
-        }`,
-      };
-
     case 'unassign':
       return {
         ...base,
-        action: 'unassign',
-        title: 'Unassigned asset',
-      };
-
-    case 'custom_field_update':
-      return {
-        ...base,
-        action: 'custom_field_update',
-        title: 'Custom field updated',
-        description: `${log.field}: ${log.old_value ?? '—'} → ${log.new_value ?? '—'}`,
+        action: log.action,
+        title: `${actor} changed assignment`,
+        description: `${log.old_value ?? 'Unassigned'} → ${
+          log.new_value ?? 'Unassigned'
+        }`,
       };
 
     default:
+      if (log.action === 'update' && log.field === 'assigned_to') {
+        return {
+          ...base,
+          action: 'update',
+          title: `${actor} changed assignment`,
+          description: `${log.old_value ?? 'Unassigned'} → ${
+            log.new_value ?? 'Unassigned'
+          }`,
+        };
+      }
+      if (log.action === 'update' && log.field === 'status') {
+        return {
+          ...base,
+          action: 'update',
+          title: `${actor} changed status`,
+          description: `${log.old_value ?? '—'} → ${log.new_value ?? '—'}`,
+        };
+      }
       return {
         ...base,
-        action: 'update',
-        title: 'Asset updated',
+        action: log.action,
+        title:
+          log.action === 'custom_field_update'
+            ? `${actor} updated a custom field`
+            : `${actor} updated the asset`,
+        description:
+          log.action === 'update'
+            ? `${log.field}: "${log.old_value ?? '—'}" → "${
+                log.new_value ?? '—'
+              }"`
+            : null,
       };
   }
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/lib/supabase';
+import { notifyError } from '@/lib/notify';
 import { Tables, TablesUpdate } from '../types/supabase';
 
 interface EditTicketModalProps {
@@ -67,7 +68,7 @@ const EditTicketModal: React.FC<EditTicketModalProps> = ({ isOpen, onClose, onTi
         setProfiles(profileData);
 
       } catch (err: any) {
-        console.error('Error fetching dropdown data:', err.message);
+        notifyError('Failed to load ticket data', err.message);
         setError('Failed to load necessary data for ticket editing.');
       } finally {
         setLoading(false);
@@ -121,7 +122,7 @@ const EditTicketModal: React.FC<EditTicketModalProps> = ({ isOpen, onClose, onTi
       onTicketUpdated(); // Notify parent to refresh list
       setTimeout(onClose, 1500); // Close modal after a short delay
     } catch (err: any) {
-      console.error('Error updating ticket:', err.message);
+      notifyError('Failed to update ticket', err.message);
       setError(`Failed to update ticket: ${err.message}`);
     } finally {
       setLoading(false);

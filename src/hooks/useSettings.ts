@@ -23,8 +23,7 @@ async function updateSettingMutation(setting: Partial<Setting>): Promise<Setting
 
   const { data, error } = await supabase
     .from('settings')
-    .update({ value, updated_at: new Date().toISOString() })
-    .eq('key', key)
+    .upsert({ key, value, updated_at: new Date().toISOString() })
     .select()
     .single();
 

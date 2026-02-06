@@ -9,6 +9,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { notifyError } from '@/lib/notify';
 
 interface AuthContextType {
   session: Session | null;
@@ -34,7 +35,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         error,
       } = await supabase.auth.getSession();
       if (error) {
-        console.error('Error getting session:', error);
+        notifyError('Failed to load session', error.message);
       }
       setSession(session);
       setUser(session?.user || null);
@@ -71,7 +72,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     setLoading(true);
     const { error } = await supabase.auth.signOut();
     if (error) {
-      console.error('Error signing out:', error);
+      notifyError('Logout failed', error.message);
     }
     setSession(null);
     setUser(null);

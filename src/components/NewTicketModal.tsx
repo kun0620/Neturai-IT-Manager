@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/lib/supabase';
+import { notifyError } from '@/lib/notify';
 import { Tables, TablesInsert } from '../types/supabase';
 
 interface NewTicketModalProps {
@@ -61,7 +62,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose, onTick
         if (categoryData.length > 0) setCategoryId(categoryData[0].id);
 
       } catch (err: any) {
-        console.error('Error fetching dropdown data:', err.message);
+        notifyError('Failed to load ticket data', err.message);
         setError('Failed to load necessary data for ticket creation.');
       } finally {
         setLoading(false);
@@ -117,7 +118,7 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose, onTick
       onTicketCreated(); // Notify parent to refresh list
       setTimeout(onClose, 1500); // Close modal after a short delay
     } catch (err: any) {
-      console.error('Error creating ticket:', err.message);
+      notifyError('Failed to create ticket', err.message);
       setError(`Failed to create ticket: ${err.message}`);
     } finally {
       setLoading(false);

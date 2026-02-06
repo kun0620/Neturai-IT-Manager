@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '@/lib/supabase';
+import { notifyError } from '@/lib/notify';
 import { Tables, TablesInsert } from '../types/supabase';
 
 interface NewAssetModalProps {
@@ -48,7 +49,7 @@ const NewAssetModal: React.FC<NewAssetModalProps> = ({ isOpen, onClose, onAssetC
         if (error) throw error;
         setProfiles(data);
       } catch (err: any) {
-        console.error('Error fetching profiles:', err.message);
+        notifyError('Failed to load profiles', err.message);
         setError('Failed to load profiles for assignment.');
       } finally {
         setLoading(false);
@@ -96,7 +97,7 @@ const NewAssetModal: React.FC<NewAssetModalProps> = ({ isOpen, onClose, onAssetC
       onAssetCreated(); // Notify parent to refresh list
       setTimeout(onClose, 1500); // Close modal after a short delay
     } catch (err: any) {
-      console.error('Error creating asset:', err.message);
+      notifyError('Failed to create asset', err.message);
       setError(`Failed to create asset: ${err.message}`);
     } finally {
       setLoading(false);

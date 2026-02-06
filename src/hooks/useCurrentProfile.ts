@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { hasPermission } from '@/lib/permissions';
 import type { Permission } from '@/lib/permissions';
+import { notifyError } from '@/lib/notify';
 
 export type UserRole = 'user' | 'it' | 'admin';
 
@@ -37,7 +38,7 @@ export function useCurrentProfile() {
           .single();
 
         if (error || !data) {
-          console.error('[useCurrentProfile] Failed to load profile:', error);
+          notifyError('Failed to load profile', error?.message ?? 'Unknown error');
           // fallback ปลอดภัย
           setProfile({
             id: user.id,
@@ -50,7 +51,7 @@ export function useCurrentProfile() {
           });
         }
       } catch (err) {
-        console.error('[useCurrentProfile] Unexpected error:', err);
+        notifyError('Failed to load profile', 'Unexpected error');
         setProfile(null);
       } finally {
         setLoading(false);

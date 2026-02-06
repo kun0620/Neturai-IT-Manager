@@ -12,8 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
-import { useToast } from '@/hooks/use-toast'; // Corrected import path
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 interface DeleteUserDialogProps {
   isOpen: boolean;
@@ -31,7 +30,6 @@ export const DeleteUserDialog: React.FC<DeleteUserDialogProps> = ({
   onSuccess,
 }) => {
   const queryClient = useQueryClient();
-  const { toast: shadcnToast } = useToast(); // Renamed to avoid conflict with sonner.toast
 
   const deleteUserMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -44,17 +42,16 @@ export const DeleteUserDialog: React.FC<DeleteUserDialogProps> = ({
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('User Deleted', {
-        description: `User "${userName}" has been successfully removed.`,
-      });
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      notifySuccess(
+        'User Deleted',
+        `User "${userName}" has been successfully removed.`
+      );
       onSuccess();
       onClose();
     },
     onError: (error) => {
-      toast.error('Failed to Delete User', {
-        description: error.message,
-      });
+      notifyError('Failed to Delete User', error.message);
     },
   });
 

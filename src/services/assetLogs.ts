@@ -31,5 +31,6 @@ export async function insertAssetLogs(logs: LogInput[]) {
     }))
   );
 
-  if (error) throw error;
+  if (error) {
+  }
 }

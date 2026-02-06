@@ -29,7 +29,6 @@ type Props = {
   users: SimpleUser[];
 };
 
-
 /* ================= COMPONENT ================= */
 
 export function AssetDrawer({
@@ -39,17 +38,23 @@ export function AssetDrawer({
   onEdit,
   users,
 }: Props) {
-  if (!asset) return null;
-
-  /* ---------- dynamic fields ---------- */
-  const assetTypeId = asset.asset_type?.id;
-  const { data: assetFields = [] } = useAssetFields(assetTypeId);
-  const { data: rawCustomValues = {} } = useAssetFieldValues(asset.id);
+  // ✅ Hooks MUST be called first
   const { can } = useCurrentProfile();
+
+  const assetId: string | undefined = asset?.id;
+  const assetTypeId: string | undefined = asset?.asset_type?.id;
+
+  const { data: assetFields = [] } = useAssetFields(assetTypeId);
+  const { data: rawCustomValues = {} } = useAssetFieldValues(assetId);
+
   const canViewHistory = can('asset.history.view');
+
   const customValues: Record<string, string> = Object.fromEntries(
     Object.entries(rawCustomValues).map(([k, v]) => [k, v ?? ''])
   );
+
+  // ✅ Early return AFTER hooks
+  if (!asset) return null;
 
   const assignedUser =
     users.find((u) => u.id === asset.assigned_to)?.name ?? '—';
@@ -123,17 +128,17 @@ export function AssetDrawer({
 
         {/* ===== Footer ===== */}
         <div className="border-t px-6 py-4 flex justify-end">
-         {can('asset.edit') && (
-          <Button
-            size="sm"
-            variant="default"
-            onClick={() => {
-              onClose();
-              onEdit(asset);
-            }}
-          >
-            Edit
-          </Button>
+          {can('asset.edit') && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => {
+                onClose();
+                onEdit(asset);
+              }}
+            >
+              Edit
+            </Button>
           )}
         </div>
       </SheetContent>

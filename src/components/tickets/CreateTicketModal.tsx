@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { useCreateTicket } from '@/hooks/useTickets';
 import { useAuth } from '@/hooks/useAuth';
-import { toast } from 'sonner';
+import { notifyError, notifySuccess } from '@/lib/notify';
 import { Loader2 } from 'lucide-react';
 import { Enums } from '@/types/supabase';
 
@@ -51,7 +51,7 @@ export function CreateTicketModal({ isOpen, onClose }: CreateTicketModalProps) {
 
   const handleNext = () => {
     if (step === 1 && !subject.trim()) {
-      toast.error('Subject cannot be empty.');
+      notifyError('Subject cannot be empty.');
       return;
     }
     setStep((prev) => prev + 1);
@@ -63,7 +63,7 @@ export function CreateTicketModal({ isOpen, onClose }: CreateTicketModalProps) {
 
   const handleSubmit = async () => {
     if (!user?.id) {
-      toast.error('You must be logged in to create a ticket.');
+      notifyError('You must be logged in to create a ticket.');
       return;
     }
 
@@ -77,11 +77,11 @@ export function CreateTicketModal({ isOpen, onClose }: CreateTicketModalProps) {
         assignee: assignee || null,
         status: 'Open', // Default status for new tickets
       });
-      toast.success('Ticket created successfully!');
+      notifySuccess('Ticket created successfully!');
       onClose();
       resetForm();
     } catch (error: any) {
-      toast.error(`Failed to create ticket: ${error.message}`);
+      notifyError('Failed to create ticket', error.message);
     }
   };
 

@@ -7,8 +7,10 @@ import { format } from 'date-fns';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { DragStartEvent } from '@dnd-kit/core';
+import { notifyError, notifySuccess } from '@/lib/notify';
 
 
 import {
@@ -194,6 +196,8 @@ interface KanbanViewProps {
 export function KanbanView({ tickets, categories }: KanbanViewProps) {
   const { openDrawer } = useTicketDrawer();
   const [activeTicket, setActiveTicket] = useState<Tables<'tickets'> | null>(null);
+  const queryClient = useQueryClient();
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const [localTickets, setLocalTickets] = useState(tickets);
   useEffect(() => {
@@ -213,7 +217,7 @@ export function KanbanView({ tickets, categories }: KanbanViewProps) {
       return overId as Tables<'tickets'>['status'];
     }
 
-    const overTicket = tickets.find(t => t.id === overId);
+    const overTicket = localTickets.find(t => t.id === overId);
     return overTicket?.status ?? null;
   };
 
@@ -255,6 +259,7 @@ export function KanbanView({ tickets, categories }: KanbanViewProps) {
 
 const handleDragEnd = async (event: DragEndEvent) => {
   setActiveTicket(null); // 🔑 สำคัญ
+  if (isUpdating) return;
 
   const { active, over } = event;
   if (!over) return;
@@ -277,25 +282,39 @@ const handleDragEnd = async (event: DragEndEvent) => {
     )
   );
 
+  setIsUpdating(true);
   const { error } = await supabase
     .from('tickets')
     .update({ status: newStatus })
     .eq('id', ticketId);
 
   if (error) {
-    console.error('Rollback status', error);
+    notifyError('Failed to update ticket status', error.message);
     setLocalTickets(prev);
+  } else {
+    notifySuccess('Status updated');
+    queryClient.invalidateQueries({ queryKey: ['allTickets'] });
+    queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
+    queryClient.invalidateQueries({ queryKey: ['openTicketsCount'] });
+    queryClient.invalidateQueries({ queryKey: ['inProgressTicketsCount'] });
+    queryClient.invalidateQueries({ queryKey: ['closedTicketsCount'] });
   }
+  setIsUpdating(false);
 };
 
 
 
   /* ---------- Group Tickets ---------- */
 
-  const ticketsByStatus = TICKET_STATUS_OPTIONS.reduce((acc, status) => {
-    acc[status] = localTickets.filter(t => t.status === status);
-    return acc;
-  }, {} as Record<Tables<'tickets'>['status'], Tables<'tickets'>[]>);
+  const ticketsByStatus = useMemo(
+    () =>
+      TICKET_STATUS_OPTIONS.reduce((acc, status) => {
+        acc[status] = localTickets.filter(t => t.status === status);
+        return acc;
+      }, {} as Record<Tables<'tickets'>['status'], Tables<'tickets'>[]>),
+    [localTickets]
+  );
 
 
   /* ---------- Render ---------- */
@@ -306,64 +325,73 @@ const handleDragEnd = async (event: DragEndEvent) => {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4 items-start"
-      >
-        {TICKET_STATUS_OPTIONS.map((status) => (
-          <Card key={status} className="flex flex-col">
-            {/* Column Header */}
-            <CardHeader className="pb-2 border-b bg-muted/20">
-              <CardTitle className="flex items-center justify-between text-xs font-semibold">
-                <span className={cn('uppercase', STATUS_COLOR[status])}>
-                  {STATUS_LABEL[status]}
-                </span>
-                <Badge variant="outline" className="text-[11px]">
-                  {ticketsByStatus[status].length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
+      <div className="relative">
+        {isUpdating && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+            <div className="rounded-md border bg-card px-3 py-2 text-xs font-medium shadow-md">
+              Updating ticket status...
+            </div>
+          </div>
+        )}
 
-            {/* Column Content */}
-            <CardContent className="p-2">
-              <KanbanColumn id={status}>
-                <SortableContext
-                  items={ticketsByStatus[status].map(t => t.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {ticketsByStatus[status].length === 0 && (
-                    <div className="py-10 text-center text-xs text-muted-foreground">
-                      No tickets
-                    </div>
-                  )}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4 items-start"
+        >
+          {TICKET_STATUS_OPTIONS.map((status) => (
+            <Card key={status} className="flex flex-col">
+              {/* Column Header */}
+              <CardHeader className="pb-2 border-b bg-muted/20">
+                <CardTitle className="flex items-center justify-between text-xs font-semibold">
+                  <span className={cn('uppercase', STATUS_COLOR[status])}>
+                    {STATUS_LABEL[status]}
+                  </span>
+                  <Badge variant="outline" className="text-[11px]">
+                    {ticketsByStatus[status].length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
 
-                  {ticketsByStatus[status].map(ticket => (
-                    <KanbanTicketCard
-                      key={ticket.id}
-                      ticket={ticket}
-                      categoryName={getCategoryName(ticket.category_id)}
-                      priorityVariant={getPriorityVariant(ticket.priority)}
-                      onOpen={() => openDrawer(ticket.id)}
-                    />
-                  ))}
-                </SortableContext>
-              </KanbanColumn>
-            </CardContent>
-          </Card>
-        ))}
-      </motion.div>
-      <DragOverlay>
-      {activeTicket ? (
-        <KanbanOverlayCard
-          ticket={activeTicket}
-          categoryName={getCategoryName(activeTicket.category_id)}
-          priorityVariant={getPriorityVariant(activeTicket.priority)}
-        />
-      ) : null}
-    </DragOverlay>
+              {/* Column Content */}
+              <CardContent className="p-2">
+                <KanbanColumn id={status}>
+                  <SortableContext
+                    items={ticketsByStatus[status].map(t => t.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {ticketsByStatus[status].length === 0 && (
+                      <div className="py-10 text-center text-xs text-muted-foreground">
+                        No tickets
+                      </div>
+                    )}
 
+                    {ticketsByStatus[status].map(ticket => (
+                      <KanbanTicketCard
+                        key={ticket.id}
+                        ticket={ticket}
+                        categoryName={getCategoryName(ticket.category_id)}
+                        priorityVariant={getPriorityVariant(ticket.priority)}
+                        onOpen={() => openDrawer(ticket.id)}
+                      />
+                    ))}
+                  </SortableContext>
+                </KanbanColumn>
+              </CardContent>
+            </Card>
+          ))}
+        </motion.div>
+        <DragOverlay>
+        {activeTicket ? (
+          <KanbanOverlayCard
+            ticket={activeTicket}
+            categoryName={getCategoryName(activeTicket.category_id)}
+            priorityVariant={getPriorityVariant(activeTicket.priority)}
+          />
+        ) : null}
+      </DragOverlay>
+      </div>
     </DndContext>
     
   );
