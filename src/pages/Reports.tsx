@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { subDays, formatISO } from 'date-fns';
+import React, { useMemo, useState } from 'react';
+import { subDays, formatISO, format } from 'date-fns';
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
 
 import { useReportOverview } from '@/hooks/useReportOverview';
@@ -32,6 +32,12 @@ const Reports: React.FC = () => {
   /* ---------- derived ---------- */
   const from = formatISO(fromDate);
   const to = formatISO(toDate);
+  const customFromValue = format(fromDate, 'yyyy-MM-dd');
+  const customToValue = format(toDate, 'yyyy-MM-dd');
+  const isDateRangeInvalid = useMemo(
+    () => fromDate.getTime() > toDate.getTime(),
+    [fromDate, toDate]
+  );
 
   /* ---------- data ---------- */
   const {
@@ -51,6 +57,21 @@ const navigate = useNavigate();
 const exportCSV = () => {
   if (!data?.tickets || data.tickets.length === 0) return;
 
+  const escapeCsv = (value: unknown) => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    const needsEscape = /[",\n\r]/.test(str);
+    const safe = str.replace(/"/g, '""');
+    const guarded =
+      safe.startsWith('=') ||
+      safe.startsWith('+') ||
+      safe.startsWith('-') ||
+      safe.startsWith('@')
+        ? `'${safe}`
+        : safe;
+    return needsEscape ? `"${guarded}"` : guarded;
+  };
+
   const headers = [
     'ID',
     'Title',
@@ -62,13 +83,13 @@ const exportCSV = () => {
   ];
 
   const rows = data.tickets.map(t => [
-    t.id,
-    `"${t.title ?? ''}"`,
-    t.status,
-    t.priority,
-    t.created_at,
-    t.updated_at,
-    t.due_at,
+    escapeCsv(t.id),
+    escapeCsv(t.title ?? ''),
+    escapeCsv(t.status),
+    escapeCsv(t.priority),
+    escapeCsv(t.created_at),
+    escapeCsv(t.updated_at),
+    escapeCsv(t.due_at),
   ]);
 
   const csvContent =
@@ -154,32 +175,55 @@ const exportCSV = () => {
           <div className="flex items-center gap-2">
             <input
               type="date"
-              value={fromDate.toISOString().slice(0, 10)}
+              value={customFromValue}
               onChange={(e) => setFromDate(new Date(e.target.value))}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             />
             <span className="text-sm text-muted-foreground">to</span>
             <input
               type="date"
-              value={toDate.toISOString().slice(0, 10)}
+              value={customToValue}
               onChange={(e) => setToDate(new Date(e.target.value))}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             />
           </div>
         )}
 
-        <button
-          className="ml-auto px-3 py-1 text-sm rounded-md border hover:bg-muted"
-          onClick={() => exportCSV()}
-        >
-          Export CSV
-        </button>
-        <button
-          className="px-3 py-1 text-sm rounded-md border hover:bg-muted"
-          onClick={() => window.print()}
-        >
-          Export PDF
-        </button>
+        {range === 'custom' && isDateRangeInvalid && (
+          <span className="text-sm text-destructive">
+            From date must be before or equal to To date
+          </span>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            Export disabled if date range is invalid
+          </span>
+          <button
+            className="px-3 py-1 text-sm rounded-md border hover:bg-muted"
+            onClick={() => exportCSV()}
+            disabled={range === 'custom' && isDateRangeInvalid}
+            title={
+              range === 'custom' && isDateRangeInvalid
+                ? 'Fix date range to export'
+                : undefined
+            }
+          >
+            Export CSV
+          </button>
+          <button
+            className="px-3 py-1 text-sm rounded-md border hover:bg-muted"
+            onClick={() => window.print()}
+            disabled={range === 'custom' && isDateRangeInvalid}
+            title={
+              range === 'custom' && isDateRangeInvalid
+                ? 'Fix date range to export'
+                : undefined
+            }
+          >
+            Export PDF
+          </button>
+        </div>
       </div>
 
       {/* Summary */}

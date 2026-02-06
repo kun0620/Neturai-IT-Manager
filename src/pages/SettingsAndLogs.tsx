@@ -27,13 +27,31 @@ import {
   PaginationLink,
 } from '@/components/ui/pagination';
 import { useSettings, useUpdateSetting } from '@/hooks/useSettings';
-import { useCategories } from '@/hooks/useCategories';
-import { useSLAPolicies } from '@/hooks/useSLAPolicies';
+import {
+  useCategories,
+  useCategoryStats,
+  useAddCategory,
+  useUpdateCategory,
+  useDeleteCategory,
+} from '@/hooks/useCategories';
+import { useSLAPolicies, useUpdateSLAPolicy } from '@/hooks/useSLAPolicies';
 import { useLogs } from '@/hooks/useLogs';
 import { useUsersForAssignment } from '@/hooks/useUsers';
+import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { EmptyState } from '@/components/common/EmptyState';
-import { Search } from 'lucide-react';
+import { InlineEditableText } from '@/components/ui/inline-editable-text';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Search, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { mapLogToText } from '@/features/logs/mapLogToText';
 import { notifyError, notifySuccess } from '@/lib/notify';
@@ -45,9 +63,18 @@ export const SettingsAndLogs: React.FC = () => {
   const { data: settings, isLoading: isLoadingSettings } = useSettings();
   const updateSetting = useUpdateSetting();
   const { data: categories, isLoading: isLoadingCategories } = useCategories();
+  const {
+    data: categoryStats,
+    isLoading: isLoadingCategoryStats,
+  } = useCategoryStats();
+  const addCategory = useAddCategory();
+  const updateCategory = useUpdateCategory();
+  const deleteCategory = useDeleteCategory();
   const { data: slaPolicies, isLoading: isLoadingSLAPolicies } = useSLAPolicies();
+  const updateSLAPolicy = useUpdateSLAPolicy();
   const { data: usersForAssignment, isLoading: isLoadingUsers } =
     useUsersForAssignment();
+  const { isAdmin, isIT } = useCurrentProfile();
 
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] =
     useState(false);
@@ -58,6 +85,12 @@ export const SettingsAndLogs: React.FC = () => {
   const [savingKey, setSavingKey] = useState<string | null>(
     null
   );
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [resetSlaOpen, setResetSlaOpen] = useState(false);
 
   const [logSearchTerm, setLogSearchTerm] = useState('');
   const [logPage, setLogPage] = useState(1);
@@ -111,6 +144,153 @@ export const SettingsAndLogs: React.FC = () => {
     setLogPage(1);
   };
 
+  const canManageCategories = isAdmin || isIT;
+  const canManageSla = isAdmin || isIT;
+
+  const handleAddCategory = async () => {
+    if (!canManageCategories) {
+      notifyError('Permission denied', 'You cannot edit categories');
+      return;
+    }
+
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) {
+      notifyError('Category name required');
+      return;
+    }
+
+    const exists = categories?.some(
+      c => c.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      notifyError('Category already exists');
+      return;
+    }
+
+    try {
+      await addCategory.mutateAsync({ name: trimmed });
+      notifySuccess('Category added');
+      setNewCategoryName('');
+    } catch (err: any) {
+      notifyError('Failed to add category', err?.message);
+    }
+  };
+
+  const handleRenameCategory = async (
+    id: string,
+    currentName: string,
+    next: string | null
+  ) => {
+    if (!canManageCategories) {
+      notifyError('Permission denied', 'You cannot edit categories');
+      return;
+    }
+
+    const trimmed = (next ?? '').trim();
+    if (!trimmed) {
+      notifyError('Category name required');
+      return;
+    }
+
+    if (trimmed === currentName) return;
+
+    const exists = categories?.some(
+      c =>
+        c.id !== id &&
+        c.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      notifyError('Category already exists');
+      return;
+    }
+
+    try {
+      await updateCategory.mutateAsync({ id, name: trimmed });
+      notifySuccess('Category updated');
+    } catch (err: any) {
+      notifyError('Failed to update category', err?.message);
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteCategory.mutateAsync(deleteTarget.id);
+      notifySuccess('Category deleted');
+    } catch (err: any) {
+      notifyError('Failed to delete category', err?.message);
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleUpdateSla = async (
+    id: string,
+    field: 'response_time_hours' | 'resolution_time_hours',
+    next: string | null,
+    currentValue: number
+  ) => {
+    if (!canManageSla) {
+      notifyError('Permission denied', 'You cannot edit SLA policies');
+      return;
+    }
+
+    const trimmed = (next ?? '').trim();
+    if (!trimmed) {
+      notifyError('Value required');
+      return;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      notifyError('Invalid number', 'Please enter a non-negative number');
+      return;
+    }
+
+    if (parsed === currentValue) return;
+
+    try {
+      await updateSLAPolicy.mutateAsync({ id, [field]: parsed });
+      notifySuccess('SLA policy updated');
+    } catch (err: any) {
+      notifyError('Failed to update SLA policy', err?.message);
+    }
+  };
+
+
+  const handleResetSla = async () => {
+    if (!slaPolicies?.length) {
+      setResetSlaOpen(false);
+      return;
+    }
+
+    const defaults: Record<string, { response: number; resolution: number }> = {
+      Low: { response: 48, resolution: 168 },
+      Medium: { response: 24, resolution: 72 },
+      High: { response: 8, resolution: 24 },
+      Critical: { response: 1, resolution: 4 },
+    };
+
+    try {
+      await Promise.all(
+        slaPolicies.map(policy => {
+          const fallback = defaults[policy.priority ?? ''];
+          if (!fallback) return Promise.resolve();
+          return updateSLAPolicy.mutateAsync({
+            id: policy.id,
+            response_time_hours: fallback.response,
+            resolution_time_hours: fallback.resolution,
+          });
+        })
+      );
+      notifySuccess('SLA policies reset to defaults');
+    } catch (err: any) {
+      notifyError('Failed to reset SLA policies', err?.message);
+    } finally {
+      setResetSlaOpen(false);
+    }
+  };
+
   const totalLogPages = logs
     ? Math.ceil(logs.count / logsPerPage)
     : 0;
@@ -118,6 +298,7 @@ export const SettingsAndLogs: React.FC = () => {
   if (
     isLoadingSettings ||
     isLoadingCategories ||
+    isLoadingCategoryStats ||
     isLoadingSLAPolicies ||
     isLoadingUsers ||
     isLoadingLogs
@@ -252,29 +433,90 @@ export const SettingsAndLogs: React.FC = () => {
             title="Issue Categories"
             description="Ticket classification"
           >
-            {categories?.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {categories.map(c => (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">
-                        {c.name}
-                      </TableCell>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="font-medium">Manage categories</div>
+                  <div className="text-sm text-muted-foreground">
+                    Add, rename, or remove ticket categories
+                  </div>
+                </div>
+                {canManageCategories && (
+                  <div className="flex w-full gap-2 sm:w-auto">
+                    <Input
+                      placeholder="New category name"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      className="h-9"
+                    />
+                    <Button
+                      onClick={handleAddCategory}
+                      disabled={addCategory.isPending}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {categories?.length ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="w-[140px] text-right">
+                        Tickets
+                      </TableHead>
+                      {canManageCategories && (
+                        <TableHead className="w-[120px] text-right">
+                          Actions
+                        </TableHead>
+                      )}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <EmptyState
-                title="No Categories"
-                message="No issue categories defined"
-              />
-            )}
+                  </TableHeader>
+                  <TableBody>
+                    {categories.map(c => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">
+                          {canManageCategories ? (
+                            <InlineEditableText
+                              value={c.name}
+                              onSave={(next) =>
+                                handleRenameCategory(c.id, c.name, next)
+                              }
+                            />
+                          ) : (
+                            c.name
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {categoryStats?.find(stat => stat.category === c.name)
+                            ?.count ?? 0}
+                        </TableCell>
+                        {canManageCategories && (
+                          <TableCell className="text-right">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() =>
+                                setDeleteTarget({ id: c.id, name: c.name })
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <EmptyState
+                  title="No Categories"
+                  message="No issue categories defined"
+                />
+              )}
+            </div>
           </SettingsSection>
         </TabsContent>
 
@@ -284,37 +526,81 @@ export const SettingsAndLogs: React.FC = () => {
             title="SLA Policies"
             description="Response & resolution targets"
           >
-            {slaPolicies?.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Response (hrs)</TableHead>
-                    <TableHead>Resolution (hrs)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {slaPolicies.map(p => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">
-                        {p.priority}
-                      </TableCell>
-                      <TableCell>
-                        {p.response_time_hours}
-                      </TableCell>
-                      <TableCell>
-                        {p.resolution_time_hours}
-                      </TableCell>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Edit response and resolution targets per priority
+                </div>
+                {canManageSla && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => setResetSlaOpen(true)}
+                  >
+                    Reset to defaults
+                  </Button>
+                )}
+              </div>
+
+              {slaPolicies?.length ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Response (hrs)</TableHead>
+                      <TableHead>Resolution (hrs)</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <EmptyState
-                title="No SLA Policies"
-                message="Define SLA rules per priority"
-              />
-            )}
+                  </TableHeader>
+                  <TableBody>
+                    {slaPolicies.map(p => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium">
+                          {p.priority}
+                        </TableCell>
+                        <TableCell>
+                          {canManageSla ? (
+                            <InlineEditableText
+                              value={String(p.response_time_hours ?? 0)}
+                              onSave={(next) =>
+                                handleUpdateSla(
+                                  p.id,
+                                  'response_time_hours',
+                                  next,
+                                  p.response_time_hours ?? 0
+                                )
+                              }
+                            />
+                          ) : (
+                            p.response_time_hours
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {canManageSla ? (
+                            <InlineEditableText
+                              value={String(p.resolution_time_hours ?? 0)}
+                              onSave={(next) =>
+                                handleUpdateSla(
+                                  p.id,
+                                  'resolution_time_hours',
+                                  next,
+                                  p.resolution_time_hours ?? 0
+                                )
+                              }
+                            />
+                          ) : (
+                            p.resolution_time_hours
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <EmptyState
+                  title="No SLA Policies"
+                  message="Define SLA rules per priority"
+                />
+              )}
+            </div>
           </SettingsSection>
         </TabsContent>
 
@@ -451,6 +737,57 @@ export const SettingsAndLogs: React.FC = () => {
           </SettingsSection>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete category</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove "{deleteTarget?.name}".
+              Existing tickets may lose their category.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCategory.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCategory}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteCategory.isPending}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={resetSlaOpen} onOpenChange={setResetSlaOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset SLA policies</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will restore default response and resolution times for all
+              priorities.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResetSla}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={updateSLAPolicy.isPending}
+            >
+              Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -62,6 +62,28 @@ export function useCategories() {
   });
 }
 
+type CategoryStat = {
+  category: string;
+  count: number;
+};
+
+async function fetchCategoryStats(): Promise<CategoryStat[]> {
+  const { data, error } = await supabase.rpc('get_issue_categories_distribution');
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? [];
+}
+
+export function useCategoryStats() {
+  return useQuery<CategoryStat[], Error>({
+    queryKey: ['ticket_categories', 'stats'],
+    queryFn: fetchCategoryStats,
+  });
+}
+
 export function useAddCategory() {
   const queryClient = useQueryClient();
   return useMutation<TicketCategory, Error, { name: string }>({

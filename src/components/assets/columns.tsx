@@ -11,6 +11,46 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+
+const STATUS_STYLE: Record<string, string> = {
+  Available: 'bg-emerald-500/10 text-emerald-700',
+  Assigned: 'bg-blue-500/10 text-blue-700',
+  'In Repair': 'bg-amber-500/10 text-amber-700',
+  Retired: 'bg-gray-500/10 text-gray-700',
+  Lost: 'bg-red-500/10 text-red-700',
+  'In Use': 'bg-purple-500/10 text-purple-700',
+};
+
+const TextWithTooltip = ({
+  value,
+  className,
+  maxWidthClass,
+}: {
+  value: string;
+  className?: string;
+  maxWidthClass?: string;
+}) => (
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={`${maxWidthClass ?? ''} truncate ${className ?? ''}`}
+          title={value}
+        >
+          {value}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{value}</TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
 
 export function getColumns(): ColumnDef<AssetWithType>[] {
   return [
@@ -27,10 +67,13 @@ export function getColumns(): ColumnDef<AssetWithType>[] {
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
+      size: 220,
       cell: ({ row }) => (
-        <div className="capitalize font-medium">
-          {row.getValue('name')}
-        </div>
+        <TextWithTooltip
+          value={String(row.getValue('name') ?? '')}
+          className="capitalize font-medium"
+          maxWidthClass="max-w-[220px] inline-block"
+        />
       ),
     },
     {
@@ -46,15 +89,19 @@ export function getColumns(): ColumnDef<AssetWithType>[] {
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
+      size: 140,
       cell: ({ row }) => (
-        <div className="text-muted-foreground">
-          {row.getValue('asset_code')}
-        </div>
+        <TextWithTooltip
+          value={String(row.getValue('asset_code') ?? '')}
+          className="text-muted-foreground"
+          maxWidthClass="max-w-[140px] inline-block"
+        />
       ),
     },
     {
       id: 'asset_type',
       header: 'Type',
+      size: 160,
       cell: ({ row }) => (
         <div>{row.original.asset_type?.name ?? '—'}</div>
       ),
@@ -66,6 +113,7 @@ export function getColumns(): ColumnDef<AssetWithType>[] {
     {
       id: 'category',
       header: 'Category',
+      size: 160,
       cell: ({ row }) => (
         <div>{row.original.category?.name ?? '—'}</div>
       ),
@@ -77,6 +125,7 @@ export function getColumns(): ColumnDef<AssetWithType>[] {
     {
       accessorKey: 'location',
       header: 'Location',
+      size: 140,
       cell: ({ row }) => (
         <div>{row.getValue('location') || '—'}</div>
       ),
@@ -84,15 +133,20 @@ export function getColumns(): ColumnDef<AssetWithType>[] {
     {
       accessorKey: 'status',
       header: 'Status',
+      size: 120,
       cell: ({ row }) => (
-        <div className="capitalize">
+        <Badge
+          variant="secondary"
+          className={STATUS_STYLE[row.getValue('status') as string] ?? ''}
+        >
           {row.getValue('status')}
-        </div>
+        </Badge>
       ),
     },
     {
       id: 'actions',
       enableHiding: false,
+      size: 60,
       cell: ({ row }) => {
         const asset = row.original;
 
