@@ -242,55 +242,17 @@ const useUpdateTicket = () => {
 
   return useMutation<Ticket, Error, UpdateTicketPayload>({
     mutationFn: async ({ id, updates, userId }) => {
-      const { data: oldTicket, error } = await supabase
-        .from('tickets')
-        .select('status, assigned_to, due_at')
-        .eq('id', id)
-        .single();
-
-      if (error) throw error;
-
-      const { data: updatedTicket, error: updateError } = await supabase
-        .from('tickets')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
+      const { data: updatedTicket, error: updateError } = await supabase.rpc(
+        'update_ticket_with_logs',
+        {
+          p_id: id,
+          p_updates: updates,
+          p_user_id: userId,
+        }
+      );
 
       if (updateError) throw updateError;
-
-      const normalize = (v?: string | null) => v ?? null;
-      const logs: any[] = [];
-
-      if (updates.status && updates.status !== oldTicket.status) {
-        logs.push({
-          action: 'ticket.status_changed',
-          user_id: userId,
-          details: {
-            ticket_id: id,
-            from: normalize(oldTicket.status),
-            to: normalize(updates.status),
-          },
-        });
-      }
-
-      if ('due_at' in updates && updates.due_at !== oldTicket.due_at) {
-        logs.push({
-          action: 'ticket.due_date_changed',
-          user_id: userId,
-          details: {
-            ticket_id: id,
-            from: normalize(oldTicket.due_at),
-            to: normalize(updates.due_at),
-          },
-        });
-      }
-
-      if (logs.length > 0) {
-        await supabase.from('logs').insert(logs);
-      }
-
-      return updatedTicket;
+      return updatedTicket as Ticket;
     },
 
     onSuccess: (_, v) => {
@@ -408,17 +370,60 @@ const useAvgResolutionTime = () =>
   useQuery({
     queryKey: ['avgResolutionTime'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: logs, error } = await supabase
         .from('logs')
         .select('details, created_at')
         .eq('action', 'ticket.status_changed')
         .eq('details->>to', 'closed');
 
       if (error) throw error;
-      if (!data || data.length === 0) return null;
+      if (!logs || logs.length === 0) return null;
 
-      // logic คำนวณต่อ (คุณทำไว้แล้วก่อนหน้านี้ ถือว่าโอเค)
-      return null;
+      const closedByTicket = new Map<string, string>();
+
+      // pick earliest close per ticket
+      logs
+        .filter((l) => l.details?.ticket_id && l.created_at)
+        .sort(
+          (a, b) =>
+            new Date(a.created_at as string).getTime() -
+            new Date(b.created_at as string).getTime()
+        )
+        .forEach((l) => {
+          const ticketId = l.details.ticket_id as string;
+          if (!closedByTicket.has(ticketId)) {
+            closedByTicket.set(ticketId, l.created_at as string);
+          }
+        });
+
+      if (closedByTicket.size === 0) return null;
+
+      const ticketIds = Array.from(closedByTicket.keys());
+
+      const { data: tickets, error: ticketsError } = await supabase
+        .from('tickets')
+        .select('id, created_at')
+        .in('id', ticketIds);
+
+      if (ticketsError) throw ticketsError;
+      if (!tickets || tickets.length === 0) return null;
+
+      let totalHours = 0;
+      let count = 0;
+
+      tickets.forEach((t) => {
+        const closedAt = closedByTicket.get(t.id);
+        if (!t.created_at || !closedAt) return;
+        const start = new Date(t.created_at).getTime();
+        const end = new Date(closedAt).getTime();
+        if (Number.isNaN(start) || Number.isNaN(end) || end < start) return;
+        totalHours += (end - start) / (1000 * 60 * 60);
+        count += 1;
+      });
+
+      if (count === 0) return null;
+
+      return Number((totalHours / count).toFixed(2));
     },
   });
 

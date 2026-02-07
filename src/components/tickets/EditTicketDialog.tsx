@@ -23,6 +23,7 @@ import { useUsersForAssignment } from '@/hooks/useUsers'; // Assuming this hook 
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { Loader2 } from 'lucide-react';
 import { Enums, Tables } from '@/types/database.types';
+import { useAuth } from '@/hooks/useAuth';
 
 interface EditTicketDialogProps {
   isOpen: boolean;
@@ -36,22 +37,32 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
   const { data: ticket, isLoading: isLoadingTicket, error: ticketError } = useTicketById(ticketId);
   const { data: usersForAssignment, isLoading: isLoadingUsers } = useUsersForAssignment();
   const updateTicketMutation = useUpdateTicket();
+  const { session } = useAuth();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
-  const [priority, setPriority] = useState<Enums<'ticket_priority'>>('Low');
+  const [priority, setPriority] = useState<Enums<'ticket_priority_enum'>>('Low');
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
-  const [status, setStatus] = useState<Enums<'ticket_status'>>('Open');
+  const [status, setStatus] = useState<Enums<'ticket_status'>>('open');
 
   useEffect(() => {
     if (ticket) {
       setTitle(ticket.title || '');
       setDescription(ticket.description || '');
       setSelectedCategoryId(ticket.category_id || '');
-      setPriority(ticket.priority || 'Low');
+      if (
+        ticket.priority === 'Low' ||
+        ticket.priority === 'Medium' ||
+        ticket.priority === 'High' ||
+        ticket.priority === 'Critical'
+      ) {
+        setPriority(ticket.priority);
+      } else {
+        setPriority('Low');
+      }
       setAssigneeId(ticket.assigned_to || null);
-      setStatus(ticket.status || 'Open');
+      setStatus(ticket.status || 'open');
     }
   }, [ticket]);
 
@@ -63,6 +74,11 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
 
     if (!selectedCategoryId) {
       notifyError('Please select a category.');
+      return;
+    }
+
+    if (!session?.user?.id) {
+      notifyError('You must be logged in to update a ticket.');
       return;
     }
 
@@ -78,6 +94,7 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
           status: status,
           updated_at: new Date().toISOString(), // Ensure updated_at is set
         },
+        userId: session.user.id,
       });
       notifySuccess('Ticket updated successfully!');
       onClose();
@@ -167,7 +184,7 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
             <Label htmlFor="priority">Priority</Label>
             <Select
               value={priority}
-              onValueChange={(value: Enums<'ticket_priority'>) => setPriority(value)}
+              onValueChange={(value: Enums<'ticket_priority_enum'>) => setPriority(value)}
             >
               <SelectTrigger id="priority">
                 <SelectValue placeholder="Select priority" />
@@ -191,11 +208,9 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
-                {['Open', 'In Progress', 'Resolved', 'Closed'].map((stat) => (
-                  <SelectItem key={stat} value={stat}>
-                    {stat}
-                  </SelectItem>
-                ))}
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
               </SelectContent>
             </Select>
           </div>

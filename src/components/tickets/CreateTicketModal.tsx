@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import {
   Dialog,
   DialogContent,
@@ -18,11 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCreateTicket } from '@/hooks/useTickets';
+import { useTickets } from '@/hooks/useTickets';
 import { useAuth } from '@/hooks/useAuth';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { Loader2 } from 'lucide-react';
-import { Enums } from '@/types/supabase';
+import { Enums } from '@/types/database.types';
 
 interface CreateTicketModalProps {
   isOpen: boolean;
@@ -31,22 +33,45 @@ interface CreateTicketModalProps {
 
 export function CreateTicketModal({ isOpen, onClose }: CreateTicketModalProps) {
   const { user } = useAuth();
+  const { useCreateTicket, useTicketCategories } = useTickets;
   const createTicketMutation = useCreateTicket();
+  const { data: categories = [] } = useTicketCategories();
 
   const [step, setStep] = useState(1);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<Enums<'ticket_category'>>('General');
-  const [priority, setPriority] = useState<Enums<'ticket_priority'>>('Low');
-  const [assignee, setAssignee] = useState('');
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [priority, setPriority] =
+    useState<Enums<'ticket_priority_enum'>>('Low');
+
+  const { data: priorities = [] } = useQuery({
+    queryKey: ['ticket_priorities'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ticket_priorities')
+        .select('id, name');
+
+      if (error) throw error;
+
+      const order = ['Low', 'Medium', 'High', 'Critical'];
+      return (data ?? []).sort(
+        (a, b) => order.indexOf(a.name) - order.indexOf(b.name)
+      );
+    },
+  });
+
+  useEffect(() => {
+    if (!categoryId && categories.length > 0) {
+      setCategoryId(categories[0].id);
+    }
+  }, [categories, categoryId]);
 
   const resetForm = () => {
     setStep(1);
     setSubject('');
     setDescription('');
-    setCategory('General');
+    setCategoryId(categories[0]?.id ?? '');
     setPriority('Low');
-    setAssignee('');
   };
 
   const handleNext = () => {
@@ -67,15 +92,19 @@ export function CreateTicketModal({ isOpen, onClose }: CreateTicketModalProps) {
       return;
     }
 
+    if (!categoryId) {
+      notifyError('Please select a category.');
+      return;
+    }
+
     try {
       await createTicketMutation.mutateAsync({
         user_id: user.id,
         subject,
         description,
-        category,
+        category_id: categoryId,
         priority,
-        assignee: assignee || null,
-        status: 'Open', // Default status for new tickets
+        status: 'open', // Default status for new tickets
       });
       notifySuccess('Ticket created successfully!');
       onClose();
@@ -123,52 +152,43 @@ export function CreateTicketModal({ isOpen, onClose }: CreateTicketModalProps) {
         {step === 2 && (
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={category}
-                onValueChange={(value: Enums<'ticket_category'>) => setCategory(value)}
-              >
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {['Hardware', 'Software', 'Network', 'Account', 'General', 'Other'].map(
-                    (cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+            <Label htmlFor="category">Category</Label>
+            <Select
+              value={categoryId}
+              onValueChange={(value: string) => setCategoryId(value)}
+            >
+              <SelectTrigger id="category">
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
             <div className="grid gap-2">
               <Label htmlFor="priority">Priority</Label>
-              <Select
-                value={priority}
-                onValueChange={(value: Enums<'ticket_priority'>) => setPriority(value)}
-              >
-                <SelectTrigger id="priority">
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  {['Low', 'Medium', 'High', 'Critical'].map((prio) => (
-                    <SelectItem key={prio} value={prio}>
-                      {prio}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="assignee">Assignee (Optional)</Label>
-              <Input
-                id="assignee"
-                placeholder="Name of the person assigned"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-              />
-            </div>
+            <Select
+              value={priority}
+              onValueChange={(value: Enums<'ticket_priority_enum'>) =>
+                setPriority(value)
+              }
+            >
+              <SelectTrigger id="priority">
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent>
+                {priorities.map((prio) => (
+                  <SelectItem key={prio.id} value={prio.name}>
+                    {prio.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           </div>
         )}
 

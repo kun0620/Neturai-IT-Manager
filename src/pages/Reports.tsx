@@ -176,14 +176,30 @@ const exportCSV = () => {
             <input
               type="date"
               value={customFromValue}
-              onChange={(e) => setFromDate(new Date(e.target.value))}
+              onChange={(e) => {
+                const next = new Date(e.target.value);
+                if (next.getTime() > toDate.getTime()) {
+                  setFromDate(next);
+                  setToDate(next);
+                  return;
+                }
+                setFromDate(next);
+              }}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             />
             <span className="text-sm text-muted-foreground">to</span>
             <input
               type="date"
               value={customToValue}
-              onChange={(e) => setToDate(new Date(e.target.value))}
+              onChange={(e) => {
+                const next = new Date(e.target.value);
+                if (next.getTime() < fromDate.getTime()) {
+                  setToDate(next);
+                  setFromDate(next);
+                  return;
+                }
+                setToDate(next);
+              }}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             />
           </div>
@@ -196,9 +212,11 @@ const exportCSV = () => {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            Export disabled if date range is invalid
-          </span>
+          {range === 'custom' && isDateRangeInvalid && (
+            <span className="text-xs text-muted-foreground">
+              Export disabled while date range is invalid
+            </span>
+          )}
           <button
             className="px-3 py-1 text-sm rounded-md border hover:bg-muted"
             onClick={() => exportCSV()}

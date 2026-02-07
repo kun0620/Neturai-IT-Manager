@@ -34,7 +34,7 @@ export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({
   const { data: ticket, isLoading, error } = useTicketById(ticketId);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  const { canManageTickets, loading: roleLoading } = useCurrentProfile();
+  const { can, loading: roleLoading } = useCurrentProfile();
 
   const getCategoryName = (categoryId: string | null) =>
     categories.find((cat) => cat.id === categoryId)?.name || 'N/A';
@@ -136,7 +136,7 @@ export const TicketDetailDialog: React.FC<TicketDetailDialogProps> = ({
           </div>
 
           <DialogFooter>
-            {canManageTickets && (
+            {can('ticket.manage') && (
               <Button
                 variant="outline"
                 onClick={() => setIsEditDialogOpen(true)}

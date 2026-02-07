@@ -57,10 +57,6 @@ export const Tickets: React.FC = () => {
   }, [canManageTickets]);
 
 
-  const categoryMap = React.useMemo(() => {
-  return new Map(categories?.map(cat => [cat.id, cat.name.toLowerCase()]) || []);
-}, [categories]);
-
 const SLA_HOURS: Record<string, number> = {
     Low: 72,
     Medium: 48,

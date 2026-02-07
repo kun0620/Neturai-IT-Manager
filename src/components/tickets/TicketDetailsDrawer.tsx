@@ -170,10 +170,15 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
   const handleAssignUser = (userId: string) => {
     if (!user || !ticketId) return;
 
-    setAssignedUser(userId);
+    const normalizedUserId = userId || '';
+    setAssignedUser(normalizedUserId);
 
     updateTicket(
-      { id: ticketId, updates: { assigned_to: userId }, userId: user.id },
+      {
+        id: ticketId,
+        updates: { assigned_to: normalizedUserId || null },
+        userId: user.id,
+      },
       {
         onSuccess: () => notifySuccess('Ticket assigned'),
         onError: (err) => notifyError(err.message),
@@ -470,7 +475,11 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
                           "
                         />
 
-                        <Button size="sm">
+                        <Button
+                          size="sm"
+                          onClick={handleConfirmDueDate}
+                          disabled={isUpdatingTicket || !draftDueDate}
+                        >
                           Save
                         </Button>
                       </div>
@@ -525,7 +534,29 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
                       );
                     }
 
-                    const text = mapLogToText(item.action, item.details);
+                    let text = mapLogToText(item.action, item.details);
+                    if (item.action === 'ticket.assigned') {
+                      const assigneeId = item.details?.to as string | null;
+                      const assigneeName = assigneeId
+                        ? itUserMap.get(assigneeId) ?? assigneeId
+                        : '—';
+                      text = {
+                        title: 'Ticket assigned',
+                        description: `Assigned to ${assigneeName}`,
+                      };
+                    }
+                    if (item.action === 'ticket.unassigned') {
+                      const previousId = item.details?.from as string | null;
+                      const previousName = previousId
+                        ? itUserMap.get(previousId) ?? previousId
+                        : '—';
+                      text = {
+                        title: 'Ticket unassigned',
+                        description: previousId
+                          ? `Unassigned from ${previousName}`
+                          : undefined,
+                      };
+                    }
                     const { icon: Icon, color } = logAppearance(item.action);
 
                     const author =

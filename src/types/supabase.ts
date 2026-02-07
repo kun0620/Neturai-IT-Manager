@@ -751,6 +751,7 @@ export type Database = {
       is_admin:
         | { Args: never; Returns: boolean }
         | { Args: { user_id: string }; Returns: boolean }
+      is_admin_or_it: { Args: { user_id: string }; Returns: boolean }
       is_technician: { Args: never; Returns: boolean }
       jwt_custom_claims: { Args: { event: Json }; Returns: Json }
       notify_ticket_updated: {

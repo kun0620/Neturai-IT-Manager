@@ -8,17 +8,11 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-  const loadSessionAndProfile = async () => {
-    const { data } = await supabase.auth.getSession();
-    const session = data.session;
-
-    setSession(session);
-
-    if (session?.user) {
+    const fetchRole = async (userId: string) => {
       const { data: profileData, error } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', session.user.id)
+        .eq('id', userId)
         .single();
 
       if (!error && profileData?.role) {
@@ -28,29 +22,44 @@ export const useAuth = () => {
           profileData.role === 'user'
         ) {
           setRole(profileData.role);
-        } else {
-          setRole(null);
+          return;
         }
+      }
+
+      setRole(null);
+    };
+
+    const loadSessionAndProfile = async () => {
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
+
+      setSession(session);
+
+      if (session?.user) {
+        await fetchRole(session.user.id);
       } else {
         setRole(null);
       }
-    }
-    setLoading(false);
-  };
 
-  loadSessionAndProfile();
+      setLoading(false);
+    };
 
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    setSession(session);
-    if (!session) {
-      setRole(null);
-    }
-  });
+    loadSessionAndProfile();
 
-  return () => subscription.unsubscribe();
-}, []);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (!session?.user) {
+        setRole(null);
+        return;
+      }
+
+      void fetchRole(session.user.id);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   return {
   session,
