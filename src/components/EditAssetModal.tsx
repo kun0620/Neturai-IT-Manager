@@ -60,8 +60,9 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onAsse
         const { data, error } = await supabase.from('profiles').select('id, full_name');
         if (error) throw error;
         setProfiles(data);
-      } catch (err: any) {
-        notifyError('Failed to load profiles', err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to load profiles';
+        notifyError('Failed to load profiles', message);
         setError('Failed to load profiles for assignment.');
       } finally {
         setLoading(false);
@@ -116,9 +117,10 @@ const EditAssetModal: React.FC<EditAssetModalProps> = ({ isOpen, onClose, onAsse
       setSuccess('Asset updated successfully!');
       onAssetUpdated(); // Notify parent to refresh list
       setTimeout(onClose, 1500); // Close modal after a short delay
-    } catch (err: any) {
-      notifyError('Failed to update asset', err.message);
-      setError(`Failed to update asset: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update asset';
+      notifyError('Failed to update asset', message);
+      setError(`Failed to update asset: ${message}`);
     } finally {
       setLoading(false);
     }

@@ -128,11 +128,15 @@ const exportCSV = () => {
   /* ---------- render ---------- */
   return (
     <div id="report-print" className="flex flex-col gap-6 p-4 md:p-6">
-      <h1 className="text-2xl font-bold">IT Ticket Report</h1>
-        <p className="text-sm text-muted-foreground">
-          Period: {from.slice(0,10)} → {to.slice(0,10)}
+      <div className="space-y-2">
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          Neturai IT Manager
         </p>
-        <hr className="my-4" />
+        <h1 className="text-3xl font-semibold">IT Ticket Report</h1>
+        <p className="text-sm text-muted-foreground">
+          Reporting period: {from.slice(0,10)} → {to.slice(0,10)}
+        </p>
+      </div>
 
       {/* Date Range */}
       <div className="flex flex-wrap items-center gap-2">

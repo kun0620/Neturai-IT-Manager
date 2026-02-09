@@ -5,7 +5,6 @@ import { AssetFormDialog } from '@/components/assets/AssetFormDialog';
 import { useAssets } from '@/hooks/useAssets';
 import { useUsersForAssignment } from '@/hooks/useUsers';
 import { getColumns } from '@/components/assets/columns';
-import { Tables } from '@/types/supabase';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 import { AssetWithType } from '@/types/asset';
 
@@ -117,26 +116,31 @@ export function Assets() {
   // ---------------------------
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Asset Management
-        </h1>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Neturai IT Manager
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Asset Management
+          </h1>
+          <p className="text-muted-foreground">
+            Manage assets, track status changes, and assign ownership.
+          </p>
+        </div>
 
         {/* STEP 2 จะมาแก้ละเอียดกว่านี้ */}
         {can('asset.edit') && (
-          <Button onClick={() => {
-            setSelectedAsset(null);
-            setIsFormOpen(true);
-          }}>
+          <Button
+            onClick={() => {
+              setSelectedAsset(null);
+              setIsFormOpen(true);
+            }}
+          >
             Add Asset
           </Button>
         )}
       </div>
-
-      <p className="text-muted-foreground">
-        Manage your organization's assets, track their status, and assign them
-        to users.
-      </p>
 
       <div className="rounded-md border">
         <DataTable

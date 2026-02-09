@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 
-type LogDetails = Record<string, any>;
+type LogDetails = Record<string, unknown>;
 
 type LogText = {
   title: string;
@@ -25,13 +25,16 @@ export function mapLogToText(
     return { title: action };
   }
 
+  const getString = (value: unknown) =>
+    typeof value === 'string' ? value : undefined;
+
   switch (action) {
     case 'ticket.created':
       return {
         title: 'Ticket created',
         description: [
-          details.title && `Title: ${details.title}`,
-          details.priority && `Priority: ${details.priority}`,
+          getString(details.title) && `Title: ${details.title}`,
+          getString(details.priority) && `Priority: ${details.priority}`,
         ]
           .filter(Boolean)
           .join('\n'),
@@ -40,13 +43,13 @@ export function mapLogToText(
     case 'ticket.status_changed':
       return {
         title: 'Status changed',
-        description: `from "${details.from ?? '—'}" → "${details.to ?? '—'}"`,
+        description: `from "${getString(details.from) ?? '—'}" → "${getString(details.to) ?? '—'}"`,
       };
 
     case 'ticket.assigned':
       return {
         title: 'Ticket assigned',
-        description: `Assigned to ${details.to ?? '—'}`,
+        description: `Assigned to ${getString(details.to) ?? '—'}`,
       };
 
     case 'ticket.unassigned':
@@ -57,13 +60,13 @@ export function mapLogToText(
     case 'ticket.due_date_changed':
       return {
         title: 'Due date changed',
-        description: `from "${formatDate(details.from)}" → "${formatDate(details.to)}"`,
+        description: `from "${formatDate(getString(details.from))}" → "${formatDate(getString(details.to))}"`,
       };
 
     case 'ticket.updated':
       return {
         title: 'Ticket updated',
-        description: details.source
+        description: getString(details.source)
           ? `Source: ${details.source}`
           : undefined,
       };

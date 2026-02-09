@@ -67,8 +67,9 @@ const EditTicketModal: React.FC<EditTicketModalProps> = ({ isOpen, onClose, onTi
         if (profileError) throw profileError;
         setProfiles(profileData);
 
-      } catch (err: any) {
-        notifyError('Failed to load ticket data', err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to load ticket data';
+        notifyError('Failed to load ticket data', message);
         setError('Failed to load necessary data for ticket editing.');
       } finally {
         setLoading(false);
@@ -121,9 +122,10 @@ const EditTicketModal: React.FC<EditTicketModalProps> = ({ isOpen, onClose, onTi
       setSuccess('Ticket updated successfully!');
       onTicketUpdated(); // Notify parent to refresh list
       setTimeout(onClose, 1500); // Close modal after a short delay
-    } catch (err: any) {
-      notifyError('Failed to update ticket', err.message);
-      setError(`Failed to update ticket: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update ticket';
+      notifyError('Failed to update ticket', message);
+      setError(`Failed to update ticket: ${message}`);
     } finally {
       setLoading(false);
     }

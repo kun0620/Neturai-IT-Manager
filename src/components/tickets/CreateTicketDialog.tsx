@@ -123,8 +123,9 @@ export function CreateTicketDialog({
       notifySuccess('Ticket created successfully');
       resetForm();
       onClose();
-    } catch (err: any) {
-      notifyError(err.message ?? 'Failed to create ticket');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create ticket';
+      notifyError(message);
     }
   };
 

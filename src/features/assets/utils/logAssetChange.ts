@@ -3,8 +3,8 @@ import { insertAssetLogs } from '@/services/assetLogs';
 export type LogAssetChangeParams = {
   assetId: string;
   action: string;
-  oldValue?: Record<string, any> | null;
-  newValue?: Record<string, any> | null;
+  oldValue?: Record<string, unknown> | null;
+  newValue?: Record<string, unknown> | null;
   userId?: string | null;
 };
 
@@ -77,5 +77,6 @@ export async function logAssetChange({
       },
     ]);
   } catch (error) {
+    void error;
   }
 }

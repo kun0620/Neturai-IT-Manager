@@ -211,15 +211,10 @@ export function KanbanView({ tickets, categories }: KanbanViewProps) {
   );
 
   /* ---------- Helpers ---------- */
-
-  const getStatusFromOverId = (overId: string) => {
-    if (TICKET_STATUS_OPTIONS.includes(overId as any)) {
-      return overId as Tables<'tickets'>['status'];
-    }
-
-    const overTicket = localTickets.find(t => t.id === overId);
-    return overTicket?.status ?? null;
-  };
+  const isTicketStatus = (
+    value: string
+  ): value is Tables<'tickets'>['status'] =>
+    (TICKET_STATUS_OPTIONS as readonly string[]).includes(value);
 
   const getCategoryName = (id: string | null) =>
     categories.find((c) => c.id === id)?.name || 'N/A';
@@ -239,15 +234,15 @@ export function KanbanView({ tickets, categories }: KanbanViewProps) {
     }
   };
   const resolveStatusFromOver = (overId: string) => {
-  // 1. วางลง column
-  if (TICKET_STATUS_OPTIONS.includes(overId as any)) {
-    return overId as Tables<'tickets'>['status'];
-  }
+    // 1. วางลง column
+    if (isTicketStatus(overId)) {
+      return overId;
+    }
 
-  // 2. วางบน ticket ใบอื่น → ใช้ status ของใบนั้น
-  const overTicket = localTickets.find(t => t.id === overId);
-  return overTicket?.status ?? null;
-};
+    // 2. วางบน ticket ใบอื่น → ใช้ status ของใบนั้น
+    const overTicket = localTickets.find(t => t.id === overId);
+    return overTicket?.status ?? null;
+  };
 
   /* ---------- Drag End ---------- */
 

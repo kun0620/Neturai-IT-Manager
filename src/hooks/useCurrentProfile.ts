@@ -50,7 +50,7 @@ export function useCurrentProfile() {
             role: (data.role as UserRole) ?? 'user',
           });
         }
-      } catch (err) {
+      } catch {
         notifyError('Failed to load profile', 'Unexpected error');
         setProfile(null);
       } finally {

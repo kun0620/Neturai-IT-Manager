@@ -98,8 +98,10 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
       });
       notifySuccess('Ticket updated successfully!');
       onClose();
-    } catch (error: any) {
-      notifyError('Failed to update ticket', error.message);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to update ticket';
+      notifyError('Failed to update ticket', message);
     }
   };
 

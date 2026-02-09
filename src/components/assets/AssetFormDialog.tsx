@@ -40,6 +40,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useAssetCategories } from '@/hooks/useAssetCategories';
 import { CATEGORY_TYPE_MAP } from '@/features/assets/constants/categoryTypeMap';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
+import type { Database } from '@/types/supabase';
 
 import { logSystemAction } from '@/features/logs/utils/logSystemAction';
 import { createAsset } from '@/features/assets/api/createAsset';
@@ -188,21 +189,14 @@ export function AssetFormDialog({
 
   /* ================= MUTATION ================= */
 
-  type AssetPayload = {
-    name: string;
-    asset_code: string;
-    asset_type_id: string;
-    category_id: string | null;
-    status: AssetStatus;
-    assigned_to: string | null;
-    serial_number: string | null;
-    location: string | null;
-    last_service_date: string | null;
-  };
+  type AssetInsert =
+    Database['public']['Tables']['assets']['Insert'];
+  type AssetRow =
+    Database['public']['Tables']['assets']['Row'];
 
   const saveAssetMutation = useMutation<string, Error, AssetFormValues>({
     mutationFn: async (values) => {
-  const payload: AssetPayload = {
+  const payload: AssetInsert = {
     name: values.name,
     asset_code: values.asset_code,
     asset_type_id: values.asset_type_id,
@@ -229,7 +223,7 @@ export function AssetFormDialog({
   if (asset && oldAsset) {
     await updateAsset(
       asset.id,
-      asset as any,
+      asset as AssetRow,
       payload,
       user?.id ?? null
     );
@@ -272,7 +266,7 @@ export function AssetFormDialog({
   }
 
   /* ================= CREATE ================= */
-  const created = await createAsset(payload as any, user?.id ?? null);
+  const created = await createAsset(payload, user?.id ?? null);
   const newId = created.id;
 
   await logSystemAction({

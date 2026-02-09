@@ -22,7 +22,6 @@ const Navbar: React.FC<NavbarProps> = ({
     loading: roleLoading,
     isAdmin,
     isIT,
-    isUser,
   } = useCurrentProfile();
 
   const handleLogout = async () => {

@@ -147,37 +147,45 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
-      <h1 className="text-3xl font-bold flex items-center gap-2">
-        <LayoutDashboard className="h-8 w-8" />
-        Dashboard
-      </h1>
-      <p className="text-muted-foreground">
-        Track, manage, and resolve IT tickets at a glance
-      </p>
-      {/* Quick Actions */}
-      <div className="flex flex-wrap gap-3">
-        <Button
-          onClick={() => setIsCreateTicketDialogOpen(true)}
-          className="flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" /> New Ticket
-        </Button>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Neturai IT Manager
+          </p>
+          <h1 className="text-3xl font-semibold flex items-center gap-2">
+            <LayoutDashboard className="h-8 w-8" />
+            Dashboard
+          </h1>
+          <p className="text-muted-foreground">
+            Track, manage, and resolve IT tickets at a glance.
+          </p>
+        </div>
 
-        <Button
-          onClick={() => navigate('/tickets')}
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <ListTodo className="h-4 w-4" /> View All Tickets
-        </Button>
+        {/* Quick Actions */}
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={() => setIsCreateTicketDialogOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" /> New Ticket
+          </Button>
 
-        <Button
-          onClick={() => navigate('/assets/new')}
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <PackagePlus className="h-4 w-4" /> Add Asset
-        </Button>
+          <Button
+            onClick={() => navigate('/tickets')}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <ListTodo className="h-4 w-4" /> View All Tickets
+          </Button>
+
+          <Button
+            onClick={() => navigate('/assets/new')}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <PackagePlus className="h-4 w-4" /> Add Asset
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}

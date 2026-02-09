@@ -7,12 +7,10 @@ import {
   Users,
   BarChart2,
   Settings,
-  Menu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
 import { useAuth } from '@/context/AuthContext';
 import { EmptyState } from '@/components/common/EmptyState';
 import { TopBar } from '@/components/Layout/TopBar';
@@ -95,9 +93,7 @@ export const MainLayout: React.FC = () => {
         {/* ================= Main Area ================= */}
         <div className="flex flex-col">
           {/* ===== Top Bar (HEADER เดียว) ===== */}
-          <TopBar
-            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
-          />
+          <TopBar />
 
           {/* ===== Mobile Sidebar (Sheet) ===== */}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>

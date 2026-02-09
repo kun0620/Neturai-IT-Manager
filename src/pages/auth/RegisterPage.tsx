@@ -75,21 +75,35 @@ const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-      <Card className="mx-auto max-w-sm w-full">
-        <CardHeader>
-          <CardTitle className="text-xl">Create Account</CardTitle>
-          <CardDescription>
-            Register to use Neturai IT Manager
-          </CardDescription>
-        </CardHeader>
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
+        <div className="w-full space-y-6">
+          <div className="space-y-2 text-center">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Neturai IT Manager
+            </p>
+            <h1 className="text-2xl font-semibold text-foreground">
+              Create Account
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Register to access IT operations and internal workflows.
+            </p>
+          </div>
 
-        <CardContent>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="space-y-4"
-            >
+          <Card className="mx-auto w-full border-muted/60 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Create Account</CardTitle>
+              <CardDescription>
+                Use your work email for account verification.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              <Form {...form}>
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-4"
+                >
               <FormField
                 control={form.control}
                 name="name"
@@ -142,6 +156,9 @@ const RegisterPage: React.FC = () => {
                       <Input type="password" {...field} />
                     </FormControl>
                     <FormMessage />
+                    <p className="text-xs text-muted-foreground">
+                      Passwords must be at least 8 characters.
+                    </p>
                   </FormItem>
                 )}
               />
@@ -164,8 +181,10 @@ const RegisterPage: React.FC = () => {
               Sign in
             </Link>
           </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 };

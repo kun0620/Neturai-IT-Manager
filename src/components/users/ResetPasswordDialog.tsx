@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -46,10 +45,12 @@ export const ResetPasswordDialog: React.FC<ResetPasswordDialogProps> = ({
       );
       onSuccess();
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to send password reset email';
       notifyError(
         'Failed to send password reset email',
-        error.message
+        message
       );
     } finally {
       setIsSending(false);

@@ -75,8 +75,8 @@ export function TableView({
   const sortedTickets = [...tickets].sort((a, b) => {
     if (!sortConfig) return 0;
 
-    let aValue: any = a[sortConfig.key];
-    let bValue: any = b[sortConfig.key];
+    let aValue = a[sortConfig.key] as string | null;
+    let bValue = b[sortConfig.key] as string | null;
 
     if (sortConfig.key === 'category_id') {
       aValue = a.category_id ? categoryMap.get(a.category_id) : null;

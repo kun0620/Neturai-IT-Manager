@@ -7,7 +7,6 @@ import { useUsersForAssignment } from '@/hooks/useUsers';
 import { getColumns } from '@/components/assets/columns';
 import { AssetWithType } from '@/types/asset';
 import { AssetDrawer } from '@/features/assets/components/AssetDrawer';
-import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/EmptyState';
 import {
@@ -22,7 +21,6 @@ import {
 export function AssetManagement() {
   // ✅ hooks ต้องอยู่ใน component เท่านั้น
   const { data: assets = [], isLoading, isError, error } = useAssets();
-  const { user } = useAuth();
   const {
     data: users = [],
     isLoading: usersLoading,
@@ -36,10 +34,6 @@ export function AssetManagement() {
     }));
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<AssetWithType | null>(null);
-  const handleEditAsset = (asset: AssetWithType) => {
-    setSelectedAsset(asset);
-    setIsFormOpen(true);
-  };
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedAssetForDrawer, setSelectedAssetForDrawer] =
   useState<AssetWithType | null>(null);
@@ -47,14 +41,6 @@ export function AssetManagement() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  const handleViewAsset = (asset: AssetWithType) => {
-    setSelectedAssetForDrawer(asset);
-    setIsDrawerOpen(true);
-  };
-
-  const updateDrawerAsset = (next: AssetWithType) => {
-    setSelectedAssetForDrawer(next);
-  };
 
   // เพิ่ม handler ให้ครบ
   const handleCloseDrawer = () => {
@@ -171,6 +157,18 @@ export function AssetManagement() {
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
+      <div className="space-y-2">
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          Neturai IT Manager
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Asset Management
+        </h1>
+        <p className="text-muted-foreground">
+          Track asset health, ownership, and lifecycle in one place.
+        </p>
+      </div>
+
       <Button
         className="md:hidden self-start"
         onClick={() => {
@@ -180,10 +178,10 @@ export function AssetManagement() {
       >
         Add Asset
       </Button>
-      <div className="sticky top-14 z-20 flex items-center justify-between bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-3 py-2 rounded-md border shadow-sm">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Asset Management
-        </h1>
+      <div className="mt-2 flex items-center justify-between rounded-md border bg-background/80 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 md:sticky md:top-14 md:z-20 md:mt-0">
+        <h2 className="text-lg font-semibold tracking-tight">
+          Filters & Actions
+        </h2>
 
         <Button
           className="hidden md:inline-flex"
@@ -195,11 +193,6 @@ export function AssetManagement() {
           Add Asset
         </Button>
       </div>
-
-      <p className="text-muted-foreground">
-        Manage your organization's assets, track their status, and
-        assign them to users.
-      </p>
 
       <div className="flex flex-wrap gap-2">
         <Badge variant="outline">

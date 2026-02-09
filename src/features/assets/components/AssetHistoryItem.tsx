@@ -7,11 +7,12 @@ import {
   RefreshCcw,
   Edit3,
 } from 'lucide-react';
+import type { ElementType } from 'react';
 import { HistoryItem, HistoryAction } from '../types/history';
 
 const ACTION_META: Record<
   HistoryAction,
-  { icon: any; color: string }
+  { icon: ElementType; color: string }
 > = {
   create: { icon: PlusCircle, color: 'text-green-600' },
   assign: { icon: UserPlus, color: 'text-purple-600' },

@@ -116,8 +116,9 @@ async function seedProfiles() {
       } else {
         console.error(`Could not determine user ID for ${user.email}.`);
       }
-    } catch (err: any) {
-      console.error(`An unexpected error occurred for ${user.email}:`, err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error(`An unexpected error occurred for ${user.email}:`, message);
     }
   }
   console.log('Seeding process finished.');

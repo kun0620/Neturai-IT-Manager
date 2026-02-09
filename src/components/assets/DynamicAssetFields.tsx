@@ -5,7 +5,7 @@ import { AssetField } from '@/hooks/useAssetFields';
 
 interface Props {
   fields: AssetField[];
-  control: Control<any>;
+  control: Control<Record<string, unknown>>;
 }
 
 function DynamicFieldItem({
@@ -13,7 +13,7 @@ function DynamicFieldItem({
   control,
 }: {
   field: AssetField;
-  control: Control<any>;
+  control: Control<Record<string, unknown>>;
 }) {
   const { field: ctrl } = useController({
     name: `custom.${field.key}`,

@@ -109,8 +109,10 @@ export function CreateTicketModal({ isOpen, onClose }: CreateTicketModalProps) {
       notifySuccess('Ticket created successfully!');
       onClose();
       resetForm();
-    } catch (error: any) {
-      notifyError('Failed to create ticket', error.message);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to create ticket';
+      notifyError('Failed to create ticket', message);
     }
   };
 

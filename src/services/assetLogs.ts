@@ -13,7 +13,7 @@ type LogInput = {
   oldValue: string | null;
   newValue: string | null;
   performedBy?: string | null;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 export async function insertAssetLogs(logs: LogInput[]) {
@@ -32,5 +32,6 @@ export async function insertAssetLogs(logs: LogInput[]) {
   );
 
   if (error) {
+    void error;
   }
 }

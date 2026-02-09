@@ -60,9 +60,10 @@ const NewUserModal: React.FC<NewUserModalProps> = ({ isOpen, onClose, onUserCrea
       setRole('Employee');
       onUserCreated();
       setTimeout(onClose, 1500);
-    } catch (err: any) {
-      notifyError('Failed to create user', err.message);
-      setError(err.message || 'Failed to create user.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create user';
+      notifyError('Failed to create user', message);
+      setError(message);
     } finally {
       setLoading(false);
     }

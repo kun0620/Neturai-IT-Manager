@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DeleteUserDialog } from '@/components/users/DeleteUserDialog';
 
-import { useAdminUsers } from '@/hooks/useAdminUsers';
+import { useAdminUsers, type Profile } from '@/hooks/useAdminUsers';
 import { useUpdateUserRole } from '@/hooks/useUpdateUserRole';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 import { notifyWarning } from '@/lib/notify';
@@ -61,7 +61,7 @@ export default function Users() {
     );
   }
 
-  const columns: ColumnDef<any>[] = [
+  const columns: ColumnDef<Profile>[] = [
     { accessorKey: 'name', header: 'Name' },
     { accessorKey: 'email', header: 'Email' },
     {
@@ -140,8 +140,16 @@ export default function Users() {
 
   return (
     <>
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold">User Management</h1>
+      <div className="flex flex-col gap-6 p-4 md:p-6">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Neturai IT Manager
+          </p>
+          <h1 className="text-3xl font-semibold">User Management</h1>
+          <p className="text-muted-foreground">
+            Control access and roles across the organization.
+          </p>
+        </div>
         <DataTable columns={columns} data={users ?? []} />
       </div>
 

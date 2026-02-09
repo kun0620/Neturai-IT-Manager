@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 export type LogSystemActionParams = {
   action: string;
-  details?: Record<string, any> | null;
+  details?: Record<string, unknown> | null;
   userId?: string | null;
 };
 

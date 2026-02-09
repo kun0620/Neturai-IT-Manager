@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -29,6 +29,7 @@ const formSchema = z.object({
 });
 
 const ForgotPasswordPage: React.FC = () => {
+  const [submitted, setSubmitted] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -48,19 +49,40 @@ const ForgotPasswordPage: React.FC = () => {
         'Password Reset Email Sent',
         'Please check your email for instructions to reset your password.'
       );
+      setSubmitted(true);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-      <Card className="mx-auto max-w-sm">
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
+        <div className="w-full space-y-6">
+          <div className="space-y-2 text-center">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Neturai IT Manager
+            </p>
+            <h1 className="text-2xl font-semibold text-foreground">
+              Reset Your Password
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Enter your email to receive a secure reset link.
+            </p>
+          </div>
+
+          <Card className="border-muted/60 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Forgot Password</CardTitle>
-          <CardDescription>
-            Enter your email below to receive a password reset link
+          <CardTitle className="text-lg">Forgot Password</CardTitle>
+          <CardDescription className="text-sm">
+            We will send a reset link if the email exists in our system.
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {submitted && (
+            <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              If this email is registered, a reset link has been sent. Please
+              check your inbox.
+            </div>
+          )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
               <FormField
@@ -79,6 +101,9 @@ const ForgotPasswordPage: React.FC = () => {
                       />
                     </FormControl>
                     <FormMessage />
+                    <p className="text-xs text-muted-foreground">
+                      We will never share your email with anyone.
+                    </p>
                   </FormItem>
                 )}
               />
@@ -94,7 +119,9 @@ const ForgotPasswordPage: React.FC = () => {
             </Link>
           </div>
         </CardContent>
-      </Card>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 };

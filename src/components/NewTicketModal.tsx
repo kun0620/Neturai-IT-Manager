@@ -61,8 +61,9 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose, onTick
         if (statusData.length > 0) setStatusId(statusData[0].id);
         if (categoryData.length > 0) setCategoryId(categoryData[0].id);
 
-      } catch (err: any) {
-        notifyError('Failed to load ticket data', err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to load ticket data';
+        notifyError('Failed to load ticket data', message);
         setError('Failed to load necessary data for ticket creation.');
       } finally {
         setLoading(false);
@@ -117,9 +118,10 @@ const NewTicketModal: React.FC<NewTicketModalProps> = ({ isOpen, onClose, onTick
       setSuccess('Ticket created successfully!');
       onTicketCreated(); // Notify parent to refresh list
       setTimeout(onClose, 1500); // Close modal after a short delay
-    } catch (err: any) {
-      notifyError('Failed to create ticket', err.message);
-      setError(`Failed to create ticket: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create ticket';
+      notifyError('Failed to create ticket', message);
+      setError(`Failed to create ticket: ${message}`);
     } finally {
       setLoading(false);
     }

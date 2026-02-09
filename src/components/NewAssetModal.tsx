@@ -48,8 +48,9 @@ const NewAssetModal: React.FC<NewAssetModalProps> = ({ isOpen, onClose, onAssetC
         const { data, error } = await supabase.from('profiles').select('id, full_name');
         if (error) throw error;
         setProfiles(data);
-      } catch (err: any) {
-        notifyError('Failed to load profiles', err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to load profiles';
+        notifyError('Failed to load profiles', message);
         setError('Failed to load profiles for assignment.');
       } finally {
         setLoading(false);
@@ -96,9 +97,10 @@ const NewAssetModal: React.FC<NewAssetModalProps> = ({ isOpen, onClose, onAssetC
       setSuccess('Asset created successfully!');
       onAssetCreated(); // Notify parent to refresh list
       setTimeout(onClose, 1500); // Close modal after a short delay
-    } catch (err: any) {
-      notifyError('Failed to create asset', err.message);
-      setError(`Failed to create asset: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create asset';
+      notifyError('Failed to create asset', message);
+      setError(`Failed to create asset: ${message}`);
     } finally {
       setLoading(false);
     }

@@ -60,17 +60,31 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-      <Card className="mx-auto max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>
-            Enter your email below to login to your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
+        <div className="w-full space-y-6">
+          <div className="space-y-2 text-center">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Neturai IT Manager
+            </p>
+            <h1 className="text-2xl font-semibold text-foreground">
+              Sign In
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Access your dashboard and manage operations securely.
+            </p>
+          </div>
+
+          <Card className="border-muted/60 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Login</CardTitle>
+              <CardDescription>
+                Enter your email and password to continue.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
               <FormField
                 control={form.control}
                 name="email"
@@ -107,6 +121,9 @@ const LoginPage: React.FC = () => {
                       />
                     </FormControl>
                     <FormMessage />
+                    <p className="text-xs text-muted-foreground">
+                      Use the password provided by your administrator.
+                    </p>
                   </FormItem>
                 )}
               />
@@ -129,8 +146,10 @@ const LoginPage: React.FC = () => {
               Forgot your password?
             </Link>
           </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 };

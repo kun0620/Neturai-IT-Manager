@@ -99,8 +99,10 @@ export const SettingsAndLogs: React.FC = () => {
   const {
     data: logs,
     isLoading: isLoadingLogs,
-    refetch: refetchLogs,
   } = useLogs(logPage, logsPerPage, logSearchTerm);
+
+  const getErrorMessage = (err: unknown) =>
+    err instanceof Error ? err.message : 'Unknown error';
 
   useEffect(() => {
     if (!settings) return;
@@ -131,8 +133,8 @@ export const SettingsAndLogs: React.FC = () => {
     try {
       await updateSetting.mutateAsync({ key, value });
       notifySuccess(successMessage ?? 'Setting updated');
-    } catch (err: any) {
-      notifyError('Failed to update setting', err?.message);
+    } catch (err: unknown) {
+      notifyError('Failed to update setting', getErrorMessage(err));
       onRollback?.();
     } finally {
       setSavingKey(null);
@@ -171,8 +173,8 @@ export const SettingsAndLogs: React.FC = () => {
       await addCategory.mutateAsync({ name: trimmed });
       notifySuccess('Category added');
       setNewCategoryName('');
-    } catch (err: any) {
-      notifyError('Failed to add category', err?.message);
+    } catch (err: unknown) {
+      notifyError('Failed to add category', getErrorMessage(err));
     }
   };
 
@@ -207,8 +209,8 @@ export const SettingsAndLogs: React.FC = () => {
     try {
       await updateCategory.mutateAsync({ id, name: trimmed });
       notifySuccess('Category updated');
-    } catch (err: any) {
-      notifyError('Failed to update category', err?.message);
+    } catch (err: unknown) {
+      notifyError('Failed to update category', getErrorMessage(err));
     }
   };
 
@@ -217,8 +219,8 @@ export const SettingsAndLogs: React.FC = () => {
     try {
       await deleteCategory.mutateAsync(deleteTarget.id);
       notifySuccess('Category deleted');
-    } catch (err: any) {
-      notifyError('Failed to delete category', err?.message);
+    } catch (err: unknown) {
+      notifyError('Failed to delete category', getErrorMessage(err));
     } finally {
       setDeleteTarget(null);
     }
@@ -252,8 +254,8 @@ export const SettingsAndLogs: React.FC = () => {
     try {
       await updateSLAPolicy.mutateAsync({ id, [field]: parsed });
       notifySuccess('SLA policy updated');
-    } catch (err: any) {
-      notifyError('Failed to update SLA policy', err?.message);
+    } catch (err: unknown) {
+      notifyError('Failed to update SLA policy', getErrorMessage(err));
     }
   };
 
@@ -284,8 +286,8 @@ export const SettingsAndLogs: React.FC = () => {
         })
       );
       notifySuccess('SLA policies reset to defaults');
-    } catch (err: any) {
-      notifyError('Failed to reset SLA policies', err?.message);
+    } catch (err: unknown) {
+      notifyError('Failed to reset SLA policies', getErrorMessage(err));
     } finally {
       setResetSlaOpen(false);
     }
@@ -307,12 +309,15 @@ export const SettingsAndLogs: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6 p-4 md:p-6">
       {/* ===== Page Header ===== */}
-      <div>
-        <h1 className="text-2xl font-bold">Settings & Logs</h1>
+      <div className="space-y-2">
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          Neturai IT Manager
+        </p>
+        <h1 className="text-3xl font-semibold">Settings & Logs</h1>
         <p className="text-muted-foreground">
-          Manage system configuration and audit activity
+          Manage system configuration and audit activity.
         </p>
       </div>
 

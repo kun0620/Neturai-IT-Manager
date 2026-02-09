@@ -44,7 +44,7 @@ type TimelineItem =
       created_at: string | null;
       user_id: string | null;
       action: string;
-      details: any;
+      details: Record<string, unknown> | null;
     }
   | {
       type: 'comment';

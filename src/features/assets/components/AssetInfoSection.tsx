@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAssetCategories } from '@/hooks/useAssetCategories';
 import { useAssetTypes } from '@/hooks/useAssetTypes';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import type { Database } from '@/types/supabase';
 
 
 type Props = {
@@ -21,6 +22,7 @@ export function AssetInfoSection({
   onLocalUpdate,
 }: Props) {
   const qc = useQueryClient();
+  const assetRow = asset as unknown as Database['public']['Tables']['assets']['Row'];
 
   /* ---------- data ---------- */
   const { data: categories = [] } = useAssetCategories();
@@ -44,10 +46,12 @@ export function AssetInfoSection({
   ) {
     if (next === asset[field]) return;
 
+    const updates = { [field]: next } as Database['public']['Tables']['assets']['Update'];
+
     await updateAsset(
       asset.id,
-      asset as any,
-      { [field]: next } as any,
+      assetRow,
+      updates,
       performedBy
     );
 
@@ -66,12 +70,14 @@ export function AssetInfoSection({
     field: 'category_id' | 'asset_type_id',
     nextId: string | null
   ) {
-    if (nextId === (asset as any)[field]) return;
+    if (nextId === assetRow[field]) return;
+
+    const updates = { [field]: nextId } as Database['public']['Tables']['assets']['Update'];
 
     await updateAsset(
       asset.id,
-      asset as any,
-      { [field]: nextId } as any,
+      assetRow,
+      updates,
       performedBy
     );
 
@@ -97,7 +103,7 @@ export function AssetInfoSection({
     try {
       await updateAsset(
         asset.id,
-        asset as any,
+        assetRow,
         { asset_code: next },
         performedBy
       );
@@ -113,9 +119,10 @@ export function AssetInfoSection({
       ]);
 
       notifySuccess('Asset Code updated');
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : '';
       // 🔥 กรณีซ้ำ
-      if (e?.message?.includes('duplicate')) {
+      if (message.includes('duplicate')) {
         notifyError('Asset Code already exists');
       } else {
         notifyError('Failed to update Asset Code');

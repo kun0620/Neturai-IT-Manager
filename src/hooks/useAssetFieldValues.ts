@@ -16,7 +16,12 @@ async function getAssetFieldValues(assetId: string) {
 
   const result: Record<string, string> = {};
 
-  (data ?? []).forEach((row: any) => {
+  type AssetFieldValueRow = {
+    value_text: string | null;
+    asset_fields: { field_key: string };
+  };
+
+  (data as AssetFieldValueRow[] | null ?? []).forEach((row) => {
     result[row.asset_fields.field_key] = row.value_text ?? '';
   });
 

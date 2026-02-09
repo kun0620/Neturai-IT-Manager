@@ -8,8 +8,8 @@ const stringify = (v: unknown) =>
   v === undefined || v === null ? null : String(v);
 
 export function diffAsset(
-  before: Record<string, any>,
-  after: Record<string, any>,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
   fields: string[]
 ): Diff[] {
   return fields

@@ -11,7 +11,6 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; // Import the drawer
 import { useAuth } from '@/hooks/useAuth';
-import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import { useSearchParams } from 'react-router-dom';
 import { hasPermission } from '@/lib/permissions';
 
@@ -24,7 +23,6 @@ export const Tickets: React.FC = () => {
   const myUserId = session?.user?.id;
 
   const canManageTickets = hasPermission(role, 'ticket.manage');
-  const { openDrawer } = useTicketDrawer();
   
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -131,20 +129,28 @@ const displayedTickets = showMyTickets && myUserId
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">Ticket Management</h1>
-        {slaFilter === 'breach' && (
-          <div className="text-sm text-red-600">
-            Showing SLA breached tickets
-          </div>
-        )}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Neturai IT Manager
+          </p>
+          <h1 className="text-3xl font-semibold text-foreground">
+            Ticket Management
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Manage all incoming, in-progress, and resolved support tickets.
+          </p>
+          {slaFilter === 'breach' && (
+            <div className="text-sm text-red-600">
+              Showing SLA breached tickets
+            </div>
+          )}
+        </div>
+
         <Button onClick={() => setIsCreateTicketDialogOpen(true)}>
           <PlusCircle className="mr-2 h-4 w-4" /> New Ticket
         </Button>
       </div>
-      <p className="text-muted-foreground text-lg">
-        Manage all incoming, in-progress, and resolved support tickets.
-      </p>
 
       <div className="flex items-center gap-4">
         <div className="relative flex-1">

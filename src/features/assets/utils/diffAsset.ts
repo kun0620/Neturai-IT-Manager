@@ -1,13 +1,13 @@
 import { EditableAssetField } from '../constants/editableFields';
 
 export function diffAsset(
-  before: Record<string, any>,
-  after: Record<string, any>
+  before: Record<string, unknown>,
+  after: Record<string, unknown>
 ) {
   const changes: {
     field: EditableAssetField;
-    oldValue: any;
-    newValue: any;
+    oldValue: unknown;
+    newValue: unknown;
   }[] = [];
 
   for (const key in after) {

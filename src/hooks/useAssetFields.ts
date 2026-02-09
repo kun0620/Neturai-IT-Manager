@@ -11,7 +11,7 @@ export type AssetField = {
   label: string;
   type: string;
   required: boolean;
-  options: any;
+  options: AssetFieldRow['options'];
 };
 
 async function getAssetFields(assetTypeId: string) {

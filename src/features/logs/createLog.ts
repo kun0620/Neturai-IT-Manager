@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 type CreateLogInput = {
   action: string;
   userId: string | null;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 };
 
 export async function createLog({

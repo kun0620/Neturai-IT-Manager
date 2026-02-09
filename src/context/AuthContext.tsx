@@ -14,7 +14,7 @@ import { notifyError } from '@/lib/notify';
 interface AuthContextType {
   session: Session | null;
   loading: boolean;
-  user: any;
+  user: Session['user'] | null;
   signOut: () => Promise<void>;
 }
 
@@ -24,7 +24,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<Session['user'] | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate(); // Initialize useNavigate
 
