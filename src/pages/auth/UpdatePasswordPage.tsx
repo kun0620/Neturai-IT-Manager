@@ -3,8 +3,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { motion } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { createFadeSlideUp } from '@/lib/motion';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -97,8 +99,8 @@ const UpdatePasswordPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-background">
         <div className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
-          <div className="w-full space-y-6">
-            <div className="space-y-2 text-center">
+          <motion.div className="w-full space-y-6" {...createFadeSlideUp(0)}>
+            <motion.div className="space-y-2 text-center" {...createFadeSlideUp(0.04)}>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                 Neturai IT Manager
               </p>
@@ -108,9 +110,10 @@ const UpdatePasswordPage: React.FC = () => {
               <p className="text-sm text-muted-foreground">
                 Please wait while we verify your reset link.
               </p>
-            </div>
+            </motion.div>
 
-            <Card className="border-muted/60 shadow-sm">
+            <motion.div {...createFadeSlideUp(0.08)}>
+              <Card className="border-muted/60 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Verifying Token</CardTitle>
                 <CardDescription>
@@ -128,7 +131,8 @@ const UpdatePasswordPage: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
       </div>
     );
@@ -137,8 +141,8 @@ const UpdatePasswordPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
-        <div className="w-full space-y-6">
-          <div className="space-y-2 text-center">
+        <motion.div className="w-full space-y-6" {...createFadeSlideUp(0)}>
+          <motion.div className="space-y-2 text-center" {...createFadeSlideUp(0.04)}>
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               Neturai IT Manager
             </p>
@@ -148,9 +152,10 @@ const UpdatePasswordPage: React.FC = () => {
             <p className="text-sm text-muted-foreground">
               Create a new password to secure your account.
             </p>
-          </div>
+          </motion.div>
 
-          <Card className="border-muted/60 shadow-sm">
+          <motion.div {...createFadeSlideUp(0.08)}>
+            <Card className="border-muted/60 shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Update Password</CardTitle>
               <CardDescription>
@@ -196,14 +201,19 @@ const UpdatePasswordPage: React.FC = () => {
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+                  <Button
+                    type="submit"
+                    className="btn-motion-primary w-full"
+                    disabled={form.formState.isSubmitting}
+                  >
                     {form.formState.isSubmitting ? 'Updating...' : 'Update Password'}
                   </Button>
                 </form>
               </Form>
             </CardContent>
           </Card>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
     </div>
   );

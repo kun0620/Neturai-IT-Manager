@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -22,6 +22,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { createFadeSlideUp } from '@/lib/motion';
+import { getTicketPriorityUi, getTicketStatusUi } from '@/lib/ticket-ui';
 
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import type { Database } from '@/types/database.types';
@@ -43,21 +45,6 @@ interface RecentTicketsTableProps {
 type SortKey = keyof RecentTicket;
 
 const ITEMS_PER_PAGE = 5;
-
-/* ---------- Config ---------- */
-
-const STATUS_CONFIG = {
-  open: { label: 'Open', variant: 'secondary' },
-  in_progress: { label: 'In Progress', variant: 'default' },
-  closed: { label: 'Closed', variant: 'outline' },
-} as const;
-
-const PRIORITY_CONFIG = {
-  low: { label: 'Low', variant: 'outline' },
-  medium: { label: 'Medium', variant: 'secondary' },
-  high: { label: 'High', variant: 'destructive' },
-  critical: { label: 'Critical', variant: 'destructive' },
-} as const;
 
 /* ---------- Component ---------- */
 
@@ -125,7 +112,7 @@ export function RecentTicketsTable({
   /* ---------- Render ---------- */
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+    <motion.div {...createFadeSlideUp(0)}>
       <Card>
         <CardHeader>
           <CardTitle>Recent Tickets</CardTitle>
@@ -173,15 +160,8 @@ export function RecentTicketsTable({
                 ))
               ) : currentTickets.length ? (
                 currentTickets.map((t) => {
-                  const statusKey =
-                    t.status as keyof typeof STATUS_CONFIG;
-                  const status =
-                    STATUS_CONFIG[statusKey] ?? STATUS_CONFIG.open;
-
-                  const priorityKey =
-                    (t.priority?.toLowerCase() as keyof typeof PRIORITY_CONFIG) ??
-                    'low';
-                  const priority = PRIORITY_CONFIG[priorityKey];
+                  const statusUi = getTicketStatusUi(t.status);
+                  const priorityUi = getTicketPriorityUi(t.priority);
 
                   return (
                     <TableRow
@@ -202,14 +182,14 @@ export function RecentTicketsTable({
                       </TableCell>
 
                       <TableCell>
-                        <Badge variant={priority.variant}>
-                          {priority.label}
+                        <Badge variant={priorityUi.variant}>
+                          {priorityUi.label}
                         </Badge>
                       </TableCell>
 
                       <TableCell>
-                        <Badge variant={status.variant}>
-                          {status.label}
+                        <Badge variant={statusUi.variant}>
+                          {statusUi.label}
                         </Badge>
                       </TableCell>
 

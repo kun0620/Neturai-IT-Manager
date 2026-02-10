@@ -9,11 +9,14 @@ const normalize = (detail?: ErrorLike) => {
 
 export function notifySuccess(title: string, detail?: string) {
   const description = normalize(detail);
+  const options = {
+    className: 'toast-success animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-300',
+  };
   if (description) {
-    toast.success(title, { description });
+    toast.success(title, { description, ...options });
     return;
   }
-  toast.success(title);
+  toast.success(title, options);
 }
 
 export function notifyError(title: string, detail?: ErrorLike) {

@@ -8,7 +8,7 @@ import {
   Legend,
 } from 'recharts';
 import { ChartConfig, ChartContainer } from '@/components/ui/chart';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 interface AverageResolutionTimeChartProps {
   data: { month: string; avg_time_hours: number }[];

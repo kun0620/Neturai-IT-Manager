@@ -201,9 +201,13 @@ export function CreateTicketModal({ isOpen, onClose }: CreateTicketModalProps) {
             </Button>
           )}
           {step < 2 ? (
-            <Button onClick={handleNext}>Next</Button>
+            <Button onClick={handleNext} className="btn-motion-primary">Next</Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={createTicketMutation.isPending}>
+            <Button
+              onClick={handleSubmit}
+              className="btn-motion-primary"
+              disabled={createTicketMutation.isPending}
+            >
               {createTicketMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}

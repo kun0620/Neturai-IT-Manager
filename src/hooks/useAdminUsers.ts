@@ -3,13 +3,44 @@ import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database.types';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type AdminUser = Profile & {
+  assigned_asset: {
+    id: string;
+    name: string;
+    asset_code: string;
+    serial_number: string | null;
+    asset_type: {
+      key: string;
+      name: string;
+    } | null;
+  } | null;
+};
 type UserRole = 'admin' | 'it' | 'user';
 
 /* ---------- FETCH USERS ---------- */
-async function getAllProfiles(): Promise<Profile[]> {
+async function getAllProfiles(): Promise<AdminUser[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, email, role, created_at')
+    .select(
+      `
+      id,
+      name,
+      full_name,
+      email,
+      role,
+      created_at,
+      department,
+      location,
+      preferred_contact,
+      assigned_asset:assets(
+        id,
+        name,
+        asset_code,
+        serial_number,
+        asset_type:asset_types(key, name)
+      )
+    `
+    )
     .order('name');
 
   if (error) throw error;

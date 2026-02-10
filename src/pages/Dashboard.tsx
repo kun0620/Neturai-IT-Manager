@@ -21,6 +21,9 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { CreateTicketDialog } from '@/components/tickets/CreateTicketDialog';
 import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer';
+import { motion } from 'motion/react';
+import { createFadeSlideUp } from '@/lib/motion';
+import { Badge } from '@/components/ui/badge';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -96,6 +99,7 @@ const Dashboard: React.FC = () => {
       isLoading: isLoadingAvgResolution,
     } = useAvgResolutionTime();
 
+
   const isLoadingAny =
     isLoadingSummary ||
     isLoadingOpenTickets ||
@@ -118,12 +122,7 @@ const Dashboard: React.FC = () => {
   if (isLoadingAny) {
     return (
       <div className="flex flex-col gap-6 p-4 md:p-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <LoadingSkeleton />
-          <LoadingSkeleton />
-          <LoadingSkeleton />
-          <LoadingSkeleton />
-        </div>
+        <LoadingSkeleton count={8} className="md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4" />
       </div>
     );
   }
@@ -146,51 +145,78 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Neturai IT Manager
-          </p>
-          <h1 className="text-3xl font-semibold flex items-center gap-2">
-            <LayoutDashboard className="h-8 w-8" />
-            Dashboard
-          </h1>
-          <p className="text-muted-foreground">
-            Track, manage, and resolve IT tickets at a glance.
-          </p>
+    <motion.div
+      className="flex flex-col gap-6 p-4 md:p-6"
+      {...createFadeSlideUp(0)}
+    >
+      <motion.div
+        className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+        {...createFadeSlideUp(0.05)}
+      >
+        <div className="w-full rounded-xl border border-border/80 bg-gradient-to-b from-card to-card/70 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="text-[11px] uppercase tracking-[0.14em]">
+              Operations
+            </Badge>
+            <Badge variant="secondary" className="text-[11px]">
+              Live workspace
+            </Badge>
+          </div>
+          <div className="mt-3 space-y-2">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Neturai IT Manager
+            </p>
+            <h1 className="text-3xl font-semibold flex items-center gap-2">
+              <LayoutDashboard className="h-8 w-8" />
+              IT Operations Dashboard
+            </h1>
+            <p className="text-muted-foreground max-w-3xl">
+              Track ticket throughput, queue pressure, and asset coverage in one operational view.
+            </p>
+          </div>
         </div>
+      </motion.div>
 
-        {/* Quick Actions */}
-        <div className="flex flex-wrap gap-3">
-          <Button
-            onClick={() => setIsCreateTicketDialogOpen(true)}
-            className="flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" /> New Ticket
-          </Button>
+      <motion.div
+        className="flex flex-wrap gap-3 rounded-lg border border-border/80 bg-card/70 p-3"
+        {...createFadeSlideUp(0.08)}
+      >
+        <Button
+          onClick={() => setIsCreateTicketDialogOpen(true)}
+          className="btn-motion-primary flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" /> New Ticket
+        </Button>
 
-          <Button
-            onClick={() => navigate('/tickets')}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <ListTodo className="h-4 w-4" /> View All Tickets
-          </Button>
+        <Button
+          onClick={() => navigate('/tickets')}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <ListTodo className="h-4 w-4" /> View All Tickets
+        </Button>
 
-          <Button
-            onClick={() => navigate('/assets/new')}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <PackagePlus className="h-4 w-4" /> Add Asset
-          </Button>
+        <Button
+          onClick={() => navigate('/assets/new')}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <PackagePlus className="h-4 w-4" /> Add Asset
+        </Button>
+
+        <div className="ml-auto flex items-center text-xs text-muted-foreground">
+          Updated from live ticket and asset sources
         </div>
-      </div>
+      </motion.div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+
+      <motion.div
+        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+        {...createFadeSlideUp(0.1)}
+      >
         <SummaryCard
+          index={0}
           title="Open Tickets"
           value={openTicketsCount || 0}
           icon={CircleDot}
@@ -199,6 +225,7 @@ const Dashboard: React.FC = () => {
           onClick={() => navigate('/tickets?status=open')}
         />
         <SummaryCard
+          index={1}
           title="In Progress Tickets"
           value={inProgressTicketsCount || 0}
           icon={Hourglass}
@@ -207,6 +234,7 @@ const Dashboard: React.FC = () => {
           onClick={() => navigate('/tickets?status=in_progress')}
         />
         <SummaryCard
+          index={2}
           title="Closed Tickets"
           value={closedTicketsCount || 0}
           icon={CheckCircle}
@@ -215,6 +243,7 @@ const Dashboard: React.FC = () => {
           onClick={() => navigate('/tickets?status=closed')}
         />
         <SummaryCard
+          index={3}
           title="Total Assets"
           value={summaryData?.totalAssets || 0}
           icon={HardDrive}
@@ -223,6 +252,7 @@ const Dashboard: React.FC = () => {
           onClick={() => navigate('/assets')}
         />
         <SummaryCard
+          index={4}
           title="Tickets Today"
           value={todayTicketsCount || 0}
           icon={Activity}
@@ -231,6 +261,7 @@ const Dashboard: React.FC = () => {
           className="border-indigo-200"
         />
         <SummaryCard
+          index={5}
           title="Overdue Tickets"
           value={overdueTicketsCount || 0}
           icon={AlertTriangle}
@@ -240,6 +271,7 @@ const Dashboard: React.FC = () => {
           onClick={() => navigate('/tickets?filter=overdue')}
         />
         <SummaryCard
+          index={6}
           title="Avg Resolution Time"
           value={avgResolutionHours !== null ? `${avgResolutionHours} hrs` : '—'}
           icon={Clock}
@@ -247,18 +279,23 @@ const Dashboard: React.FC = () => {
           description="Average time to resolve tickets"
         />
         <SummaryCard
+          index={7}
           title="Total Tickets"
           value={summaryData?.totalTickets || 0}
           icon={ListTodo}
           description="All tickets in the system"
         />
-      </div>
+      </motion.div>
 
       {/* Recent Tickets */}
-      <RecentTicketsTable
-        tickets={recentTickets || []}
-        isLoading={isLoadingRecentTickets}
-      />
+      <motion.div
+        {...createFadeSlideUp(0.18)}
+      >
+        <RecentTicketsTable
+          tickets={recentTickets || []}
+          isLoading={isLoadingRecentTickets}
+        />
+      </motion.div>
 
       {/* Drawer (state comes from Context) */}
       {categories && <TicketDetailsDrawer categories={categories} />}
@@ -271,7 +308,7 @@ const Dashboard: React.FC = () => {
           categories={categories || []}
         />
       )}
-    </div>
+    </motion.div>
   );
 };
 

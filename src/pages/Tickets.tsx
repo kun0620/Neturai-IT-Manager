@@ -13,6 +13,8 @@ import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer'; 
 import { useAuth } from '@/hooks/useAuth';
 import { useSearchParams } from 'react-router-dom';
 import { hasPermission } from '@/lib/permissions';
+import { motion } from 'motion/react';
+import { createFadeSlideUp } from '@/lib/motion';
 
 export const Tickets: React.FC = () => {
   const {
@@ -108,12 +110,7 @@ const displayedTickets = showMyTickets && myUserId
           <div className="h-10 w-64 bg-muted rounded animate-pulse"></div>
           <div className="h-10 w-24 bg-muted rounded animate-pulse"></div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <LoadingSkeleton />
-          <LoadingSkeleton />
-          <LoadingSkeleton />
-          <LoadingSkeleton />
-        </div>
+        <LoadingSkeleton count={8} className="md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4" />
       </div>
     );
   }
@@ -128,8 +125,11 @@ const displayedTickets = showMyTickets && myUserId
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <motion.div className="flex flex-col gap-6 p-4 md:p-6" {...createFadeSlideUp(0)}>
+      <motion.div
+        className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+        {...createFadeSlideUp(0.04)}
+      >
         <div className="space-y-2">
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
             Neturai IT Manager
@@ -147,12 +147,15 @@ const displayedTickets = showMyTickets && myUserId
           )}
         </div>
 
-        <Button onClick={() => setIsCreateTicketDialogOpen(true)}>
+        <Button
+          onClick={() => setIsCreateTicketDialogOpen(true)}
+          className="btn-motion-primary"
+        >
           <PlusCircle className="mr-2 h-4 w-4" /> New Ticket
         </Button>
-      </div>
+      </motion.div>
 
-      <div className="flex items-center gap-4">
+      <motion.div className="flex items-center gap-4" {...createFadeSlideUp(0.08)}>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -162,9 +165,9 @@ const displayedTickets = showMyTickets && myUserId
             className="pl-9"
           />
         </div>
-      </div>
+      </motion.div>
       {canManageTickets && (
-        <div className="flex items-center gap-2">
+        <motion.div className="flex items-center gap-2" {...createFadeSlideUp(0.12)}>
           <Button
             variant={!showMyTickets ? 'default' : 'outline'}
             size="sm"
@@ -180,9 +183,10 @@ const displayedTickets = showMyTickets && myUserId
           >
             My Tickets
           </Button>
-        </div>
+        </motion.div>
       )}
-      <Tabs defaultValue="table">
+      <motion.div {...createFadeSlideUp(0.16)}>
+        <Tabs defaultValue="table">
         <TabsList className="grid w-fit grid-cols-2">
           <TabsTrigger value="table">
             <List className="mr-2 h-4 w-4" /> Table View
@@ -209,7 +213,8 @@ const displayedTickets = showMyTickets && myUserId
             categories={categories || []}
           />
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </motion.div>
 
       <CreateTicketDialog
         isOpen={isCreateTicketDialogOpen}
@@ -219,6 +224,6 @@ const displayedTickets = showMyTickets && myUserId
 
       {/* Render the TicketDetailsDrawer */}
       {categories && <TicketDetailsDrawer categories={categories} />}
-    </div>
+    </motion.div>
   );
 };

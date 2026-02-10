@@ -297,24 +297,45 @@ export type Database = {
       }
       profiles: {
         Row: {
+          assigned_asset_id: string | null
           created_at: string | null
+          device_details: string | null
+          device_type: string | null
+          department: string | null
           email: string
+          full_name: string | null
           id: string
+          location: string | null
           name: string | null
+          preferred_contact: string | null
           role: string | null
         }
         Insert: {
+          assigned_asset_id?: string | null
           created_at?: string | null
+          device_details?: string | null
+          device_type?: string | null
+          department?: string | null
           email: string
+          full_name?: string | null
           id: string
+          location?: string | null
           name?: string | null
+          preferred_contact?: string | null
           role?: string | null
         }
         Update: {
+          assigned_asset_id?: string | null
           created_at?: string | null
+          device_details?: string | null
+          device_type?: string | null
+          department?: string | null
           email?: string
+          full_name?: string | null
           id?: string
+          location?: string | null
           name?: string | null
+          preferred_contact?: string | null
           role?: string | null
         }
         Relationships: []

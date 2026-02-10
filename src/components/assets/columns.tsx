@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import { ColumnDef } from '@tanstack/react-table';
 import { ArrowUpDown, MoreHorizontal } from 'lucide-react';
 import { AssetWithType } from '@/types/asset';
@@ -131,15 +133,17 @@ export function getColumns(): ColumnDef<AssetWithType>[] {
     },
     {
       accessorKey: 'status',
-      header: 'Status',
+      header: () => <div className="text-center">Status</div>,
       size: 120,
       cell: ({ row }) => (
-        <Badge
-          variant="secondary"
-          className={STATUS_STYLE[row.getValue('status') as string] ?? ''}
-        >
-          {row.getValue('status')}
-        </Badge>
+        <div className="flex justify-center">
+          <Badge
+            variant="secondary"
+            className={STATUS_STYLE[row.getValue('status') as string] ?? ''}
+          >
+            {row.getValue('status')}
+          </Badge>
+        </div>
       ),
     },
     {

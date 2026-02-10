@@ -241,7 +241,11 @@ export function EditTicketDialog({ isOpen, onClose, ticketId, categories }: Edit
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={updateTicketMutation.isPending}>
+          <Button
+            onClick={handleSubmit}
+            className="btn-motion-primary"
+            disabled={updateTicketMutation.isPending}
+          >
             {updateTicketMutation.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}

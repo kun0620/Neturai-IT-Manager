@@ -3,7 +3,7 @@ import { subDays, formatISO, format } from 'date-fns';
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
 
 import { useReportOverview } from '@/hooks/useReportOverview';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { SummaryCard } from '@/components/dashboard/SummaryCard';
 
@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TicketsStatusDonut } from '@/components/reports/TicketsStatusDonut';
 import { TicketsByDayBar } from '@/components/reports/TicketsByDayBar';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'motion/react';
+import { createFadeSlideUp } from '@/lib/motion';
 
 
 
@@ -108,8 +110,14 @@ const exportCSV = () => {
 
   /* ---------- states ---------- */
   if (isLoading || isLoadingTrend) {
-  return <LoadingSpinner />;
-}
+    return (
+      <div className="flex flex-col gap-6 p-4 md:p-6">
+        <div className="h-8 w-1/2 bg-muted rounded animate-pulse"></div>
+        <div className="h-6 w-1/3 bg-muted rounded animate-pulse"></div>
+        <LoadingSkeleton count={6} className="md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" />
+      </div>
+    );
+  }
 
   if (isError) {
     return (
@@ -127,8 +135,12 @@ const exportCSV = () => {
 
   /* ---------- render ---------- */
   return (
-    <div id="report-print" className="flex flex-col gap-6 p-4 md:p-6">
-      <div className="space-y-2">
+    <motion.div
+      id="report-print"
+      className="flex flex-col gap-6 p-4 md:p-6"
+      {...createFadeSlideUp(0)}
+    >
+      <motion.div className="space-y-2" {...createFadeSlideUp(0.04)}>
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
           Neturai IT Manager
         </p>
@@ -136,10 +148,10 @@ const exportCSV = () => {
         <p className="text-sm text-muted-foreground">
           Reporting period: {from.slice(0,10)} → {to.slice(0,10)}
         </p>
-      </div>
+      </motion.div>
 
       {/* Date Range */}
-      <div className="flex flex-wrap items-center gap-2">
+      <motion.div className="flex flex-wrap items-center gap-2" {...createFadeSlideUp(0.08)}>
         <button
           className={`px-3 py-1 text-sm rounded-md border ${
             range === '7d' ? 'bg-primary text-primary-foreground' : ''
@@ -246,11 +258,15 @@ const exportCSV = () => {
             Export PDF
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Summary */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 print-summary-grid">
+      <motion.div
+        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 print-summary-grid"
+        {...createFadeSlideUp(0.12)}
+      >
         <SummaryCard
+          index={0}
           title="Total Tickets"
           value={data.total}
           icon={LayoutDashboard}
@@ -258,6 +274,7 @@ const exportCSV = () => {
         />
 
         <SummaryCard
+          index={1}
           title="Open"
           value={data.open}
           icon={CircleDot}
@@ -266,6 +283,7 @@ const exportCSV = () => {
         />
 
         <SummaryCard
+          index={2}
           title="In Progress"
           value={data.inProgress}
           icon={Hourglass}
@@ -274,6 +292,7 @@ const exportCSV = () => {
         />
 
         <SummaryCard
+          index={3}
           title="Closed"
           value={data.closed}
           icon={CheckCircle}
@@ -282,6 +301,7 @@ const exportCSV = () => {
         />
 
         <SummaryCard
+          index={4}
           title="Median Resolution"
           value={
             data.medianResolutionHours !== null
@@ -293,6 +313,7 @@ const exportCSV = () => {
         />
 
         <SummaryCard
+          index={5}
           title="Overdue Tickets"
           value={data.overdue}
           icon={CircleDot}
@@ -301,6 +322,7 @@ const exportCSV = () => {
         />
 
         <SummaryCard
+          index={6}
           title="SLA Breaches"
           value={data.slaBreaches}
           icon={CircleDot}
@@ -309,8 +331,11 @@ const exportCSV = () => {
           onClick={() => navigate('/tickets?sla=breach')}
         />
 
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2 print-grid-2">
+      </motion.div>
+      <motion.div
+        className="grid gap-6 lg:grid-cols-2 print-grid-2"
+        {...createFadeSlideUp(0.16)}
+      >
         {/* Trend */}
         <Card>
           <CardHeader>
@@ -357,8 +382,8 @@ const exportCSV = () => {
             )}
           </CardContent>
         </Card>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 
   

@@ -3,9 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { motion } from 'motion/react';
 
 import { supabase } from '@/lib/supabase';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { createFadeSlideUp } from '@/lib/motion';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -77,8 +79,8 @@ const RegisterPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
-        <div className="w-full space-y-6">
-          <div className="space-y-2 text-center">
+        <motion.div className="w-full space-y-6" {...createFadeSlideUp(0)}>
+          <motion.div className="space-y-2 text-center" {...createFadeSlideUp(0.04)}>
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               Neturai IT Manager
             </p>
@@ -88,9 +90,10 @@ const RegisterPage: React.FC = () => {
             <p className="text-sm text-muted-foreground">
               Register to access IT operations and internal workflows.
             </p>
-          </div>
+          </motion.div>
 
-          <Card className="mx-auto w-full border-muted/60 shadow-sm">
+          <motion.div {...createFadeSlideUp(0.08)}>
+            <Card className="mx-auto w-full border-muted/60 shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Create Account</CardTitle>
               <CardDescription>
@@ -165,7 +168,7 @@ const RegisterPage: React.FC = () => {
 
               <Button
                 type="submit"
-                className="w-full"
+                className="btn-motion-primary w-full"
                 disabled={form.formState.isSubmitting}
               >
                 {form.formState.isSubmitting
@@ -183,7 +186,8 @@ const RegisterPage: React.FC = () => {
           </div>
             </CardContent>
           </Card>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
     </div>
   );

@@ -17,6 +17,10 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -34,26 +38,47 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   filterColumnId?: string;
   filterPlaceholder?: string;
+  globalFilterPlaceholder?: string;
   onRowClick?: (row: TData) => void;
 }
+
+type TableDensity = 'compact' | 'comfortable';
+const TABLE_DENSITY_KEY = 'datatable-density';
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   filterColumnId,
   filterPlaceholder,
+  globalFilterPlaceholder,
   onRowClick,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
+  const [globalFilter, setGlobalFilter] = React.useState('');
+  const [density, setDensity] = React.useState<TableDensity>(() => {
+    if (typeof window === 'undefined') {
+      return 'comfortable';
+    }
+    const savedDensity = window.localStorage.getItem(TABLE_DENSITY_KEY);
+    return savedDensity === 'compact' ? 'compact' : 'comfortable';
+  });
+
+  React.useEffect(() => {
+    window.localStorage.setItem(TABLE_DENSITY_KEY, density);
+  }, [density]);
+
+  const headerClassName = density === 'compact' ? 'h-8 px-2 text-xs' : 'h-10 px-3';
+  const cellClassName = density === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5';
 
   const table = useReactTable({
     data,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -63,6 +88,7 @@ export function DataTable<TData, TValue>({
     state: {
       sorting,
       columnFilters,
+      globalFilter,
       columnVisibility,
       rowSelection,
     },
@@ -71,6 +97,12 @@ export function DataTable<TData, TValue>({
   return (
     <div className="w-full">
       <div className="flex items-center py-4">
+        <Input
+          placeholder={globalFilterPlaceholder || 'Search all columns...'}
+          value={(table.getState().globalFilter as string) ?? ''}
+          onChange={(event) => table.setGlobalFilter(event.target.value)}
+          className="max-w-sm"
+        />
         {filterColumnId && (
           <Input
             placeholder={filterPlaceholder || `Filter ${filterColumnId}...`}
@@ -78,12 +110,34 @@ export function DataTable<TData, TValue>({
             onChange={(event) =>
               table.getColumn(filterColumnId)?.setFilterValue(event.target.value)
             }
-            className="max-w-sm"
+            className="ml-2 max-w-sm"
           />
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="ml-auto">
+              Density
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Table density</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup
+              value={density}
+              onValueChange={(value) => setDensity(value as TableDensity)}
+            >
+              <DropdownMenuRadioItem value="comfortable">
+                Comfortable
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="compact">
+                Compact
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="ml-2">
               Columns
             </Button>
           </DropdownMenuTrigger>
@@ -113,7 +167,7 @@ export function DataTable<TData, TValue>({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id}>
+                    <TableHead key={header.id} className={headerClassName}>
                       {header.isPlaceholder
                         ? null
                         : flexRender(header.column.columnDef.header, header.getContext())}
@@ -133,7 +187,7 @@ export function DataTable<TData, TValue>({
                   className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} className={cellClassName}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}

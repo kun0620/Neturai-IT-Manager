@@ -4,64 +4,79 @@
 
 @layer base {
   :root {
-    /* Base */
-    --background: 210 40% 98%;        /* ขาวขึ้น */
-    --foreground: 222.2 47.4% 11.2%;
+    --radius: 0.9rem;
 
-    /* Panels */
+    --background: 220 20% 98%;
+    --foreground: 221 39% 16%;
+
     --card: 0 0% 100%;
-    --card-foreground: 222.2 47.4% 11.2%;
+    --card-foreground: 221 39% 16%;
 
-    /* Subtle (แยกจาก background ชัดเจน) */
-    --muted: 210 40% 94%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 18% 94%;
+    --muted-foreground: 220 14% 38%;
 
-    /* Lines */
-    --border: 214 32% 88%;
-    --input: 214 32% 88%;
+    --border: 220 16% 84%;
+    --input: 220 16% 84%;
 
-    /* Accent (ฟ้า IT แบบ Jira) */
-    --primary: 220 90% 56%;
+    --primary: 231 74% 61%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 220 18% 96%;
+    --secondary-foreground: 221 39% 16%;
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 220 18% 96%;
+    --accent-foreground: 221 39% 16%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 77% 56%;
     --destructive-foreground: 0 0% 100%;
 
-    --ring: 220 90% 56%;
+    --success: 156 72% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 48%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 220 90% 56%;
+    --info-foreground: 0 0% 100%;
+
+    --ring: 221 70% 52%;
   }
 
   .dark {
-    /* Base */
-    --background: 222 47% 6%;          /* พื้นหลังหลัก */
-    --foreground: 210 40% 96%;         /* ตัวอักษรหลัก */
+    --background: 226 18% 14%;
+    --foreground: 220 30% 92%;
 
-    /* Panels */
-    --card: 223 47% 9%;                /* Sidebar / Card */
-    --card-foreground: 210 40% 96%;
+    --card: 227 17% 20%;
+    --card-foreground: 220 30% 92%;
 
-    /* Subtle layers */
-    --muted: 223 47% 14%;              /* Hover / Header */
-    --muted-foreground: 215 20% 70%;
+    --muted: 227 16% 24%;
+    --muted-foreground: 220 15% 74%;
 
-    /* Lines */
-    --border: 216 34% 28%;
-    --input: 216 34% 28%;
+    --border: 226 14% 31%;
+    --input: 226 14% 31%;
 
-    /* Accent */
-    --primary: 210 90% 66%;             /* ฟ้า IT */
-    --primary-foreground: 222 47% 11%;
+    --primary: 231 84% 72%;
+    --primary-foreground: 226 22% 12%;
 
-    /* States */
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
+    --secondary: 226 16% 24%;
+    --secondary-foreground: 220 30% 92%;
 
-    --ring: 210 90% 66%;
+    --accent: 226 16% 24%;
+    --accent-foreground: 220 30% 92%;
+
+    --destructive: 0 66% 43%;
+    --destructive-foreground: 210 32% 95%;
+
+    --success: 156 64% 43%;
+    --success-foreground: 210 32% 95%;
+
+    --warning: 40 94% 55%;
+    --warning-foreground: 226 22% 12%;
+
+    --info: 214 84% 72%;
+    --info-foreground: 226 22% 12%;
+
+    --ring: 231 84% 72%;
   }
 
 }
@@ -70,7 +85,27 @@
   * {
     @apply border-border;
   }
+  html {
+    font-family: Inter, 'Inter var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background-image:
+      radial-gradient(circle at 0% 0%, hsl(var(--primary) / 0.08), transparent 40%),
+      radial-gradient(circle at 100% 0%, hsl(var(--primary) / 0.05), transparent 32%);
+  }
+}
+
+@layer components {
+  .btn-motion-primary {
+    @apply motion-safe:transition-all motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:translate-y-0;
+  }
+
+  .toast-success {
+    @apply border-emerald-200/80 bg-emerald-50 text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-950/70 dark:text-emerald-100;
+  }
+
+  .surface-panel {
+    @apply rounded-xl border border-border/80 bg-card/90 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80;
   }
 }

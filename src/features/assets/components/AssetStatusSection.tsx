@@ -1,13 +1,5 @@
 import { AssetWithType } from '@/types/asset';
 
-type AssetStatus =
-  | 'Available'
-  | 'Assigned'
-  | 'In Repair'
-  | 'Retired'
-  | 'Lost'
-  | 'In Use';
-
 type Props = {
   asset: AssetWithType;
   performedBy: string | null;

@@ -17,14 +17,16 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tables, Database } from '@/types/database.types';
 import { format } from 'date-fns';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
+import { createFadeSlideUp } from '@/lib/motion';
+import { cn } from '@/lib/utils';
+import { getTicketPriorityUi, getTicketStatusUi } from '@/lib/ticket-ui';
 
 type Ticket = Database['public']['Tables']['tickets']['Row'];
-type TicketStatus = 'open' | 'in_progress' | 'closed';
 
 interface TableViewProps {
   tickets: Ticket[];
@@ -32,20 +34,6 @@ interface TableViewProps {
 }
 
 const ITEMS_PER_PAGE = 10;
-
-/* ---------------- Status Config ---------------- */
-
-const STATUS_CONFIG: Record<
-  TicketStatus,
-  {
-    label: string;
-    variant: 'outline' | 'secondary' | 'default' | 'destructive';
-  }
-> = {
-  open: { label: 'Open', variant: 'outline' },
-  in_progress: { label: 'In Progress', variant: 'secondary' },
-  closed: { label: 'Closed', variant: 'default' },
-};
 
 export function TableView({
   tickets,
@@ -126,16 +114,19 @@ export function TableView({
   /* ---------------- Render ---------------- */
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <motion.div {...createFadeSlideUp(0)}>
       <Card>
-        <CardHeader>
-          <CardTitle>All Tickets</CardTitle>
-          <CardDescription>
-            A comprehensive list of all IT service desk tickets.
-          </CardDescription>
-        </CardHeader>
+        <motion.div {...createFadeSlideUp(0.04)}>
+          <CardHeader>
+            <CardTitle>All Tickets</CardTitle>
+            <CardDescription>
+              A comprehensive list of all IT service desk tickets.
+            </CardDescription>
+          </CardHeader>
+        </motion.div>
 
-        <CardContent>
+        <motion.div {...createFadeSlideUp(0.08)}>
+          <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
@@ -146,13 +137,19 @@ export function TableView({
                   Category {getSortIndicator('category_id')}
                 </TableHead>
                 <TableHead onClick={() => requestSort('priority')}>
-                  Priority {getSortIndicator('priority')}
+                  <div className="text-center">
+                    Priority {getSortIndicator('priority')}
+                  </div>
                 </TableHead>
                 <TableHead onClick={() => requestSort('status')}>
-                  Status {getSortIndicator('status')}
+                  <div className="text-center">
+                    Status {getSortIndicator('status')}
+                  </div>
                 </TableHead>
                 <TableHead onClick={() => requestSort('assigned_to')}>
-                  Assigned To {getSortIndicator('assigned_to')}
+                  <div className="text-center">
+                    Assigned To {getSortIndicator('assigned_to')}
+                  </div>
                 </TableHead>
                 <TableHead onClick={() => requestSort('created_at')}>
                   Created At {getSortIndicator('created_at')}
@@ -170,8 +167,8 @@ export function TableView({
               )}
 
               {currentTickets.map((ticket) => {
-                const statusKey = ticket.status as TicketStatus;
-                const statusConfig = STATUS_CONFIG[statusKey];
+                const statusUi = getTicketStatusUi(ticket.status);
+                const priorityUi = getTicketPriorityUi(ticket.priority);
 
                 return (
                   <TableRow
@@ -192,17 +189,20 @@ export function TableView({
                         : 'N/A'}
                     </TableCell>
 
-                    <TableCell>
-                      <Badge variant="outline">{ticket.priority}</Badge>
+                    <TableCell className="text-center">
+                      <Badge variant={priorityUi.variant}>{priorityUi.label}</Badge>
                     </TableCell>
 
-                    <TableCell>
-                      <Badge variant={statusConfig.variant}>
-                        {statusConfig.label}
+                    <TableCell className="text-center">
+                      <Badge
+                        variant={statusUi.variant}
+                        className={cn(statusUi.badgeClass)}
+                      >
+                        {statusUi.label}
                       </Badge>
                     </TableCell>
 
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-center text-muted-foreground">
                       {isUsersLoading
                         ? 'Loading...'
                         : ticket.assigned_to
@@ -225,7 +225,7 @@ export function TableView({
           </Table>
 
           {totalPages > 1 && (
-            <div className="flex justify-end gap-2 py-4">
+            <motion.div className="flex justify-end gap-2 py-4" {...createFadeSlideUp(0.12)}>
               <Button
                 variant="outline"
                 size="sm"
@@ -249,9 +249,10 @@ export function TableView({
                 Next
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
-            </div>
+            </motion.div>
           )}
-        </CardContent>
+          </CardContent>
+        </motion.div>
       </Card>
     </motion.div>
   );

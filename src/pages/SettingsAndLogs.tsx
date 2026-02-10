@@ -38,7 +38,7 @@ import { useSLAPolicies, useUpdateSLAPolicy } from '@/hooks/useSLAPolicies';
 import { useLogs } from '@/hooks/useLogs';
 import { useUsersForAssignment } from '@/hooks/useUsers';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import { EmptyState } from '@/components/common/EmptyState';
 import { InlineEditableText } from '@/components/ui/inline-editable-text';
 import {
@@ -55,11 +55,23 @@ import { Search, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { mapLogToText } from '@/features/logs/mapLogToText';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { motion } from 'motion/react';
+import { createFadeSlideUp } from '@/lib/motion';
+import { UserManagementPanel } from '@/pages/Users';
+import { useSearchParams } from 'react-router-dom';
 
 
 /* ================= PAGE ================= */
 
 export const SettingsAndLogs: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromQuery = searchParams.get('tab');
+  const validTabs = ['general', 'users', 'categories', 'sla', 'logs'] as const;
+  type SettingsTab = (typeof validTabs)[number];
+  const currentTab: SettingsTab = validTabs.includes(tabFromQuery as SettingsTab)
+    ? (tabFromQuery as SettingsTab)
+    : 'general';
+
   const { data: settings, isLoading: isLoadingSettings } = useSettings();
   const updateSetting = useUpdateSetting();
   const { data: categories, isLoading: isLoadingCategories } = useCategories();
@@ -305,13 +317,19 @@ export const SettingsAndLogs: React.FC = () => {
     isLoadingUsers ||
     isLoadingLogs
   ) {
-    return <LoadingSpinner className="h-full" />;
+    return (
+      <div className="flex flex-col gap-6 p-4 md:p-6">
+        <div className="h-8 w-1/3 rounded bg-muted animate-pulse"></div>
+        <div className="h-5 w-1/2 rounded bg-muted animate-pulse"></div>
+        <LoadingSkeleton count={6} className="md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" />
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6">
+    <motion.div className="flex flex-col gap-6 p-4 md:p-6" {...createFadeSlideUp(0)}>
       {/* ===== Page Header ===== */}
-      <div className="space-y-2">
+      <motion.div className="space-y-2" {...createFadeSlideUp(0.04)}>
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
           Neturai IT Manager
         </p>
@@ -319,11 +337,19 @@ export const SettingsAndLogs: React.FC = () => {
         <p className="text-muted-foreground">
           Manage system configuration and audit activity.
         </p>
-      </div>
+      </motion.div>
 
-      <Tabs defaultValue="general">
+      <motion.div {...createFadeSlideUp(0.08)}>
+        <Tabs
+          value={currentTab}
+          onValueChange={(value) => {
+            if (!validTabs.includes(value as SettingsTab)) return;
+            setSearchParams({ tab: value });
+          }}
+        >
         <TabsList className="bg-muted/40 p-1 rounded-lg w-fit">
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="users">Users & Roles</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="sla">SLA Policies</TabsTrigger>
           <TabsTrigger value="logs">System Logs</TabsTrigger>
@@ -429,6 +455,16 @@ export const SettingsAndLogs: React.FC = () => {
                 </div>
               </div>
             </div>
+          </SettingsSection>
+        </TabsContent>
+
+        {/* ===== USERS ===== */}
+        <TabsContent value="users" className="mt-6">
+          <SettingsSection
+            title="Users & Roles"
+            description="Manage access control and profile administration"
+          >
+            <UserManagementPanel embedded />
           </SettingsSection>
         </TabsContent>
 
@@ -660,9 +696,11 @@ export const SettingsAndLogs: React.FC = () => {
                           </TableCell>
                           <TableCell className="space-y-1">
                             {(() => {
+                              const logDetails =
+                                (log.details as Record<string, unknown>) ?? null;
                               const { title, description } = mapLogToText(
                                 log.action,
-                                log.details as any
+                                logDetails
                               );
 
                               return (
@@ -741,7 +779,8 @@ export const SettingsAndLogs: React.FC = () => {
             )}
           </SettingsSection>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </motion.div>
 
       <AlertDialog
         open={!!deleteTarget}
@@ -793,7 +832,7 @@ export const SettingsAndLogs: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </motion.div>
   );
 };
 

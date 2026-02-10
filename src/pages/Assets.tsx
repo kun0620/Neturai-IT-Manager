@@ -7,6 +7,7 @@ import { useUsersForAssignment } from '@/hooks/useUsers';
 import { getColumns } from '@/components/assets/columns';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 import { AssetWithType } from '@/types/asset';
+import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 
 export function Assets() {
   const { can, loading: profileLoading } = useCurrentProfile();
@@ -47,10 +48,9 @@ export function Assets() {
   if (profileLoading) {
     return (
       <div className="flex flex-col gap-6 p-4 md:p-6">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Asset Management
-        </h1>
-        <p className="text-muted-foreground">Loading profile...</p>
+        <div className="h-8 w-1/3 rounded bg-muted animate-pulse"></div>
+        <div className="h-5 w-1/2 rounded bg-muted animate-pulse"></div>
+        <LoadingSkeleton count={6} className="md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" />
       </div>
     );
   }
@@ -77,10 +77,9 @@ export function Assets() {
   if (isLoading || usersLoading) {
     return (
       <div className="flex flex-col gap-6 p-4 md:p-6">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Asset Management
-        </h1>
-        <p className="text-muted-foreground">Loading assets...</p>
+        <div className="h-8 w-1/3 rounded bg-muted animate-pulse"></div>
+        <div className="h-5 w-1/2 rounded bg-muted animate-pulse"></div>
+        <LoadingSkeleton count={6} className="md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" />
       </div>
     );
   }

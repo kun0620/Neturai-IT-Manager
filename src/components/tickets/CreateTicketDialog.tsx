@@ -212,10 +212,11 @@ export function CreateTicketDialog({
           )}
 
           {step === 1 ? (
-            <Button onClick={handleNext}>Next</Button>
+            <Button onClick={handleNext} className="btn-motion-primary">Next</Button>
           ) : (
             <Button
               onClick={handleSubmit}
+              className="btn-motion-primary"
               disabled={createTicketMutation.isPending}
             >
               {createTicketMutation.isPending && (

@@ -10,6 +10,7 @@ import { AssetManagement } from '@/pages/AssetManagement';
 import Users from '@/pages/Users';
 import Reports from '@/pages/Reports';
 import { SettingsAndLogs } from '@/pages/SettingsAndLogs';
+import { ProfilePage } from '@/pages/Profile';
 import { AuthProvider } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 // Removed: import { TicketDetailsPage } from '@/pages/TicketDetailsPage';
@@ -34,6 +35,7 @@ function App() {
               <Route path="assets/new" element={<AssetManagement />} /> {/* New route for adding asset */}
               <Route path="users" element={<Users />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="profile" element={<ProfilePage />} />
               <Route path="settings" element={<SettingsAndLogs />} />
             </Route>
           </Route>

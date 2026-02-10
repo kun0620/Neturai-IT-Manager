@@ -9,6 +9,7 @@ import { AssetWithType } from '@/types/asset';
 import { AssetDrawer } from '@/features/assets/components/AssetDrawer';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/common/EmptyState';
+import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import {
   Select,
   SelectContent,
@@ -119,10 +120,9 @@ export function AssetManagement() {
   if (isLoading || usersLoading) {
     return (
       <div className="flex flex-col gap-6 p-4 md:p-6">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Asset Management
-        </h1>
-        <p className="text-muted-foreground">Loading assets...</p>
+        <div className="h-8 w-1/3 rounded bg-muted animate-pulse"></div>
+        <div className="h-5 w-1/2 rounded bg-muted animate-pulse"></div>
+        <LoadingSkeleton count={6} className="md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" />
       </div>
     );
   }

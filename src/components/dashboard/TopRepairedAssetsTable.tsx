@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 interface TopRepairedAssetsTableProps {
   data: { asset_name: string; asset_code: string; repairs_count: number }[];

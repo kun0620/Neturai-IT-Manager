@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Tables } from '@/types/database.types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DragStartEvent } from '@dnd-kit/core';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { cardRevealVariants, createFadeSlideUp } from '@/lib/motion';
+import type { BadgeProps } from '@/components/ui/badge';
+import { getTicketPriorityUi, getTicketStatusUi } from '@/lib/ticket-ui';
 
 
 import {
@@ -29,31 +32,21 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-/* ================= Constants ================= */
-
-const STATUS_LABEL: Record<string, string> = {
-  open: 'OPEN',
-  in_progress: 'IN PROGRESS',
-  closed: 'CLOSED',
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  open: 'text-green-600',
-  in_progress: 'text-yellow-600',
-  closed: 'text-blue-600',
-};
-
 /* ================= Ticket Card ================= */
 
 function KanbanTicketCard({
   ticket,
   categoryName,
-  priorityVariant,
+  priorityBadgeVariant,
+  priorityLabel,
+  index,
   onOpen,
 }: {
   ticket: Tables<'tickets'>;
   categoryName: string;
-  priorityVariant: 'outline' | 'secondary' | 'default' | 'destructive';
+  priorityBadgeVariant: NonNullable<BadgeProps['variant']>;
+  priorityLabel: string;
+  index: number;
   onOpen: () => void;
 }) {
   const {
@@ -77,6 +70,10 @@ function KanbanTicketCard({
       {...attributes}
       {...listeners}
       layout
+      variants={cardRevealVariants}
+      custom={index}
+      initial="hidden"
+      animate="visible"
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('button,a')) return;
         onOpen();
@@ -97,8 +94,8 @@ function KanbanTicketCard({
           {categoryName}
         </Badge>
 
-        <Badge variant={priorityVariant} className="text-[11px]">
-          {ticket.priority}
+        <Badge variant={priorityBadgeVariant} className="text-[11px]">
+          {priorityLabel}
         </Badge>
       </div>
 
@@ -116,11 +113,13 @@ function KanbanTicketCard({
 function KanbanOverlayCard({
   ticket,
   categoryName,
-  priorityVariant,
+  priorityBadgeVariant,
+  priorityLabel,
 }: {
   ticket: Tables<'tickets'>;
   categoryName: string;
-  priorityVariant: 'outline' | 'secondary' | 'default' | 'destructive';
+  priorityBadgeVariant: NonNullable<BadgeProps['variant']>;
+  priorityLabel: string;
 }) {
   return (
     <div
@@ -145,8 +144,8 @@ function KanbanOverlayCard({
           {categoryName}
         </Badge>
 
-        <Badge variant={priorityVariant} className="text-[11px]">
-          {ticket.priority}
+        <Badge variant={priorityBadgeVariant} className="text-[11px]">
+          {priorityLabel}
         </Badge>
       </div>
 
@@ -218,21 +217,7 @@ export function KanbanView({ tickets, categories }: KanbanViewProps) {
 
   const getCategoryName = (id: string | null) =>
     categories.find((c) => c.id === id)?.name || 'N/A';
-
-  const getPriorityVariant = (
-    priority: Tables<'tickets'>['priority']
-  ) => {
-    switch (priority) {
-      case 'Medium':
-        return 'secondary';
-      case 'High':
-        return 'default';
-      case 'Critical':
-        return 'destructive';
-      default:
-        return 'outline';
-    }
-  };
+  
   const resolveStatusFromOver = (overId: string) => {
     // 1. วางลง column
     if (isTicketStatus(overId)) {
@@ -311,6 +296,9 @@ const handleDragEnd = async (event: DragEndEvent) => {
     [localTickets]
   );
 
+  const activePriorityUi = activeTicket
+    ? getTicketPriorityUi(activeTicket.priority)
+    : null;
 
   /* ---------- Render ---------- */
 
@@ -330,20 +318,24 @@ const handleDragEnd = async (event: DragEndEvent) => {
         )}
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+          {...createFadeSlideUp(0)}
           className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4 items-start"
         >
-          {TICKET_STATUS_OPTIONS.map((status) => (
-            <Card key={status} className="flex flex-col">
+          {TICKET_STATUS_OPTIONS.map((status, columnIndex) => {
+            const statusUi = getTicketStatusUi(status);
+            return (
+            <motion.div key={status} {...createFadeSlideUp(columnIndex * 0.04)}>
+              <Card className="flex flex-col">
               {/* Column Header */}
               <CardHeader className="pb-2 border-b bg-muted/20">
                 <CardTitle className="flex items-center justify-between text-xs font-semibold">
-                  <span className={cn('uppercase', STATUS_COLOR[status])}>
-                    {STATUS_LABEL[status]}
+                  <span className={cn('uppercase', statusUi.textClass)}>
+                    {statusUi.label}
                   </span>
-                  <Badge variant="outline" className="text-[11px]">
+                  <Badge
+                    variant={statusUi.variant}
+                    className="text-[11px]"
+                  >
                     {ticketsByStatus[status].length}
                   </Badge>
                 </CardTitle>
@@ -362,27 +354,35 @@ const handleDragEnd = async (event: DragEndEvent) => {
                       </div>
                     )}
 
-                    {ticketsByStatus[status].map(ticket => (
-                      <KanbanTicketCard
-                        key={ticket.id}
-                        ticket={ticket}
-                        categoryName={getCategoryName(ticket.category_id)}
-                        priorityVariant={getPriorityVariant(ticket.priority)}
-                        onOpen={() => openDrawer(ticket.id)}
-                      />
-                    ))}
+                    {ticketsByStatus[status].map((ticket, ticketIndex) => {
+                      const priorityUi = getTicketPriorityUi(ticket.priority);
+                      return (
+                        <KanbanTicketCard
+                          key={ticket.id}
+                          ticket={ticket}
+                          categoryName={getCategoryName(ticket.category_id)}
+                          priorityBadgeVariant={priorityUi.variant}
+                          priorityLabel={priorityUi.label}
+                          index={ticketIndex}
+                          onOpen={() => openDrawer(ticket.id)}
+                        />
+                      );
+                    })}
                   </SortableContext>
                 </KanbanColumn>
               </CardContent>
-            </Card>
-          ))}
+              </Card>
+            </motion.div>
+            );
+          })}
         </motion.div>
         <DragOverlay>
         {activeTicket ? (
           <KanbanOverlayCard
             ticket={activeTicket}
             categoryName={getCategoryName(activeTicket.category_id)}
-            priorityVariant={getPriorityVariant(activeTicket.priority)}
+            priorityBadgeVariant={activePriorityUi?.variant ?? 'outline'}
+            priorityLabel={activePriorityUi?.label ?? 'Low'}
           />
         ) : null}
       </DragOverlay>
