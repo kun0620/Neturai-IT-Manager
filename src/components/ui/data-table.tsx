@@ -96,12 +96,12 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="w-full">
-      <div className="flex items-center py-4">
+      <div className="flex flex-wrap items-center gap-2 py-4">
         <Input
           placeholder={globalFilterPlaceholder || 'Search all columns...'}
           value={(table.getState().globalFilter as string) ?? ''}
           onChange={(event) => table.setGlobalFilter(event.target.value)}
-          className="max-w-sm"
+          className="w-full max-w-sm"
         />
         {filterColumnId && (
           <Input
@@ -110,7 +110,7 @@ export function DataTable<TData, TValue>({
             onChange={(event) =>
               table.getColumn(filterColumnId)?.setFilterValue(event.target.value)
             }
-            className="ml-2 max-w-sm"
+            className="w-full max-w-sm"
           />
         )}
         <DropdownMenu>

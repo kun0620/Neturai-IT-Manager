@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ColumnDef } from '@tanstack/react-table';
 import { useQueryClient } from '@tanstack/react-query';
 import { DataTable } from '@/components/ui/data-table';
@@ -72,29 +73,11 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
     }>
   >([]);
   const [editAssetsLoading, setEditAssetsLoading] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const currentUserId = profile?.id;
 
-  // Loading must be checked before permissions.
-  if (isLoading || profileLoading) {
-    return (
-      <div className="flex flex-col gap-6 p-4 md:p-6">
-        <div className="h-8 w-1/3 rounded bg-muted animate-pulse"></div>
-        <div className="h-5 w-1/2 rounded bg-muted animate-pulse"></div>
-        <LoadingSkeleton count={6} className="md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" />
-      </div>
-    );
-  }
-
-  if (!canViewUsers) {
-    return (
-      <div className="p-6 text-muted-foreground">
-        You do not have permission to view users.
-      </div>
-    );
-  }
-
-  const loadPrimaryAssets = async (userId: string) => {
+  const loadPrimaryAssets = useCallback(async (userId: string) => {
     setEditAssetsLoading(true);
     const { data, error } = await supabase
       .from('assets')
@@ -130,9 +113,9 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
 
     setEditAssets(primaryAssets);
     setEditAssetsLoading(false);
-  };
+  }, []);
 
-  const openEditProfile = (user: AdminUser) => {
+  const openEditProfile = useCallback((user: AdminUser) => {
     setEditTarget(user);
     setEditFullName(user.full_name ?? user.name ?? '');
     setEditDepartment(user.department ?? '');
@@ -141,7 +124,41 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
     setEditPrimaryAssetId(user.assigned_asset?.id ?? '');
     setEditOpen(true);
     loadPrimaryAssets(user.id);
-  };
+  }, [loadPrimaryAssets]);
+
+  useEffect(() => {
+    const editUserId = searchParams.get('editUserId');
+    if (!editUserId || !users || !canEditUsers || editOpen) return;
+
+    const target = users.find((u) => u.id === editUserId);
+    if (!target) return;
+
+    openEditProfile(target);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('editUserId');
+      return next;
+    });
+  }, [searchParams, users, canEditUsers, editOpen, setSearchParams, openEditProfile]);
+
+  // Loading must be checked before permissions.
+  if (isLoading || profileLoading) {
+    return (
+      <div className="flex flex-col gap-6 p-4 md:p-6">
+        <div className="h-8 w-1/3 rounded bg-muted animate-pulse"></div>
+        <div className="h-5 w-1/2 rounded bg-muted animate-pulse"></div>
+        <LoadingSkeleton count={6} className="md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3" />
+      </div>
+    );
+  }
+
+  if (!canViewUsers) {
+    return (
+      <div className="p-6 text-muted-foreground">
+        You do not have permission to view users.
+      </div>
+    );
+  }
 
   const handleSaveProfile = async () => {
     if (!editTarget) return;

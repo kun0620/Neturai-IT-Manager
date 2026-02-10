@@ -21,12 +21,18 @@ import {
 } from '@/components/ui/tooltip';
 
 const STATUS_STYLE: Record<string, string> = {
-  Available: 'bg-emerald-500/10 text-emerald-700',
-  Assigned: 'bg-blue-500/10 text-blue-700',
-  'In Repair': 'bg-amber-500/10 text-amber-700',
-  Retired: 'bg-gray-500/10 text-gray-700',
-  Lost: 'bg-red-500/10 text-red-700',
-  'In Use': 'bg-purple-500/10 text-purple-700',
+  Available:
+    'bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))] border-[hsl(var(--success)/0.25)]',
+  Assigned:
+    'bg-[hsl(var(--info)/0.14)] text-[hsl(var(--info))] border-[hsl(var(--info)/0.25)]',
+  'In Repair':
+    'bg-[hsl(var(--warning)/0.14)] text-[hsl(var(--warning))] border-[hsl(var(--warning)/0.25)]',
+  Retired:
+    'bg-[hsl(var(--muted)/0.5)] text-muted-foreground border-[hsl(var(--border))]',
+  Lost:
+    'bg-[hsl(var(--destructive)/0.14)] text-[hsl(var(--destructive))] border-[hsl(var(--destructive)/0.25)]',
+  'In Use':
+    'bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.25)]',
 };
 
 const TextWithTooltip = ({
@@ -101,6 +107,7 @@ export function getColumns(): ColumnDef<AssetWithType>[] {
     },
     {
       id: 'asset_type',
+      accessorFn: (row) => row.asset_type?.name ?? '',
       header: 'Type',
       size: 160,
       cell: ({ row }) => (
@@ -113,6 +120,7 @@ export function getColumns(): ColumnDef<AssetWithType>[] {
     },
     {
       id: 'category',
+      accessorFn: (row) => row.category?.name ?? '',
       header: 'Category',
       size: 160,
       cell: ({ row }) => (

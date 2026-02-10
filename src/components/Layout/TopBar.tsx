@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { notifyError } from '@/lib/notify';
 import {
@@ -6,6 +6,7 @@ import {
   User,
   Github,
   Search,
+  Loader2,
   ChevronDown,
   SlidersHorizontal,
   Users2,
@@ -37,10 +38,24 @@ import { Input } from '@/components/ui/input';
 
 
 export function TopBar() {
+  type SearchScope = 'all' | 'tickets' | 'assets' | 'users';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<SearchScope>('all');
+  const [isSearching, setIsSearching] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+  const searchListRef = useRef<HTMLDivElement | null>(null);
+  const [ticketResults, setTicketResults] = useState<
+    Array<{ id: string; title: string; status: string | null; priority: string | null }>
+  >([]);
+  const [assetResults, setAssetResults] = useState<
+    Array<{ id: string; name: string; asset_code: string | null; status: string | null }>
+  >([]);
+  const [userResults, setUserResults] = useState<
+    Array<{ id: string; name: string | null; email: string | null; department: string | null }>
+  >([]);
   const { user } = useAuth();
   const navigate = useNavigate();
   const { openDrawer } = useTicketDrawer();
@@ -77,6 +92,145 @@ export function TopBar() {
     return `${item.label} ${item.keywords}`.toLowerCase().includes(q);
   });
 
+  type SearchOverlayItem =
+    | { kind: 'quick'; key: string; href: string }
+    | { kind: 'ticket'; key: string; id: string }
+    | { kind: 'asset'; key: string; id: string }
+    | { kind: 'user'; key: string; id: string };
+
+  const keyboardItems = useMemo<SearchOverlayItem[]>(() => {
+    const query = searchQuery.trim();
+    const showTickets = searchScope === 'all' || searchScope === 'tickets';
+    const showAssets = searchScope === 'all' || searchScope === 'assets';
+    const showUsers = searchScope === 'all' || searchScope === 'users';
+
+    if (query.length < 2) {
+      return filteredSearchItems.map((item) => ({
+        kind: 'quick',
+        key: `quick-${item.href}`,
+        href: item.href,
+      }));
+    }
+
+    if (isSearching) return [];
+
+    return [
+      ...(showTickets
+        ? ticketResults.map((ticket) => ({
+            kind: 'ticket' as const,
+            key: `ticket-${ticket.id}`,
+            id: ticket.id,
+          }))
+        : []),
+      ...(showAssets
+        ? assetResults.map((asset) => ({
+            kind: 'asset' as const,
+            key: `asset-${asset.id}`,
+            id: asset.id,
+          }))
+        : []),
+      ...(showUsers
+        ? userResults.map((profile) => ({
+            kind: 'user' as const,
+            key: `user-${profile.id}`,
+            id: profile.id,
+          }))
+        : []),
+    ];
+  }, [
+    searchQuery,
+    searchScope,
+    filteredSearchItems,
+    isSearching,
+    ticketResults,
+    assetResults,
+    userResults,
+  ]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+
+    const query = searchQuery.trim();
+    const shouldSearchTickets = searchScope === 'all' || searchScope === 'tickets';
+    const shouldSearchAssets = searchScope === 'all' || searchScope === 'assets';
+    const shouldSearchUsers = searchScope === 'all' || searchScope === 'users';
+
+    if (query.length < 2) {
+      setTicketResults([]);
+      setAssetResults([]);
+      setUserResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const cleaned = query.replace(/[,%()]/g, ' ').trim();
+    const like = `%${cleaned}%`;
+    let isCancelled = false;
+
+    const timeout = window.setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const [ticketsRes, assetsRes, usersRes] = await Promise.all([
+          shouldSearchTickets
+            ? supabase
+                .from('tickets')
+                .select('id, title, status, priority, description, subject')
+                .or(`title.ilike.${like},description.ilike.${like},subject.ilike.${like}`)
+                .limit(6)
+            : Promise.resolve({ data: [] }),
+          shouldSearchAssets
+            ? supabase
+                .from('assets')
+                .select('id, name, asset_code, status, location')
+                .or(`name.ilike.${like},asset_code.ilike.${like},location.ilike.${like},status.ilike.${like}`)
+                .limit(6)
+            : Promise.resolve({ data: [] }),
+          shouldSearchUsers
+            ? supabase
+                .from('profiles')
+                .select('id, name, email, department')
+                .or(`name.ilike.${like},email.ilike.${like},department.ilike.${like}`)
+                .limit(6)
+            : Promise.resolve({ data: [] }),
+        ]);
+
+        if (isCancelled) return;
+
+        setTicketResults(
+          (ticketsRes.data ?? []).map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            priority: t.priority,
+          }))
+        );
+        setAssetResults(
+          (assetsRes.data ?? []).map((a) => ({
+            id: a.id,
+            name: a.name,
+            asset_code: a.asset_code,
+            status: a.status,
+          }))
+        );
+        setUserResults(
+          (usersRes.data ?? []).map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            department: u.department,
+          }))
+        );
+      } finally {
+        if (!isCancelled) setIsSearching(false);
+      }
+    }, 240);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [searchOpen, searchQuery, searchScope]);
+
   useEffect(() => {
     if (!mobileMenuOpen && !searchOpen) return;
     const previous = document.body.style.overflow;
@@ -86,6 +240,38 @@ export function TopBar() {
     };
   }, [mobileMenuOpen, searchOpen]);
 
+  const goTo = useCallback((href: string) => {
+    navigate(href);
+    setMobileMenuOpen(false);
+    setMobileSettingsOpen(false);
+    setSearchOpen(false);
+    setSearchQuery('');
+  }, [navigate]);
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchScope('all');
+    setActiveSearchIndex(-1);
+  }, []);
+
+  const selectSearchItem = useCallback((item: SearchOverlayItem) => {
+    if (item.kind === 'quick') {
+      goTo(item.href);
+      return;
+    }
+    if (item.kind === 'ticket') {
+      goTo('/tickets');
+      requestAnimationFrame(() => openDrawer(item.id));
+      return;
+    }
+    if (item.kind === 'asset') {
+      goTo(`/assets?assetId=${item.id}`);
+      return;
+    }
+    goTo(`/users?editUserId=${item.id}`);
+  }, [goTo, openDrawer]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -93,21 +279,51 @@ export function TopBar() {
         setSearchOpen(true);
         return;
       }
+      if (!searchOpen) return;
+
       if (event.key === 'Escape') {
-        setSearchOpen(false);
+        closeSearch();
+        return;
+      }
+      if (keyboardItems.length === 0) return;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setActiveSearchIndex((prev) => {
+          if (prev < 0) return 0;
+          return (prev + 1) % keyboardItems.length;
+        });
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActiveSearchIndex((prev) => {
+          if (prev < 0) return keyboardItems.length - 1;
+          return (prev - 1 + keyboardItems.length) % keyboardItems.length;
+        });
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        if (activeSearchIndex >= 0 && activeSearchIndex < keyboardItems.length) {
+          selectSearchItem(keyboardItems[activeSearchIndex]);
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [searchOpen, keyboardItems, activeSearchIndex, closeSearch, selectSearchItem]);
 
-  const goTo = (href: string) => {
-    navigate(href);
-    setMobileMenuOpen(false);
-    setMobileSettingsOpen(false);
-    setSearchOpen(false);
-    setSearchQuery('');
-  };
+  useEffect(() => {
+    if (!searchOpen) return;
+    setActiveSearchIndex(keyboardItems.length > 0 ? 0 : -1);
+  }, [searchOpen, searchQuery, searchScope, keyboardItems.length]);
+
+  useEffect(() => {
+    if (!searchOpen || activeSearchIndex < 0) return;
+    const activeItem = searchListRef.current?.querySelector<HTMLElement>('[data-search-active="true"]');
+    activeItem?.scrollIntoView({ block: 'nearest' });
+  }, [searchOpen, activeSearchIndex, keyboardItems.length, isSearching, searchQuery]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -152,6 +368,16 @@ export function TopBar() {
         return { label: 'Info', color: 'bg-gray-500/20 text-gray-700' };
     }
   };
+
+  const scopeOptions: Array<{ value: SearchScope; label: string }> = [
+    { value: 'all', label: 'All' },
+    { value: 'tickets', label: 'Tickets' },
+    { value: 'assets', label: 'Assets' },
+    { value: 'users', label: 'Users' },
+  ];
+  const visibleTicketCount = searchScope === 'all' || searchScope === 'tickets' ? ticketResults.length : 0;
+  const visibleAssetCount = searchScope === 'all' || searchScope === 'assets' ? assetResults.length : 0;
+  const visibleUserCount = searchScope === 'all' || searchScope === 'users' ? userResults.length : 0;
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-card shadow-sm">
@@ -379,8 +605,7 @@ export function TopBar() {
               className="absolute inset-0 bg-black/55 backdrop-blur-sm"
               aria-label="Close search overlay"
               onClick={() => {
-                setSearchOpen(false);
-                setSearchQuery('');
+                closeSearch();
               }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -405,23 +630,183 @@ export function TopBar() {
                 />
               </div>
 
-              <div className="mt-2 max-h-[50vh] overflow-auto rounded-lg border border-border bg-background p-1 sm:max-h-[45vh]">
-                {filteredSearchItems.length === 0 ? (
-                  <p className="px-3 py-4 text-sm text-muted-foreground">
-                    No results found
-                  </p>
-                ) : (
-                  filteredSearchItems.map((item) => (
+              {searchQuery.trim().length >= 2 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1 px-1">
+                  {scopeOptions.map((scope) => (
                     <button
-                      key={item.href}
+                      key={scope.value}
                       type="button"
-                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary"
-                      onClick={() => goTo(item.href)}
+                      onClick={() => setSearchScope(scope.value)}
+                      className={clsx(
+                        'inline-flex h-8 items-center rounded-full border px-3 text-xs font-medium transition-colors',
+                        searchScope === scope.value
+                          ? 'border-primary/40 bg-primary/15 text-primary'
+                          : 'border-border bg-background text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                      )}
                     >
-                      <span>{item.label}</span>
-                      <span className="text-xs text-muted-foreground">Open</span>
+                      {scope.label}
                     </button>
-                  ))
+                  ))}
+                </div>
+              )}
+
+              <div
+                ref={searchListRef}
+                className="mt-2 max-h-[50vh] overflow-auto rounded-lg border border-border bg-background p-1 sm:max-h-[45vh]"
+              >
+                {searchQuery.trim().length < 2 ? (
+                  <>
+                    <p className="px-3 pt-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                      Quick Links
+                    </p>
+                    {filteredSearchItems.map((item) => (
+                      (() => {
+                        const idx = keyboardItems.findIndex(
+                          (entry) => entry.kind === 'quick' && entry.href === item.href
+                        );
+                        const isActive = idx === activeSearchIndex;
+                        return (
+                          <button
+                            key={item.href}
+                            type="button"
+                            data-search-active={isActive ? 'true' : undefined}
+                            className={clsx(
+                              'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
+                              isActive && 'bg-primary/15 text-primary'
+                            )}
+                            onMouseEnter={() => setActiveSearchIndex(idx)}
+                            onClick={() => goTo(item.href)}
+                          >
+                            <span>{item.label}</span>
+                            <span className="text-xs text-muted-foreground">Open</span>
+                          </button>
+                        );
+                      })()
+                    ))}
+                  </>
+                ) : isSearching ? (
+                  <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Searching...
+                  </div>
+                ) : (
+                  <>
+                    {(searchScope === 'all' || searchScope === 'tickets') && ticketResults.length > 0 && (
+                      <div className="mb-1">
+                        <p className="px-3 pt-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Tickets
+                        </p>
+                        {ticketResults.map((ticket) => (
+                          (() => {
+                            const idx = keyboardItems.findIndex(
+                              (entry) => entry.kind === 'ticket' && entry.id === ticket.id
+                            );
+                            const isActive = idx === activeSearchIndex;
+                            return (
+                              <button
+                                key={ticket.id}
+                                type="button"
+                                data-search-active={isActive ? 'true' : undefined}
+                                className={clsx(
+                                  'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
+                                  isActive && 'bg-primary/15 text-primary'
+                                )}
+                                onMouseEnter={() => setActiveSearchIndex(idx)}
+                                onClick={() => {
+                                  goTo('/tickets');
+                                  requestAnimationFrame(() => openDrawer(ticket.id));
+                                }}
+                              >
+                                <span className="truncate pr-3">{ticket.title}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {(ticket.status ?? '—').replace('_', ' ')}
+                                </span>
+                              </button>
+                            );
+                          })()
+                        ))}
+                      </div>
+                    )}
+
+                    {(searchScope === 'all' || searchScope === 'assets') && assetResults.length > 0 && (
+                      <div className="mb-1">
+                        <p className="px-3 pt-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Assets
+                        </p>
+                        {assetResults.map((asset) => (
+                          (() => {
+                            const idx = keyboardItems.findIndex(
+                              (entry) => entry.kind === 'asset' && entry.id === asset.id
+                            );
+                            const isActive = idx === activeSearchIndex;
+                            return (
+                              <button
+                                key={asset.id}
+                                type="button"
+                                data-search-active={isActive ? 'true' : undefined}
+                                className={clsx(
+                                  'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
+                                  isActive && 'bg-primary/15 text-primary'
+                                )}
+                                onMouseEnter={() => setActiveSearchIndex(idx)}
+                                onClick={() => goTo(`/assets?assetId=${asset.id}`)}
+                              >
+                                <span className="truncate pr-3">
+                                  {asset.name}
+                                  {asset.asset_code ? ` (${asset.asset_code})` : ''}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {asset.status ?? '—'}
+                                </span>
+                              </button>
+                            );
+                          })()
+                        ))}
+                      </div>
+                    )}
+
+                    {(searchScope === 'all' || searchScope === 'users') && userResults.length > 0 && (
+                      <div className="mb-1">
+                        <p className="px-3 pt-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Users
+                        </p>
+                        {userResults.map((profile) => (
+                          (() => {
+                            const idx = keyboardItems.findIndex(
+                              (entry) => entry.kind === 'user' && entry.id === profile.id
+                            );
+                            const isActive = idx === activeSearchIndex;
+                            return (
+                              <button
+                                key={profile.id}
+                                type="button"
+                                data-search-active={isActive ? 'true' : undefined}
+                                className={clsx(
+                                  'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
+                                  isActive && 'bg-primary/15 text-primary'
+                                )}
+                                onMouseEnter={() => setActiveSearchIndex(idx)}
+                                onClick={() => goTo(`/users?editUserId=${profile.id}`)}
+                              >
+                                <span className="truncate pr-3">
+                                  {profile.name || profile.email || 'Unknown User'}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {profile.department || 'No Dept'}
+                                </span>
+                              </button>
+                            );
+                          })()
+                        ))}
+                      </div>
+                    )}
+
+                    {visibleTicketCount + visibleAssetCount + visibleUserCount === 0 && (
+                        <p className="px-3 py-4 text-sm text-muted-foreground">
+                          No results found
+                        </p>
+                      )}
+                  </>
                 )}
               </div>
             </motion.div>

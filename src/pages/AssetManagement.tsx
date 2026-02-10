@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/ui/data-table';
 import { AssetFormDialog } from '@/components/assets/AssetFormDialog';
@@ -41,12 +42,20 @@ export function AssetManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
 
 
   // เพิ่ม handler ให้ครบ
   const handleCloseDrawer = () => {
     setIsDrawerOpen(false);
     setSelectedAssetForDrawer(null);
+    if (searchParams.get('assetId')) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('assetId');
+        return next;
+      });
+    }
   };
 
   const handleEditFromDrawer = (asset: AssetWithType) => {
@@ -113,6 +122,17 @@ export function AssetManagement() {
     });
   }, [assets, statusFilter, categoryFilter, typeFilter]);
 
+  React.useEffect(() => {
+    const assetId = searchParams.get('assetId');
+    if (!assetId) return;
+
+    const target = assets.find((a) => a.id === assetId);
+    if (!target) return;
+
+    setSelectedAssetForDrawer(target);
+    setIsDrawerOpen(true);
+  }, [assets, searchParams]);
+
 
 
   /* ---------------- Loading / Error ---------------- */
@@ -178,7 +198,7 @@ export function AssetManagement() {
       >
         Add Asset
       </Button>
-      <div className="mt-2 flex items-center justify-between rounded-md border bg-background/80 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 md:sticky md:top-14 md:z-20 md:mt-0">
+      <div className="mt-2 flex items-center justify-between rounded-md border bg-background/80 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 md:sticky md:top-[68px] md:z-20 md:mt-0 lg:top-[64px]">
         <h2 className="text-lg font-semibold tracking-tight">
           Filters & Actions
         </h2>
@@ -199,9 +219,18 @@ export function AssetManagement() {
           Total: {assets.length}
         </Badge>
         {Object.entries(statusCounts).map(([status, count]) => (
-          <Badge key={status} variant="secondary">
-            {status}: {count}
-          </Badge>
+          <button
+            key={status}
+            type="button"
+            onClick={() => setStatusFilter((prev) => (prev === status ? 'all' : status))}
+          >
+            <Badge
+              variant={statusFilter === status ? 'default' : 'secondary'}
+              className="cursor-pointer"
+            >
+              {status}: {count}
+            </Badge>
+          </button>
         ))}
       </div>
 
@@ -310,7 +339,7 @@ export function AssetManagement() {
           <DataTable
             columns={getColumns()}
             data={filteredAssets}
-            filterColumnId="name"
+            globalFilterPlaceholder="Search assets by name, code, type, category, location, status..."
             onRowClick={(asset) => {
               setSelectedAssetForDrawer(asset);
               setIsDrawerOpen(true);
