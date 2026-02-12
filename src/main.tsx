@@ -8,6 +8,7 @@ import { Toaster } from './components/ui/sonner.tsx';
 import './styles/print.css';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { MotionConfig } from 'motion/react';
+import { appMotionTransition } from '@/lib/motion';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,7 +23,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <MotionConfig reducedMotion="user">
+        <MotionConfig reducedMotion="user" transition={appMotionTransition}>
           <ErrorBoundary>
             <App />
           </ErrorBoundary>

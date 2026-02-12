@@ -2,6 +2,7 @@ import * as React from 'react';
 import {
   ColumnDef,
   ColumnFiltersState,
+  RowSelectionState,
   SortingState,
   VisibilityState,
   flexRender,
@@ -32,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -40,6 +42,11 @@ interface DataTableProps<TData, TValue> {
   filterPlaceholder?: string;
   globalFilterPlaceholder?: string;
   onRowClick?: (row: TData) => void;
+  showGlobalFilter?: boolean;
+  enableRowSelection?: boolean;
+  getRowId?: (row: TData, index: number) => string;
+  onSelectedRowsChange?: (rows: TData[]) => void;
+  clearSelectionKey?: number;
 }
 
 type TableDensity = 'compact' | 'comfortable';
@@ -52,11 +59,16 @@ export function DataTable<TData, TValue>({
   filterPlaceholder,
   globalFilterPlaceholder,
   onRowClick,
+  showGlobalFilter = true,
+  enableRowSelection = false,
+  getRowId,
+  onSelectedRowsChange,
+  clearSelectionKey,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [rowSelection, setRowSelection] = React.useState({});
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [density, setDensity] = React.useState<TableDensity>(() => {
     if (typeof window === 'undefined') {
@@ -85,6 +97,8 @@ export function DataTable<TData, TValue>({
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    enableRowSelection,
+    getRowId,
     state: {
       sorting,
       columnFilters,
@@ -94,15 +108,27 @@ export function DataTable<TData, TValue>({
     },
   });
 
+  React.useEffect(() => {
+    if (!onSelectedRowsChange) return;
+    onSelectedRowsChange(table.getSelectedRowModel().rows.map((row) => row.original));
+  }, [onSelectedRowsChange, rowSelection, table, data]);
+
+  React.useEffect(() => {
+    if (clearSelectionKey === undefined) return;
+    table.resetRowSelection();
+  }, [clearSelectionKey, table]);
+
   return (
     <div className="w-full">
-      <div className="flex flex-wrap items-center gap-2 py-4">
-        <Input
-          placeholder={globalFilterPlaceholder || 'Search all columns...'}
-          value={(table.getState().globalFilter as string) ?? ''}
-          onChange={(event) => table.setGlobalFilter(event.target.value)}
-          className="w-full max-w-sm"
-        />
+      <div className="flex flex-wrap items-center gap-2 py-2">
+        {showGlobalFilter && (
+          <Input
+            placeholder={globalFilterPlaceholder || 'Search all columns...'}
+            value={(table.getState().globalFilter as string) ?? ''}
+            onChange={(event) => table.setGlobalFilter(event.target.value)}
+            className="h-8 w-full max-w-sm text-sm"
+          />
+        )}
         {filterColumnId && (
           <Input
             placeholder={filterPlaceholder || `Filter ${filterColumnId}...`}
@@ -110,12 +136,12 @@ export function DataTable<TData, TValue>({
             onChange={(event) =>
               table.getColumn(filterColumnId)?.setFilterValue(event.target.value)
             }
-            className="w-full max-w-sm"
+            className="h-8 w-full max-w-sm text-sm"
           />
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto">
+            <Button variant="outline" className="ml-auto h-8 text-sm">
               Density
             </Button>
           </DropdownMenuTrigger>
@@ -137,7 +163,7 @@ export function DataTable<TData, TValue>({
         </DropdownMenu>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-2">
+            <Button variant="outline" className="ml-2 h-8 text-sm">
               Columns
             </Button>
           </DropdownMenuTrigger>
@@ -161,47 +187,63 @@ export function DataTable<TData, TValue>({
         </DropdownMenu>
       </div>
       <div className="rounded-md border bg-background text-foreground">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id} className={headerClassName}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
-                  onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className={cellClassName}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    const headerMeta = (header.column.columnDef.meta ?? {}) as {
+                      headerClassName?: string;
+                    };
+                    return (
+                      <TableHead
+                        key={header.id}
+                        className={cn(headerClassName, headerMeta.headerClassName)}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && 'selected'}
+                    onClick={() => onRowClick?.(row.original)}
+                    className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''}
+                  >
+                    {row.getVisibleCells().map((cell) => {
+                      const cellMeta = (cell.column.columnDef.meta ?? {}) as {
+                        cellClassName?: string;
+                      };
+                      return (
+                        <TableCell
+                          key={cell.id}
+                          className={cn(cellClassName, cellMeta.cellClassName)}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center">
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="flex-1 text-sm text-muted-foreground">

@@ -151,9 +151,12 @@ const exportCSV = () => {
       </motion.div>
 
       {/* Date Range */}
-      <motion.div className="flex flex-wrap items-center gap-2" {...createFadeSlideUp(0.08)}>
+      <motion.div
+        className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-card/60 p-2"
+        {...createFadeSlideUp(0.08)}
+      >
         <button
-          className={`px-3 py-1 text-sm rounded-md border ${
+          className={`h-8 rounded-md border px-3 text-sm ${
             range === '7d' ? 'bg-primary text-primary-foreground' : ''
           }`}
           onClick={() => {
@@ -166,7 +169,7 @@ const exportCSV = () => {
         </button>
 
         <button
-          className={`px-3 py-1 text-sm rounded-md border ${
+          className={`h-8 rounded-md border px-3 text-sm ${
             range === '30d' ? 'bg-primary text-primary-foreground' : ''
           }`}
           onClick={() => {
@@ -179,7 +182,7 @@ const exportCSV = () => {
         </button>
 
         <button
-          className={`px-3 py-1 text-sm rounded-md border ${
+          className={`h-8 rounded-md border px-3 text-sm ${
             range === 'custom' ? 'bg-primary text-primary-foreground' : ''
           }`}
           onClick={() => setRange('custom')}
@@ -201,7 +204,7 @@ const exportCSV = () => {
                 }
                 setFromDate(next);
               }}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
             />
             <span className="text-sm text-muted-foreground">to</span>
             <input
@@ -216,7 +219,7 @@ const exportCSV = () => {
                 }
                 setToDate(next);
               }}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
             />
           </div>
         )}
@@ -234,7 +237,7 @@ const exportCSV = () => {
             </span>
           )}
           <button
-            className="px-3 py-1 text-sm rounded-md border hover:bg-muted"
+            className="h-8 rounded-md border px-3 text-sm hover:bg-muted"
             onClick={() => exportCSV()}
             disabled={range === 'custom' && isDateRangeInvalid}
             title={
@@ -246,7 +249,7 @@ const exportCSV = () => {
             Export CSV
           </button>
           <button
-            className="px-3 py-1 text-sm rounded-md border hover:bg-muted"
+            className="h-8 rounded-md border px-3 text-sm hover:bg-muted"
             onClick={() => window.print()}
             disabled={range === 'custom' && isDateRangeInvalid}
             title={
@@ -329,6 +332,7 @@ const exportCSV = () => {
           color="text-red-600"
           description="Tickets exceeding SLA"
           onClick={() => navigate('/tickets?sla=breach')}
+          clickHint="Open SLA breach ticket list"
         />
 
       </motion.div>

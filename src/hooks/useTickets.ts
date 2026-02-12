@@ -21,6 +21,28 @@ type ProfileLite = {
   email: string | null;
 };
 
+type DashboardMetrics = {
+  totalTickets: number;
+  totalAssets: number;
+  openTicketsCount: number;
+  inProgressTicketsCount: number;
+  closedTicketsCount: number;
+  todayTicketsCount: number;
+  overdueTicketsCount: number;
+  avgResolutionHours: number | null;
+  openTrendDelta: number;
+  inProgressTrendDelta: number;
+  closedTrendDelta: number;
+  todayTrendDelta: number;
+  overdueTrendDelta: number;
+  recentTickets: RecentTicket[];
+};
+
+type DashboardMetricsOptions = {
+  userId?: string | null;
+  onlyMy?: boolean;
+};
+
 const useLogAuthors = (logs?: LogRow[]) => {
   const userIds = Array.from(
     new Set(logs?.map(l => l.user_id).filter(Boolean) as string[])
@@ -51,82 +73,100 @@ const useLogAuthors = (logs?: LogRow[]) => {
 
 /* ================= Dashboard ================= */
 
-const useDashboardSummary = () =>
-  useQuery({
-    queryKey: ['dashboardSummary'],
+const useDashboardMetrics = (options: DashboardMetricsOptions = {}) =>
+  useQuery<DashboardMetrics>({
+    queryKey: ['dashboardMetrics', options.userId ?? null, !!options.onlyMy],
     queryFn: async () => {
-      const { count: totalTickets, error: ticketsError } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true });
+      const { data, error } = await supabase.rpc('get_dashboard_metrics', {
+        p_user_id: options.userId ?? null,
+        p_only_my: !!options.onlyMy,
+      });
+      if (error) throw error;
 
-      if (ticketsError) throw ticketsError;
+      const row = data?.[0];
+      if (!row) {
+        return {
+          totalTickets: 0,
+          totalAssets: 0,
+          openTicketsCount: 0,
+          inProgressTicketsCount: 0,
+          closedTicketsCount: 0,
+          todayTicketsCount: 0,
+          overdueTicketsCount: 0,
+          avgResolutionHours: null,
+          openTrendDelta: 0,
+          inProgressTrendDelta: 0,
+          closedTrendDelta: 0,
+          todayTrendDelta: 0,
+          overdueTrendDelta: 0,
+          recentTickets: [],
+        };
+      }
 
-      const { count: totalAssets, error: assetsError } = await supabase
-        .from('assets')
-        .select('*', { count: 'exact', head: true });
+      const recentTicketsRaw = Array.isArray(row.recent_tickets)
+        ? row.recent_tickets
+        : [];
 
-      if (assetsError) throw assetsError;
+      const recentTickets: RecentTicket[] = recentTicketsRaw
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const record = item as Record<string, unknown>;
+          const id = record.id;
+          const title = record.title;
+          if (typeof id !== 'string' || typeof title !== 'string') return null;
+
+          return {
+            id,
+            title,
+            category_id:
+              typeof record.category_id === 'string' ? record.category_id : null,
+            priority:
+              typeof record.priority === 'string' ? record.priority : 'low',
+            status:
+              record.status === 'open' ||
+              record.status === 'in_progress' ||
+              record.status === 'closed'
+                ? record.status
+                : 'open',
+            created_at:
+              typeof record.created_at === 'string' ? record.created_at : null,
+          };
+        })
+        .filter((ticket): ticket is RecentTicket => ticket !== null);
 
       return {
-        totalTickets: totalTickets ?? 0,
-        totalAssets: totalAssets ?? 0,
+        totalTickets: Number(row.total_tickets ?? 0),
+        totalAssets: Number(row.total_assets ?? 0),
+        openTicketsCount: Number(row.open_tickets_count ?? 0),
+        inProgressTicketsCount: Number(row.in_progress_tickets_count ?? 0),
+        closedTicketsCount: Number(row.closed_tickets_count ?? 0),
+        todayTicketsCount: Number(row.today_tickets_count ?? 0),
+        overdueTicketsCount: Number(row.overdue_tickets_count ?? 0),
+        avgResolutionHours:
+          row.avg_resolution_hours === null
+            ? null
+            : Number(row.avg_resolution_hours),
+        openTrendDelta: Number(row.open_trend_delta ?? 0),
+        inProgressTrendDelta: Number(row.in_progress_trend_delta ?? 0),
+        closedTrendDelta: Number(row.closed_trend_delta ?? 0),
+        todayTrendDelta: Number(row.today_trend_delta ?? 0),
+        overdueTrendDelta: Number(row.overdue_trend_delta ?? 0),
+        recentTickets,
       };
-    },
-  });
-
-const useOpenTicketsCount = () =>
-  useQuery({
-    queryKey: ['openTicketsCount'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'open');
-
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-
-const useInProgressTicketsCount = () =>
-  useQuery({
-    queryKey: ['inProgressTicketsCount'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'in_progress');
-
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-
-const useClosedTicketsCount = () =>
-  useQuery({
-    queryKey: ['closedTicketsCount'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'closed');
-
-      if (error) throw error;
-      return count ?? 0;
     },
   });
 
 /* ================= Tickets ================= */
 
-const useRecentTickets = () =>
+const useRecentTickets = (limit = 20) =>
   useQuery<RecentTicket[]>({
-    queryKey: ['recentTickets', 5],
+    queryKey: ['recentTickets', limit],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tickets')
         .select('id, title, category_id, priority, status, created_at')
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(limit);
 
       if (error) throw error;
       return data ?? [];
@@ -224,7 +264,7 @@ const useCreateTicket = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allTickets'] });
       queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
     },
   });
 };
@@ -258,6 +298,8 @@ const useUpdateTicket = () => {
     onSuccess: (_, v) => {
       queryClient.invalidateQueries({ queryKey: ['ticket', v.id] });
       queryClient.invalidateQueries({ queryKey: ['allTickets'] });
+      queryClient.invalidateQueries({ queryKey: ['recentTickets'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
     },
   });
 };
@@ -332,111 +374,10 @@ const useTicketTimeline = (ticketId?: string) => {
   });
 };
 
-const useTodayTicketsCount = () =>
-  useQuery({
-    queryKey: ['todayTicketsCount'],
-    queryFn: async () => {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-
-      const { count, error } = await supabase
-        .from('tickets')
-        .select('id', { count: 'exact', head: true })
-        .gte('created_at', start.toISOString());
-
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-
-const useOverdueTicketsCount = () =>
-  useQuery({
-    queryKey: ['overdueTicketsCount'],
-    queryFn: async () => {
-      const now = new Date().toISOString();
-
-      const { count, error } = await supabase
-        .from('tickets')
-        .select('id', { count: 'exact', head: true })
-        .lt('due_at', now)
-        .neq('status', 'closed');
-
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-
-const useAvgResolutionTime = () =>
-  useQuery({
-    queryKey: ['avgResolutionTime'],
-    queryFn: async () => {
-      const { data: logs, error } = await supabase
-        .from('logs')
-        .select('details, created_at')
-        .eq('action', 'ticket.status_changed')
-        .eq('details->>to', 'closed');
-
-      if (error) throw error;
-      if (!logs || logs.length === 0) return null;
-
-      const closedByTicket = new Map<string, string>();
-
-      // pick earliest close per ticket
-      logs
-        .filter((l) => l.details?.ticket_id && l.created_at)
-        .sort(
-          (a, b) =>
-            new Date(a.created_at as string).getTime() -
-            new Date(b.created_at as string).getTime()
-        )
-        .forEach((l) => {
-          const ticketId = l.details.ticket_id as string;
-          if (!closedByTicket.has(ticketId)) {
-            closedByTicket.set(ticketId, l.created_at as string);
-          }
-        });
-
-      if (closedByTicket.size === 0) return null;
-
-      const ticketIds = Array.from(closedByTicket.keys());
-
-      const { data: tickets, error: ticketsError } = await supabase
-        .from('tickets')
-        .select('id, created_at')
-        .in('id', ticketIds);
-
-      if (ticketsError) throw ticketsError;
-      if (!tickets || tickets.length === 0) return null;
-
-      let totalHours = 0;
-      let count = 0;
-
-      tickets.forEach((t) => {
-        const closedAt = closedByTicket.get(t.id);
-        if (!t.created_at || !closedAt) return;
-        const start = new Date(t.created_at).getTime();
-        const end = new Date(closedAt).getTime();
-        if (Number.isNaN(start) || Number.isNaN(end) || end < start) return;
-        totalHours += (end - start) / (1000 * 60 * 60);
-        count += 1;
-      });
-
-      if (count === 0) return null;
-
-      return Number((totalHours / count).toFixed(2));
-    },
-  });
-
-
-
-
 /* ================= Export ================= */
 
 export const useTickets = {
-  useDashboardSummary,
-  useOpenTicketsCount,
-  useInProgressTicketsCount,
-  useClosedTicketsCount,
+  useDashboardMetrics,
 
   useRecentTickets,
   useAllTickets,
@@ -449,9 +390,5 @@ export const useTickets = {
   useTicketComments,
   useAddTicketComment,
   useTicketTimeline,
-
-  useTodayTicketsCount,
-  useOverdueTicketsCount,
-  useAvgResolutionTime,
   useLogAuthors,
 };

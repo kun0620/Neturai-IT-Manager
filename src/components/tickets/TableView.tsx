@@ -18,9 +18,9 @@ import { Badge } from '@/components/ui/badge';
 import { Tables, Database } from '@/types/database.types';
 import { format } from 'date-fns';
 import { motion } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import { createFadeSlideUp } from '@/lib/motion';
 import { cn } from '@/lib/utils';
@@ -33,13 +33,15 @@ interface TableViewProps {
   categories: Tables<'ticket_categories'>[];
 }
 
-const ITEMS_PER_PAGE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+const TICKETS_TABLE_PAGE_SIZE_KEY = 'neturai_tickets_table_page_size';
 
 export function TableView({
   tickets,
   categories,
 }: TableViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Ticket;
     direction: 'ascending' | 'descending';
@@ -88,11 +90,50 @@ export function TableView({
     return 0;
   });
 
-  const totalPages = Math.ceil(sortedTickets.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(sortedTickets.length / pageSize);
+  const totalRows = sortedTickets.length;
+  const startRow = totalRows === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endRow = Math.min(currentPage * pageSize, totalRows);
   const currentTickets = sortedTickets.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(TICKETS_TABLE_PAGE_SIZE_KEY);
+      const parsed = Number(raw);
+      if (PAGE_SIZE_OPTIONS.includes(parsed as (typeof PAGE_SIZE_OPTIONS)[number])) {
+        setPageSize(parsed as (typeof PAGE_SIZE_OPTIONS)[number]);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(TICKETS_TABLE_PAGE_SIZE_KEY, String(pageSize));
+    } catch {
+      // ignore
+    }
+  }, [pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [pageSize]);
+
+  useEffect(() => {
+    if (totalPages === 0) {
+      if (currentPage !== 1) setCurrentPage(1);
+      return;
+    }
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const requestSort = (key: keyof Ticket) => {
     setSortConfig((prev) => ({
@@ -104,12 +145,14 @@ export function TableView({
     }));
   };
 
-  const getSortIndicator = (key: keyof Ticket) =>
-    sortConfig?.key === key
-      ? sortConfig.direction === 'ascending'
-        ? ' ▲'
-        : ' ▼'
-      : null;
+  const getSortIcon = (key: keyof Ticket) => {
+    if (sortConfig?.key !== key) return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground/70" />;
+    return sortConfig.direction === 'ascending' ? (
+      <ArrowUp className="h-3.5 w-3.5 text-foreground" />
+    ) : (
+      <ArrowDown className="h-3.5 w-3.5 text-foreground" />
+    );
+  };
 
   /* ---------------- Render ---------------- */
 
@@ -127,32 +170,69 @@ export function TableView({
 
         <motion.div {...createFadeSlideUp(0.08)}>
           <CardContent>
-          <Table>
-            <TableHeader>
+          <div className="max-h-[62vh] overflow-auto rounded-lg border border-border/70">
+          <Table className="min-w-[760px] table-fixed">
+            <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
               <TableRow>
-                <TableHead onClick={() => requestSort('title')}>
-                  Title {getSortIndicator('title')}
+                <TableHead className="w-[30%]">
+                  <button
+                    type="button"
+                    onClick={() => requestSort('title')}
+                    className="flex w-full items-center gap-1.5 text-left font-medium hover:text-foreground"
+                  >
+                    <span>Title</span>
+                    {getSortIcon('title')}
+                  </button>
                 </TableHead>
-                <TableHead onClick={() => requestSort('category_id')}>
-                  Category {getSortIndicator('category_id')}
+                <TableHead className="w-[17%]">
+                  <button
+                    type="button"
+                    onClick={() => requestSort('category_id')}
+                    className="flex w-full items-center gap-1.5 text-left font-medium hover:text-foreground"
+                  >
+                    <span>Category</span>
+                    {getSortIcon('category_id')}
+                  </button>
                 </TableHead>
-                <TableHead onClick={() => requestSort('priority')}>
-                  <div className="text-center">
-                    Priority {getSortIndicator('priority')}
-                  </div>
+                <TableHead className="w-[12%]">
+                  <button
+                    type="button"
+                    onClick={() => requestSort('priority')}
+                    className="mx-auto flex items-center justify-center gap-1.5 font-medium hover:text-foreground"
+                  >
+                    <span>Priority</span>
+                    {getSortIcon('priority')}
+                  </button>
                 </TableHead>
-                <TableHead onClick={() => requestSort('status')}>
-                  <div className="text-center">
-                    Status {getSortIndicator('status')}
-                  </div>
+                <TableHead className="w-[12%]">
+                  <button
+                    type="button"
+                    onClick={() => requestSort('status')}
+                    className="mx-auto flex items-center justify-center gap-1.5 font-medium hover:text-foreground"
+                  >
+                    <span>Status</span>
+                    {getSortIcon('status')}
+                  </button>
                 </TableHead>
-                <TableHead onClick={() => requestSort('assigned_to')}>
-                  <div className="text-center">
-                    Assigned To {getSortIndicator('assigned_to')}
-                  </div>
+                <TableHead className="w-[14%]">
+                  <button
+                    type="button"
+                    onClick={() => requestSort('assigned_to')}
+                    className="mx-auto flex items-center justify-center gap-1.5 font-medium hover:text-foreground"
+                  >
+                    <span>Assigned To</span>
+                    {getSortIcon('assigned_to')}
+                  </button>
                 </TableHead>
-                <TableHead onClick={() => requestSort('created_at')}>
-                  Created At {getSortIndicator('created_at')}
+                <TableHead className="w-[15%]">
+                  <button
+                    type="button"
+                    onClick={() => requestSort('created_at')}
+                    className="flex w-full items-center gap-1.5 text-left font-medium hover:text-foreground"
+                  >
+                    <span>Created At</span>
+                    {getSortIcon('created_at')}
+                  </button>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -169,21 +249,34 @@ export function TableView({
               {currentTickets.map((ticket) => {
                 const statusUi = getTicketStatusUi(ticket.status);
                 const priorityUi = getTicketPriorityUi(ticket.priority);
+                const assignedToLabel = isUsersLoading
+                  ? 'Loading...'
+                  : ticket.assigned_to
+                    ? userMap.get(ticket.assigned_to) ?? 'Unknown'
+                    : 'Unassigned';
 
                 return (
                   <TableRow
                     key={ticket.id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open ticket ${ticket.title}`}
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest('button,a')) return;
                       openDrawer(ticket.id);
                     }}
-                    className="cursor-pointer transition-colors hover:bg-muted/50"
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      e.preventDefault();
+                      openDrawer(ticket.id);
+                    }}
+                    className="cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   >
                     <TableCell className="font-medium">
                       {ticket.title}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="truncate">
                       {ticket.category_id
                         ? categoryMap.get(ticket.category_id) ?? 'N/A'
                         : 'N/A'}
@@ -203,11 +296,7 @@ export function TableView({
                     </TableCell>
 
                     <TableCell className="text-center text-muted-foreground">
-                      {isUsersLoading
-                        ? 'Loading...'
-                        : ticket.assigned_to
-                        ? userMap.get(ticket.assigned_to) ?? 'Unknown'
-                        : 'Unassigned'}
+                      {assignedToLabel}
                     </TableCell>
 
                     <TableCell>
@@ -223,34 +312,56 @@ export function TableView({
               })}
             </TableBody>
           </Table>
+          </div>
 
-          {totalPages > 1 && (
-            <motion.div className="flex justify-end gap-2 py-4" {...createFadeSlideUp(0.12)}>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Previous
-              </Button>
-
-              <span className="text-sm">
-                Page {currentPage} / {totalPages}
+          <motion.div className="flex flex-wrap items-center justify-between gap-3 py-4" {...createFadeSlideUp(0.12)}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                Rows {startRow}-{endRow} of {totalRows}
               </span>
+              <span className="text-xs text-muted-foreground">|</span>
+              <span className="text-xs text-muted-foreground">Show</span>
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <Button
+                  key={size}
+                  variant={pageSize === size ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => setPageSize(size)}
+                >
+                  {size}
+                </Button>
+              ))}
+            </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
-              >
-                Next
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </motion.div>
-          )}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  Previous
+                </Button>
+
+                <span className="text-sm">
+                  Page {currentPage} / {totalPages}
+                </span>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                >
+                  Next
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </motion.div>
           </CardContent>
         </motion.div>
       </Card>

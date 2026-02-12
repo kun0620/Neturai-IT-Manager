@@ -37,13 +37,18 @@ import { Input } from '@/components/ui/input';
 
 
 
+const RECENT_SEARCH_STORAGE_KEY = 'neturai_recent_searches';
+const SEARCH_SCOPE_STORAGE_KEY = 'neturai_search_scope';
+
 export function TopBar() {
   type SearchScope = 'all' | 'tickets' | 'assets' | 'users';
+  type RecentSearchRecord = SearchOverlayItem & { label: string; scope: SearchScope };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
+  const [recentSearches, setRecentSearches] = useState<RecentSearchRecord[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
   const searchListRef = useRef<HTMLDivElement | null>(null);
@@ -98,6 +103,15 @@ export function TopBar() {
     | { kind: 'asset'; key: string; id: string }
     | { kind: 'user'; key: string; id: string };
 
+  const recentKeyboardItems = useMemo(
+    () =>
+      recentSearches.map((record, idx) => ({
+        ...record,
+        key: `recent-${record.key}-${idx}`,
+      })),
+    [recentSearches]
+  );
+
   const keyboardItems = useMemo<SearchOverlayItem[]>(() => {
     const query = searchQuery.trim();
     const showTickets = searchScope === 'all' || searchScope === 'tickets';
@@ -105,11 +119,14 @@ export function TopBar() {
     const showUsers = searchScope === 'all' || searchScope === 'users';
 
     if (query.length < 2) {
-      return filteredSearchItems.map((item) => ({
-        kind: 'quick',
-        key: `quick-${item.href}`,
-        href: item.href,
-      }));
+      return [
+        ...filteredSearchItems.map((item) => ({
+          kind: 'quick' as const,
+          key: `quick-${item.href}`,
+          href: item.href,
+        })),
+        ...recentKeyboardItems,
+      ];
     }
 
     if (isSearching) return [];
@@ -141,11 +158,63 @@ export function TopBar() {
     searchQuery,
     searchScope,
     filteredSearchItems,
+    recentKeyboardItems,
     isSearching,
     ticketResults,
     assetResults,
     userResults,
   ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(RECENT_SEARCH_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as RecentSearchRecord[];
+      if (Array.isArray(parsed)) {
+        setRecentSearches(parsed);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const rawScope = window.localStorage.getItem(SEARCH_SCOPE_STORAGE_KEY);
+      if (rawScope === 'all' || rawScope === 'tickets' || rawScope === 'assets' || rawScope === 'users') {
+        setSearchScope(rawScope);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(RECENT_SEARCH_STORAGE_KEY, JSON.stringify(recentSearches));
+    } catch {
+      // ignore
+    }
+  }, [recentSearches]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(SEARCH_SCOPE_STORAGE_KEY, searchScope);
+    } catch {
+      // ignore
+    }
+  }, [searchScope]);
+
+  const pushRecentSearch = useCallback((record: RecentSearchRecord) => {
+    setRecentSearches((prev) => {
+      const filtered = prev.filter((item) => item.key !== record.key);
+      return [record, ...filtered].slice(0, 6);
+    });
+  }, []);
 
   useEffect(() => {
     if (!searchOpen) return;
@@ -251,7 +320,6 @@ export function TopBar() {
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
     setSearchQuery('');
-    setSearchScope('all');
     setActiveSearchIndex(-1);
   }, []);
 
@@ -271,6 +339,25 @@ export function TopBar() {
     }
     goTo(`/users?editUserId=${item.id}`);
   }, [goTo, openDrawer]);
+
+  const applySearchSelection = useCallback(
+    (item: SearchOverlayItem, label: string, scope: SearchScope = searchScope) => {
+      pushRecentSearch({ ...item, label, scope });
+      if (scope !== searchScope) {
+        setSearchScope(scope);
+      }
+      selectSearchItem(item);
+    },
+    [pushRecentSearch, searchScope, selectSearchItem]
+  );
+
+  const clearRecentSearches = useCallback(() => {
+    setRecentSearches([]);
+  }, []);
+
+  const removeRecentSearch = useCallback((key: string) => {
+    setRecentSearches((prev) => prev.filter((item) => item.key !== key));
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -303,16 +390,34 @@ export function TopBar() {
         });
         return;
       }
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        setActiveSearchIndex((prev) => {
+          if (event.shiftKey) {
+            if (prev < 0) return keyboardItems.length - 1;
+            return (prev - 1 + keyboardItems.length) % keyboardItems.length;
+          }
+          if (prev < 0) return 0;
+          return (prev + 1) % keyboardItems.length;
+        });
+        return;
+      }
       if (event.key === 'Enter') {
         event.preventDefault();
         if (activeSearchIndex >= 0 && activeSearchIndex < keyboardItems.length) {
-          selectSearchItem(keyboardItems[activeSearchIndex]);
+          const activeItem = keyboardItems[activeSearchIndex];
+          const recentItem = recentKeyboardItems.find((item) => item.key === activeItem.key);
+          if (recentItem) {
+            applySearchSelection(recentItem, recentItem.label, recentItem.scope);
+            return;
+          }
+          selectSearchItem(activeItem);
         }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [searchOpen, keyboardItems, activeSearchIndex, closeSearch, selectSearchItem]);
+  }, [searchOpen, keyboardItems, activeSearchIndex, closeSearch, selectSearchItem, recentKeyboardItems, applySearchSelection]);
 
   useEffect(() => {
     if (!searchOpen) return;
@@ -629,6 +734,22 @@ export function TopBar() {
                   className="h-12 rounded-lg pl-10 text-base"
                 />
               </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 px-1 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
+                  <kbd className="rounded border border-border/80 bg-muted px-1">Tab</kbd>
+                  <span>/</span>
+                  <kbd className="rounded border border-border/80 bg-muted px-1">↑↓</kbd>
+                  <span>Navigate</span>
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
+                  <kbd className="rounded border border-border/80 bg-muted px-1">Enter</kbd>
+                  <span>Open</span>
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
+                  <kbd className="rounded border border-border/80 bg-muted px-1">Esc</kbd>
+                  <span>Close</span>
+                </span>
+              </div>
 
               {searchQuery.trim().length >= 2 && (
                 <div className="mt-2 flex flex-wrap items-center gap-1 px-1">
@@ -664,6 +785,7 @@ export function TopBar() {
                         const idx = keyboardItems.findIndex(
                           (entry) => entry.kind === 'quick' && entry.href === item.href
                         );
+                        const entry = idx >= 0 ? keyboardItems[idx] : undefined;
                         const isActive = idx === activeSearchIndex;
                         return (
                           <button
@@ -675,7 +797,13 @@ export function TopBar() {
                               isActive && 'bg-primary/15 text-primary'
                             )}
                             onMouseEnter={() => setActiveSearchIndex(idx)}
-                            onClick={() => goTo(item.href)}
+                            onClick={() => {
+                              if (entry) {
+                                applySearchSelection(entry, item.label);
+                              } else {
+                                goTo(item.href);
+                              }
+                            }}
                           >
                             <span>{item.label}</span>
                             <span className="text-xs text-muted-foreground">Open</span>
@@ -683,6 +811,70 @@ export function TopBar() {
                         );
                       })()
                     ))}
+                    {recentSearches.length > 0 && (
+                      <div className="mt-3 border-t border-border/50 pt-2">
+                        <div className="flex items-center justify-between px-3 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          <span>Recent Searches</span>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-muted-foreground hover:text-primary"
+                            onClick={clearRecentSearches}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                        <div className="mt-1 space-y-1">
+                          {recentSearches.map((record, recentIdx) => (
+                            (() => {
+                              const keyboardKey = recentKeyboardItems[recentIdx]?.key ?? `recent-${record.key}-${recentIdx}`;
+                              const idx = keyboardItems.findIndex((entry) => entry.key === keyboardKey);
+                              const isActive = idx === activeSearchIndex;
+                              return (
+                                <button
+                                  key={`recent-${record.key}`}
+                                  type="button"
+                                  data-search-active={isActive ? 'true' : undefined}
+                                  className={clsx(
+                                    'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
+                                    isActive && 'bg-primary/15 text-primary'
+                                  )}
+                                  onMouseEnter={() => setActiveSearchIndex(idx)}
+                                  onClick={() => applySearchSelection(record, record.label, record.scope)}
+                                >
+                                  <span className="truncate pr-3">{record.label}</span>
+                                  <span className="ml-2 flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">
+                                      {record.scope === 'all'
+                                        ? 'All'
+                                        : record.scope.charAt(0).toUpperCase() + record.scope.slice(1)}
+                                    </span>
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      aria-label={`Remove ${record.label} from recent`}
+                                      className="inline-flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        removeRecentSearch(record.key);
+                                      }}
+                                      onKeyDown={(event) => {
+                                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        removeRecentSearch(record.key);
+                                      }}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            })()
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 ) : isSearching ? (
                   <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
@@ -701,6 +893,7 @@ export function TopBar() {
                             const idx = keyboardItems.findIndex(
                               (entry) => entry.kind === 'ticket' && entry.id === ticket.id
                             );
+                            const entry = idx >= 0 ? keyboardItems[idx] : undefined;
                             const isActive = idx === activeSearchIndex;
                             return (
                               <button
@@ -713,8 +906,12 @@ export function TopBar() {
                                 )}
                                 onMouseEnter={() => setActiveSearchIndex(idx)}
                                 onClick={() => {
-                                  goTo('/tickets');
-                                  requestAnimationFrame(() => openDrawer(ticket.id));
+                                  if (entry) {
+                                    applySearchSelection(entry, ticket.title);
+                                  } else {
+                                    goTo('/tickets');
+                                    requestAnimationFrame(() => openDrawer(ticket.id));
+                                  }
                                 }}
                               >
                                 <span className="truncate pr-3">{ticket.title}</span>
@@ -738,6 +935,7 @@ export function TopBar() {
                             const idx = keyboardItems.findIndex(
                               (entry) => entry.kind === 'asset' && entry.id === asset.id
                             );
+                            const entry = idx >= 0 ? keyboardItems[idx] : undefined;
                             const isActive = idx === activeSearchIndex;
                             return (
                               <button
@@ -749,7 +947,16 @@ export function TopBar() {
                                   isActive && 'bg-primary/15 text-primary'
                                 )}
                                 onMouseEnter={() => setActiveSearchIndex(idx)}
-                                onClick={() => goTo(`/assets?assetId=${asset.id}`)}
+                                onClick={() => {
+                                  if (entry) {
+                                    applySearchSelection(
+                                      entry,
+                                      `${asset.name}${asset.asset_code ? ` (${asset.asset_code})` : ''}`
+                                    );
+                                  } else {
+                                    goTo(`/assets?assetId=${asset.id}`);
+                                  }
+                                }}
                               >
                                 <span className="truncate pr-3">
                                   {asset.name}
@@ -775,7 +982,9 @@ export function TopBar() {
                             const idx = keyboardItems.findIndex(
                               (entry) => entry.kind === 'user' && entry.id === profile.id
                             );
+                            const entry = idx >= 0 ? keyboardItems[idx] : undefined;
                             const isActive = idx === activeSearchIndex;
+                            const label = profile.name || profile.email || 'Unknown User';
                             return (
                               <button
                                 key={profile.id}
@@ -786,11 +995,15 @@ export function TopBar() {
                                   isActive && 'bg-primary/15 text-primary'
                                 )}
                                 onMouseEnter={() => setActiveSearchIndex(idx)}
-                                onClick={() => goTo(`/users?editUserId=${profile.id}`)}
+                                onClick={() => {
+                                  if (entry) {
+                                    applySearchSelection(entry, label);
+                                  } else {
+                                    goTo(`/users?editUserId=${profile.id}`);
+                                  }
+                                }}
                               >
-                                <span className="truncate pr-3">
-                                  {profile.name || profile.email || 'Unknown User'}
-                                </span>
+                                <span className="truncate pr-3">{label}</span>
                                 <span className="text-xs text-muted-foreground">
                                   {profile.department || 'No Dept'}
                                 </span>

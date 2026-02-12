@@ -10,6 +10,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    globals: false,
+  },
   define: {
     // Replace process.env.npm_package_version with a static string
     // This prevents client-side code from trying to fetch package.json

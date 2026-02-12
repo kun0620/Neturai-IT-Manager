@@ -638,6 +638,25 @@ export type Database = {
     Functions: {
       add_role_to_jwt: { Args: { event: Json }; Returns: Json }
       current_user_role: { Args: never; Returns: string }
+      get_dashboard_metrics: {
+        Args: { p_only_my?: boolean | null; p_user_id?: string | null }
+        Returns: {
+          avg_resolution_hours: number | null
+          closed_tickets_count: number
+          closed_trend_delta: number
+          in_progress_tickets_count: number
+          in_progress_trend_delta: number
+          open_tickets_count: number
+          open_trend_delta: number
+          overdue_tickets_count: number
+          overdue_trend_delta: number
+          recent_tickets: Json | null
+          today_tickets_count: number
+          today_trend_delta: number
+          total_assets: number
+          total_tickets: number
+        }[]
+      }
       get_average_resolution_time: {
         Args: { end_date: string; start_date: string }
         Returns: {
