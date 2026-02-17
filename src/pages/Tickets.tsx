@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   KanbanSquare,
   List,
@@ -40,6 +40,7 @@ import {
   DrawerTitle,
 } from '@/components/ui/drawer';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
+import { notifyWarning } from '@/lib/notify';
 
 const SLA_HOURS: Record<string, number> = {
   Low: 72,
@@ -83,6 +84,7 @@ export const Tickets: React.FC = () => {
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { openDrawer } = useTicketDrawer();
+  const consumedOpenTicketIdRef = useRef<string | null>(null);
   const slaFilter = searchParams.get('sla'); // 'breach' | null
   const openTicketId = searchParams.get('open_ticket');
   const statusQuery = searchParams.get('status');
@@ -476,12 +478,37 @@ export const Tickets: React.FC = () => {
   ]);
 
   useEffect(() => {
-    if (!openTicketId || isLoadingCategories) return;
+    if (!openTicketId) return;
+    if (isLoadingCategories || isLoadingTickets) return;
+    if (consumedOpenTicketIdRef.current === openTicketId) return;
+
+    consumedOpenTicketIdRef.current = openTicketId;
+
+    const ticketExists = (tickets ?? []).some((ticket) => ticket.id === openTicketId);
+    if (!ticketExists) {
+      notifyWarning('Ticket unavailable or inaccessible.');
+      setSearchParams((currentParams) => {
+        const nextParams = new URLSearchParams(currentParams);
+        nextParams.delete('open_ticket');
+        return nextParams;
+      });
+      return;
+    }
+
     openDrawer(openTicketId);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('open_ticket');
-    setSearchParams(nextParams);
-  }, [isLoadingCategories, openDrawer, openTicketId, searchParams, setSearchParams]);
+    setSearchParams((currentParams) => {
+      const nextParams = new URLSearchParams(currentParams);
+      nextParams.delete('open_ticket');
+      return nextParams;
+    });
+  }, [
+    isLoadingCategories,
+    isLoadingTickets,
+    openDrawer,
+    openTicketId,
+    setSearchParams,
+    tickets,
+  ]);
 
   const clearAllFilters = () => {
     setSearchParams(new URLSearchParams());

@@ -181,7 +181,7 @@ export function AssetManagement() {
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [selectedAssets, setSelectedAssets] = useState<AssetWithType[]>([]);
-  const [tableSelectionVersion, setTableSelectionVersion] = useState(0);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [bulkOwnerValue, setBulkOwnerValue] = useState('__none__');
   const [bulkStatusValue, setBulkStatusValue] = useState('__none__');
   const [bulkUpdating, setBulkUpdating] = useState(false);
@@ -449,45 +449,67 @@ export function AssetManagement() {
     () => selectedAssets.map((asset) => asset.id),
     [selectedAssets]
   );
+  const allVisibleSelected =
+    sortedAssets.length > 0 && selectedAssetIds.length === sortedAssets.length;
+
+  const toggleAssetSelection = React.useCallback((asset: AssetWithType) => {
+    setSelectedAssets((prev) => {
+      const exists = prev.some((item) => item.id === asset.id);
+      if (exists) {
+        return prev.filter((item) => item.id !== asset.id);
+      }
+      return [...prev, asset];
+    });
+  }, []);
+
+  const toggleSelectAllVisible = React.useCallback(() => {
+    if (allVisibleSelected) {
+      setSelectedAssets([]);
+      return;
+    }
+    setSelectedAssets(sortedAssets);
+  }, [allVisibleSelected, sortedAssets]);
 
   const assetTableColumns = useMemo<ColumnDef<AssetWithType>[]>(
-    () => [
-      {
-        id: 'select',
-        enableSorting: false,
-        enableHiding: false,
-        size: 40,
-        header: ({ table }) => (
-          <div
-            className="flex items-center justify-center"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <Checkbox
-              checked={
-                table.getIsAllPageRowsSelected() ||
-                (table.getIsSomePageRowsSelected() && 'indeterminate')
-              }
-              onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-              aria-label="Select all rows"
-            />
-          </div>
-        ),
-        cell: ({ row }) => (
-          <div
-            className="flex items-center justify-center"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <Checkbox
-              checked={row.getIsSelected()}
-              onCheckedChange={(value) => row.toggleSelected(!!value)}
-              aria-label="Select row"
-            />
-          </div>
-        ),
-      },
-      ...getColumns(assigneeNameById),
-    ],
-    [assigneeNameById]
+    () =>
+      selectionMode
+        ? [
+            {
+              id: 'select',
+              enableSorting: false,
+              enableHiding: false,
+              size: 40,
+              header: () => (
+                <div
+                  className="flex items-center justify-center"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={allVisibleSelected}
+                    onCheckedChange={toggleSelectAllVisible}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label="Select all rows"
+                  />
+                </div>
+              ),
+              cell: ({ row }) => (
+                <div
+                  className="flex items-center justify-center"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={selectedAssetIds.includes(row.original.id)}
+                    onCheckedChange={() => toggleAssetSelection(row.original)}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label="Select row"
+                  />
+                </div>
+              ),
+            },
+            ...getColumns(assigneeNameById),
+          ]
+        : [...getColumns(assigneeNameById)],
+    [allVisibleSelected, assigneeNameById, selectedAssetIds, selectionMode, toggleAssetSelection, toggleSelectAllVisible]
   );
 
   React.useEffect(() => {
@@ -652,8 +674,22 @@ export function AssetManagement() {
     setSelectedAssets([]);
     setBulkOwnerValue('__none__');
     setBulkStatusValue('__none__');
-    setTableSelectionVersion((value) => value + 1);
   };
+
+  const enterSelectionMode = () => {
+    setSelectionMode(true);
+  };
+
+  const exitSelectionMode = () => {
+    clearBulkSelection();
+    setSelectionMode(false);
+  };
+
+  React.useEffect(() => {
+    if (selectionMode) return;
+    if (selectedAssets.length === 0) return;
+    clearBulkSelection();
+  }, [selectionMode, selectedAssets.length]);
 
   const handleBulkAssignOwner = async () => {
     if (selectedAssetIds.length === 0) return false;
@@ -1460,6 +1496,26 @@ export function AssetManagement() {
                 </SelectContent>
               </Select>
 
+              {selectionMode ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-8"
+                  onClick={exitSelectionMode}
+                >
+                  Done
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8"
+                  onClick={enterSelectionMode}
+                >
+                  Select
+                </Button>
+              )}
+
               <Badge variant="secondary" className="ml-auto whitespace-nowrap">
                 Showing: {sortedAssets.length}
               </Badge>
@@ -1585,7 +1641,7 @@ export function AssetManagement() {
             </div>
           )}
 
-          {selectedAssetIds.length > 0 && (
+          {selectionMode && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
               <Badge variant="secondary" className="whitespace-nowrap">
                 Selected: {selectedAssetIds.length}
@@ -1630,7 +1686,10 @@ export function AssetManagement() {
                         size="sm"
                         onClick={() => setConfirmBulkOwnerOpen(true)}
                         disabled={
-                          bulkUpdating || bulkOwnerValue === '__none__' || !canAssignAssets
+                          bulkUpdating ||
+                          selectedAssetIds.length === 0 ||
+                          bulkOwnerValue === '__none__' ||
+                          !canAssignAssets
                         }
                       >
                         Assign Owner
@@ -1672,6 +1731,7 @@ export function AssetManagement() {
                         onClick={() => setConfirmBulkStatusOpen(true)}
                         disabled={
                           bulkUpdating ||
+                          selectedAssetIds.length === 0 ||
                           bulkStatusValue === '__none__' ||
                           !canChangeAssetStatus
                         }
@@ -1692,7 +1752,7 @@ export function AssetManagement() {
                 variant="outline"
                 size="sm"
                 onClick={handleBulkExportSelected}
-                disabled={bulkUpdating}
+                disabled={bulkUpdating || selectedAssetIds.length === 0}
               >
                 Export Selected
               </Button>
@@ -1714,7 +1774,7 @@ export function AssetManagement() {
                         variant="destructive"
                         size="sm"
                         onClick={() => setConfirmBulkDeleteOpen(true)}
-                        disabled={bulkUpdating || !canDeleteAssets}
+                        disabled={bulkUpdating || selectedAssetIds.length === 0 || !canDeleteAssets}
                       >
                         Delete Selected
                       </Button>
@@ -1759,14 +1819,17 @@ export function AssetManagement() {
                 columns={assetTableColumns}
                 data={sortedAssets}
                 showGlobalFilter={false}
-                enableRowSelection
                 getRowId={(row) => row.id}
-                onSelectedRowsChange={setSelectedAssets}
-                clearSelectionKey={tableSelectionVersion}
                 globalFilterPlaceholder="Search assets by name, code, type, category, location, status..."
-                onRowClick={(asset) => {
-                  openAssetInDrawer(asset);
-                }}
+                onRowClick={
+                  selectionMode
+                    ? (asset) => {
+                        toggleAssetSelection(asset);
+                      }
+                    : (asset) => {
+                        openAssetInDrawer(asset);
+                      }
+                }
               />
             )}
           </div>

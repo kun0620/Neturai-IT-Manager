@@ -69,6 +69,7 @@ export function DataTable<TData, TValue>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+  const previousClearSelectionKeyRef = React.useRef<number | undefined>(undefined);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [density, setDensity] = React.useState<TableDensity>(() => {
     if (typeof window === 'undefined') {
@@ -115,6 +116,8 @@ export function DataTable<TData, TValue>({
 
   React.useEffect(() => {
     if (clearSelectionKey === undefined) return;
+    if (previousClearSelectionKeyRef.current === clearSelectionKey) return;
+    previousClearSelectionKeyRef.current = clearSelectionKey;
     table.resetRowSelection();
   }, [clearSelectionKey, table]);
 
@@ -216,8 +219,20 @@ export function DataTable<TData, TValue>({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && 'selected'}
-                    onClick={() => onRowClick?.(row.original)}
-                    className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''}
+                    onClick={() => {
+                      if (onRowClick) {
+                        onRowClick(row.original);
+                        return;
+                      }
+                      if (enableRowSelection) {
+                        row.toggleSelected();
+                      }
+                    }}
+                    className={
+                      onRowClick || enableRowSelection
+                        ? 'cursor-pointer hover:bg-muted/50'
+                        : ''
+                    }
                   >
                     {row.getVisibleCells().map((cell) => {
                       const cellMeta = (cell.column.columnDef.meta ?? {}) as {

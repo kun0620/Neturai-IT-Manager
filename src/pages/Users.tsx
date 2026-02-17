@@ -13,6 +13,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogFooter,
   DialogTitle,
@@ -355,6 +356,9 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirm role change</DialogTitle>
+            <DialogDescription className="sr-only">
+              Confirm the selected role update for this user.
+            </DialogDescription>
           </DialogHeader>
 
           <p className="text-sm text-muted-foreground">
@@ -429,6 +433,9 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit user profile</DialogTitle>
+            <DialogDescription className="sr-only">
+              Update user profile fields and assigned primary device.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">

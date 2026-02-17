@@ -38,7 +38,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logSystemAction } from '@/features/logs/utils/logSystemAction';
 import { useNavigate } from 'react-router-dom';
 import type { Database } from '@/types/supabase';
-import { useTicketDrawer } from '@/context/TicketDrawerContext';
 
 /* ================= TYPES ================= */
 
@@ -95,7 +94,6 @@ export function AssetDrawer({
   const { session } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { openDrawer } = useTicketDrawer();
 
   const assetId: string | undefined = asset?.id;
   const assetTypeId: string | undefined = asset?.asset_type?.id;
@@ -351,9 +349,14 @@ export function AssetDrawer({
     setQuickActionLoading(null);
   };
 
-  const openRelatedTicket = (ticketId: string) => {
-    navigate('/tickets');
-    requestAnimationFrame(() => openDrawer(ticketId));
+  const goToTicketDetails = (ticketId: string) => {
+    const target = `/tickets?open_ticket=${encodeURIComponent(ticketId)}`;
+    navigate(target);
+    window.setTimeout(() => {
+      if (window.location.pathname !== '/tickets') {
+        window.location.assign(target);
+      }
+    }, 120);
   };
 
   return (
@@ -614,7 +617,7 @@ export function AssetDrawer({
                           key={ticket.id}
                           type="button"
                           className="w-full rounded-md border p-3 text-left transition-colors hover:bg-muted/50"
-                          onClick={() => openRelatedTicket(ticket.id)}
+                          onClick={() => goToTicketDetails(ticket.id)}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <p className="line-clamp-1 text-sm font-medium">{ticket.title}</p>
