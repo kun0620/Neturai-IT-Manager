@@ -611,7 +611,7 @@ export type Database = {
           description: string | null
           due_at: string | null
           id: string
-          priority: string
+          priority: Database["public"]["Enums"]["ticket_priority_enum"]
           resolved_at: string | null
           status: Database["public"]["Enums"]["ticket_status"]
           subject: string
@@ -626,7 +626,7 @@ export type Database = {
           description?: string | null
           due_at?: string | null
           id?: string
-          priority?: string
+          priority?: Database["public"]["Enums"]["ticket_priority_enum"]
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
           subject?: string
@@ -641,7 +641,7 @@ export type Database = {
           description?: string | null
           due_at?: string | null
           id?: string
-          priority?: string
+          priority?: Database["public"]["Enums"]["ticket_priority_enum"]
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
           subject?: string
@@ -685,6 +685,25 @@ export type Database = {
     }
     Functions: {
       add_role_to_jwt: { Args: { event: Json }; Returns: Json }
+      create_ticket_attachment: {
+        Args: {
+          p_content_type?: string | null
+          p_file_name: string
+          p_size_bytes?: number
+          p_storage_path: string
+          p_ticket_id: string
+        }
+        Returns: {
+          content_type: string | null
+          created_at: string
+          file_name: string
+          id: string
+          size_bytes: number
+          storage_path: string
+          ticket_id: string
+          uploaded_by: string | null
+        }
+      }
       current_user_role: { Args: never; Returns: string }
       get_dashboard_metrics: {
         Args: { p_only_my?: boolean | null; p_user_id?: string | null }

@@ -45,6 +45,26 @@ type DashboardMetricsOptions = {
 };
 
 const TICKET_ATTACHMENTS_BUCKET = 'ticket-attachments';
+const DEFAULT_ATTACHMENT_MAX_MB = 10;
+const DEFAULT_ATTACHMENT_ALLOWED_TYPES = [
+  'image/*',
+];
+
+const normalizeExt = (name: string) => {
+  const match = name.toLowerCase().match(/(\.[a-z0-9]+)$/i);
+  return match?.[1] ?? '';
+};
+
+const isAllowedByRule = (rule: string, mimeType: string, ext: string) => {
+  const normalized = rule.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized.startsWith('.')) return ext === normalized;
+  if (normalized.endsWith('/*')) {
+    const prefix = normalized.slice(0, -1);
+    return mimeType.startsWith(prefix);
+  }
+  return mimeType === normalized;
+};
 
 const useLogAuthors = (logs?: LogRow[]) => {
   const userIds = Array.from(
@@ -319,7 +339,6 @@ interface AddTicketCommentPayload {
 
 interface UploadTicketAttachmentPayload {
   ticketId: string;
-  userId: string;
   file: File;
 }
 
@@ -394,7 +413,40 @@ const useUploadTicketAttachment = () => {
   const queryClient = useQueryClient();
 
   return useMutation<TicketAttachment, Error, UploadTicketAttachmentPayload>({
-    mutationFn: async ({ ticketId, userId, file }) => {
+    mutationFn: async ({ ticketId, file }) => {
+      const { data: settingRows } = await supabase
+        .from('settings')
+        .select('key, value')
+        .in('key', ['attachment_max_size_mb', 'attachment_allowed_types']);
+
+      const settingMap = new Map((settingRows ?? []).map((row) => [row.key, row.value]));
+      const maxSizeMb = Number(
+        settingMap.get('attachment_max_size_mb') ?? DEFAULT_ATTACHMENT_MAX_MB
+      );
+      const maxBytes = Number.isFinite(maxSizeMb) && maxSizeMb > 0
+        ? maxSizeMb * 1024 * 1024
+        : DEFAULT_ATTACHMENT_MAX_MB * 1024 * 1024;
+      if (file.size > maxBytes) {
+        throw new Error(`File is too large. Maximum allowed is ${Math.floor(maxBytes / (1024 * 1024))} MB.`);
+      }
+
+      const allowedRulesRaw =
+        settingMap.get('attachment_allowed_types') ??
+        DEFAULT_ATTACHMENT_ALLOWED_TYPES.join(',');
+      const allowedRules = allowedRulesRaw
+        .split(',')
+        .map((rule) => rule.trim())
+        .filter(Boolean);
+      const mimeType = (file.type || '').toLowerCase();
+      const ext = normalizeExt(file.name);
+
+      const isAllowed = allowedRules.some((rule) =>
+        isAllowedByRule(rule, mimeType, ext)
+      );
+      if (!isAllowed) {
+        throw new Error('File type is not allowed by attachment policy.');
+      }
+
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const randomId =
         globalThis.crypto?.randomUUID?.() ??
@@ -411,25 +463,26 @@ const useUploadTicketAttachment = () => {
 
       if (uploadError) throw uploadError;
 
-      const { data, error: insertError } = await supabase
-        .from('ticket_attachments')
-        .insert({
-          ticket_id: ticketId,
-          uploaded_by: userId,
-          file_name: file.name,
-          storage_path: storagePath,
-          content_type: file.type || null,
-          size_bytes: file.size,
-        })
-        .select()
-        .single();
+      const { data, error: insertError } = await supabase.rpc(
+        'create_ticket_attachment',
+        {
+          p_ticket_id: ticketId,
+          p_file_name: file.name,
+          p_storage_path: storagePath,
+          p_content_type: file.type || null,
+          p_size_bytes: file.size,
+        }
+      );
 
       if (insertError) {
         await supabase.storage.from(TICKET_ATTACHMENTS_BUCKET).remove([storagePath]);
         throw insertError;
       }
-
-      return data;
+      if (!data) {
+        await supabase.storage.from(TICKET_ATTACHMENTS_BUCKET).remove([storagePath]);
+        throw new Error('Attachment rejected by policy or permission.');
+      }
+      return data as TicketAttachment;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({

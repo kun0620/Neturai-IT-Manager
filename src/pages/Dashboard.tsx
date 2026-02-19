@@ -285,7 +285,7 @@ const Dashboard: React.FC = () => {
           >
             <AlertTriangle className="h-4 w-4" />
             <span className="font-medium">
-              Overdue pressure: {overdueTicketsCount} overdue ticket{overdueTicketsCount > 1 ? 's' : ''}
+              SLA pressure: {overdueTicketsCount} breached ticket{overdueTicketsCount > 1 ? 's' : ''}
             </span>
             <span className="text-red-700/80 dark:text-red-300/80">
               {overdueTrendDelta > 0
@@ -298,11 +298,11 @@ const Dashboard: React.FC = () => {
               size="sm"
               variant="outline"
               className="ml-auto border-red-300/80 text-red-800 hover:bg-red-100 hover:text-red-900 dark:border-red-500/40 dark:text-red-200 dark:hover:bg-red-900/30"
-              onClick={() => navigate('/tickets?filter=overdue')}
+              onClick={() => navigate('/tickets?sla=breach')}
               onMouseEnter={prefetchTicketsRoute}
               onFocus={prefetchTicketsRoute}
             >
-              Review overdue
+              Review SLA breach
             </Button>
           </motion.div>
         )}
@@ -349,11 +349,11 @@ const Dashboard: React.FC = () => {
           size="sm"
           variant="outline"
           className="h-8 rounded-full text-red-600 hover:text-red-600"
-          onClick={() => navigate('/tickets?filter=overdue')}
+          onClick={() => navigate('/tickets?sla=breach')}
           onMouseEnter={prefetchTicketsRoute}
           onFocus={prefetchTicketsRoute}
         >
-          Overdue ({dashboardMetrics?.overdueTicketsCount || 0})
+          SLA Breach ({dashboardMetrics?.overdueTicketsCount || 0})
         </Button>
       </motion.div>
 
@@ -465,10 +465,10 @@ const Dashboard: React.FC = () => {
             label: 'vs yesterday',
             mode: 'increase_is_bad',
           }}
-          onClick={() => navigate('/tickets?filter=overdue')}
+          onClick={() => navigate('/tickets?sla=breach')}
           onMouseEnter={prefetchTicketsRoute}
           onFocus={prefetchTicketsRoute}
-          clickHint="Review overdue tickets"
+          clickHint="Review SLA breach tickets"
         />
         <SummaryCard
           index={6}

@@ -275,7 +275,7 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
     if (!ticketId || !user || !attachmentFile) return;
 
     uploadAttachment(
-      { ticketId, userId: user.id, file: attachmentFile },
+      { ticketId, file: attachmentFile },
       {
         onSuccess: () => {
           setAttachmentFile(null);

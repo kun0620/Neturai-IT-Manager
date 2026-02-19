@@ -119,6 +119,17 @@ export const SettingsAndLogs: React.FC = () => {
   const [defaultTicketStatus, setDefaultTicketStatus] = useState('open');
   const [defaultTicketCategoryId, setDefaultTicketCategoryId] = useState('');
   const [sessionIdleTimeoutMinutes, setSessionIdleTimeoutMinutes] = useState('120');
+  const [attachmentMaxSizeMb, setAttachmentMaxSizeMb] = useState('10');
+  const [attachmentAllowedTypes, setAttachmentAllowedTypes] = useState(
+    'image/*'
+  );
+  const [lineGroupNotifyEnabled, setLineGroupNotifyEnabled] = useState(false);
+  const [lineGroupNotifyEvents, setLineGroupNotifyEvents] = useState(
+    'new_critical,sla_breach,reopened'
+  );
+  const [lineGroupNotifyMinPriority, setLineGroupNotifyMinPriority] =
+    useState('high');
+  const [isSendingLineTest, setIsSendingLineTest] = useState(false);
 
   const [logSearchTerm, setLogSearchTerm] = useState('');
   const [logSearchInput, setLogSearchInput] = useState('');
@@ -190,7 +201,86 @@ export const SettingsAndLogs: React.FC = () => {
     setSessionIdleTimeoutMinutes(
       settings.find(s => s.key === 'session_idle_timeout_minutes')?.value || '120'
     );
+    setAttachmentMaxSizeMb(
+      settings.find(s => s.key === 'attachment_max_size_mb')?.value || '10'
+    );
+    setAttachmentAllowedTypes(
+      settings.find(s => s.key === 'attachment_allowed_types')?.value ||
+        'image/*'
+    );
+    setLineGroupNotifyEnabled(
+      settings.find(s => s.key === 'line_group_notify_enabled')?.value ===
+        'true'
+    );
+    setLineGroupNotifyEvents(
+      settings.find(s => s.key === 'line_group_notify_events')?.value ||
+        'new_critical,sla_breach,reopened'
+    );
+    setLineGroupNotifyMinPriority(
+      settings.find(s => s.key === 'line_group_notify_min_priority')?.value ||
+        'high'
+    );
   }, [settings, usersForAssignment]);
+
+  const lineGroupEventOptions = [
+    {
+      key: 'new_critical',
+      label: 'New critical ticket',
+      description: 'Alert when a critical ticket is created.',
+    },
+    {
+      key: 'sla_breach',
+      label: 'SLA breach',
+      description: 'Alert when a ticket enters SLA breach.',
+    },
+    {
+      key: 'reopened',
+      label: 'Ticket reopened',
+      description: 'Alert when a closed ticket gets reopened.',
+    },
+    {
+      key: 'new_high',
+      label: 'New high ticket',
+      description: 'Alert when a high-priority ticket is created.',
+    },
+    {
+      key: 'assigned',
+      label: 'Ticket assigned',
+      description: 'Alert when assignee changes on a ticket.',
+    },
+  ] as const;
+
+  const parseLineGroupEvents = (csv: string) =>
+    new Set(
+      csv
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+  const buildLineGroupEventsCsv = (set: Set<string>) =>
+    lineGroupEventOptions
+      .map((event) => event.key)
+      .filter((key) => set.has(key))
+      .join(',');
+
+  const handleSendLineGroupTest = async () => {
+    setIsSendingLineTest(true);
+    try {
+      const { data, error } = await supabase.rpc(
+        'enqueue_line_group_test_notification',
+        {
+          p_message: 'Test alert from Settings page',
+        }
+      );
+      if (error) throw error;
+      notifySuccess('LINE test queued', `Job id: ${data}`);
+    } catch (err: unknown) {
+      notifyError('Failed to queue LINE test', getErrorMessage(err));
+    } finally {
+      setIsSendingLineTest(false);
+    }
+  };
 
   const handleUpdateSetting = async (
     key: string,
@@ -719,6 +809,216 @@ export const SettingsAndLogs: React.FC = () => {
                       <SelectItem value="240">4 hours</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border/70 bg-muted/20 p-4">
+                <div className="mb-3">
+                  <div className="font-medium">Attachment policy</div>
+                  <div className="text-sm text-muted-foreground">
+                    Enforce allowed file types and maximum upload size.
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="flex flex-col gap-2">
+                    <Label
+                      htmlFor="attachment-max-size-mb"
+                      className="flex min-h-[40px] items-end"
+                    >
+                      Max file size (MB)
+                    </Label>
+                    <Input
+                      id="attachment-max-size-mb"
+                      inputMode="numeric"
+                      className="h-9"
+                      value={attachmentMaxSizeMb}
+                      onChange={(e) => setAttachmentMaxSizeMb(e.target.value)}
+                      onBlur={() => {
+                        const parsed = Number(attachmentMaxSizeMb);
+                        if (!Number.isFinite(parsed) || parsed < 1 || parsed > 100) {
+                          notifyError('Invalid attachment size', 'Use a number between 1 and 100 MB');
+                          setAttachmentMaxSizeMb(
+                            settings?.find((s) => s.key === 'attachment_max_size_mb')?.value || '10'
+                          );
+                          return;
+                        }
+                        void handleUpdateSetting(
+                          'attachment_max_size_mb',
+                          String(Math.floor(parsed)),
+                          () =>
+                            setAttachmentMaxSizeMb(
+                              settings?.find((s) => s.key === 'attachment_max_size_mb')?.value || '10'
+                            ),
+                          'Attachment max size updated'
+                        );
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <Label
+                      htmlFor="attachment-allowed-types"
+                      className="flex min-h-[40px] items-end"
+                    >
+                      Allowed types
+                    </Label>
+                    <Input
+                      id="attachment-allowed-types"
+                      className="h-9"
+                      value={attachmentAllowedTypes}
+                      onChange={(e) => setAttachmentAllowedTypes(e.target.value)}
+                      onBlur={() => {
+                        const normalized = attachmentAllowedTypes
+                          .split(',')
+                          .map((item) => item.trim())
+                          .filter(Boolean)
+                          .join(',');
+
+                        if (!normalized) {
+                          notifyError('Invalid allowed types', 'At least one type is required');
+                          setAttachmentAllowedTypes(
+                            settings?.find((s) => s.key === 'attachment_allowed_types')?.value ||
+                              'image/*'
+                          );
+                          return;
+                        }
+
+                        void handleUpdateSetting(
+                          'attachment_allowed_types',
+                          normalized,
+                          () =>
+                            setAttachmentAllowedTypes(
+                              settings?.find((s) => s.key === 'attachment_allowed_types')?.value ||
+                                'image/*'
+                            ),
+                          'Attachment allowed types updated'
+                        );
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Comma-separated MIME or extension, e.g. image/*,.png,.jpg
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border/70 bg-muted/20 p-4">
+                <div className="mb-3">
+                  <div className="font-medium">LINE group alert policy</div>
+                  <div className="text-sm text-muted-foreground">
+                    Configure high-signal alerts only for shared group channel.
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-background/60 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium">Send test notification</div>
+                      <div className="text-xs text-muted-foreground">
+                        Queue a test message to verify LINE delivery flow.
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleSendLineGroupTest()}
+                      disabled={isSendingLineTest}
+                    >
+                      {isSendingLineTest ? 'Queueing...' : 'Send test'}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-md border border-border/60 bg-background/60 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium">Enable LINE group alerts</div>
+                      <div className="text-xs text-muted-foreground">
+                        Keep disabled until sender integration is ready.
+                      </div>
+                    </div>
+                    <Switch
+                      checked={lineGroupNotifyEnabled}
+                      disabled={savingKey === 'line_group_notify_enabled'}
+                      onCheckedChange={(checked) => {
+                        const previous = lineGroupNotifyEnabled;
+                        setLineGroupNotifyEnabled(checked);
+                        void handleUpdateSetting(
+                          'line_group_notify_enabled',
+                          checked ? 'true' : 'false',
+                          () => setLineGroupNotifyEnabled(previous),
+                          'LINE group alert setting updated'
+                        );
+                      }}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    {lineGroupEventOptions.map((event) => {
+                      const enabled = parseLineGroupEvents(lineGroupNotifyEvents).has(
+                        event.key
+                      );
+                      return (
+                        <div
+                          key={event.key}
+                          className="flex items-center justify-between rounded-md border border-border/60 bg-background/60 px-3 py-2"
+                        >
+                          <div>
+                            <div className="text-sm font-medium">{event.label}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {event.description}
+                            </div>
+                          </div>
+                          <Switch
+                            checked={enabled}
+                            disabled={savingKey === 'line_group_notify_events'}
+                            onCheckedChange={(checked) => {
+                              const previous = lineGroupNotifyEvents;
+                              const nextSet = parseLineGroupEvents(previous);
+                              if (checked) {
+                                nextSet.add(event.key);
+                              } else {
+                                nextSet.delete(event.key);
+                              }
+                              const next = buildLineGroupEventsCsv(nextSet);
+                              setLineGroupNotifyEvents(next);
+                              void handleUpdateSetting(
+                                'line_group_notify_events',
+                                next,
+                                () => setLineGroupNotifyEvents(previous),
+                                'LINE group events updated'
+                              );
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex max-w-xs flex-col gap-2">
+                    <Label>Minimum priority</Label>
+                    <Select
+                      value={lineGroupNotifyMinPriority}
+                      onValueChange={(value) => {
+                        const previous = lineGroupNotifyMinPriority;
+                        setLineGroupNotifyMinPriority(value);
+                        void handleUpdateSetting(
+                          'line_group_notify_min_priority',
+                          value,
+                          () => setLineGroupNotifyMinPriority(previous),
+                          'LINE group min priority updated'
+                        );
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select minimum priority" />
+                      </SelectTrigger>
+                      <SelectContent position="popper" sideOffset={6}>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="critical">Critical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
             </div>
