@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -59,11 +61,13 @@ import { motion } from 'motion/react';
 import { createFadeSlideUp } from '@/lib/motion';
 import { UserManagementPanel } from '@/pages/Users';
 import { useSearchParams } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
 
 
 /* ================= PAGE ================= */
 
 export const SettingsAndLogs: React.FC = () => {
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromQuery = searchParams.get('tab');
   const validTabs = ['general', 'users', 'categories', 'sla', 'logs'] as const;
@@ -71,6 +75,7 @@ export const SettingsAndLogs: React.FC = () => {
   const currentTab: SettingsTab = validTabs.includes(tabFromQuery as SettingsTab)
     ? (tabFromQuery as SettingsTab)
     : 'general';
+  const isLogsTab = currentTab === 'logs';
 
   const { data: settings, isLoading: isLoadingSettings } = useSettings();
   const updateSetting = useUpdateSetting();
@@ -103,15 +108,39 @@ export const SettingsAndLogs: React.FC = () => {
     name: string;
   } | null>(null);
   const [resetSlaOpen, setResetSlaOpen] = useState(false);
+  const [purgeLogsOpen, setPurgeLogsOpen] = useState(false);
+  const [isPurgingLogs, setIsPurgingLogs] = useState(false);
+  const [logsRetentionDays, setLogsRetentionDays] = useState('90');
+  const [businessTimezone, setBusinessTimezone] = useState('UTC');
+  const [businessHoursStart, setBusinessHoursStart] = useState('09:00');
+  const [businessHoursEnd, setBusinessHoursEnd] = useState('18:00');
+  const [businessDays, setBusinessDays] = useState('1,2,3,4,5');
+  const [defaultTicketPriority, setDefaultTicketPriority] = useState('Low');
+  const [defaultTicketStatus, setDefaultTicketStatus] = useState('open');
+  const [defaultTicketCategoryId, setDefaultTicketCategoryId] = useState('');
+  const [sessionIdleTimeoutMinutes, setSessionIdleTimeoutMinutes] = useState('120');
 
   const [logSearchTerm, setLogSearchTerm] = useState('');
+  const [logSearchInput, setLogSearchInput] = useState('');
   const [logPage, setLogPage] = useState(1);
   const logsPerPage = 10;
+  const logsContainerRef = useRef<HTMLDivElement | null>(null);
+  const logSearchRestoreRef = useRef<number | null>(null);
 
   const {
     data: logs,
     isLoading: isLoadingLogs,
-  } = useLogs(logPage, logsPerPage, logSearchTerm);
+  } = useLogs(logPage, logsPerPage, logSearchTerm, isLogsTab);
+  const { data: ticketPriorities = [] } = useQuery({
+    queryKey: ['ticket_priorities'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ticket_priorities')
+        .select('id, name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : 'Unknown error';
@@ -132,6 +161,34 @@ export const SettingsAndLogs: React.FC = () => {
 
     setDefaultThemeDisplay(
       settings.find(s => s.key === 'theme_default')?.value || 'system'
+    );
+
+    setLogsRetentionDays(
+      settings.find(s => s.key === 'logs_retention_days')?.value || '90'
+    );
+    setBusinessTimezone(
+      settings.find(s => s.key === 'business_timezone')?.value || 'UTC'
+    );
+    setBusinessHoursStart(
+      settings.find(s => s.key === 'business_hours_start')?.value || '09:00'
+    );
+    setBusinessHoursEnd(
+      settings.find(s => s.key === 'business_hours_end')?.value || '18:00'
+    );
+    setBusinessDays(
+      settings.find(s => s.key === 'business_days')?.value || '1,2,3,4,5'
+    );
+    setDefaultTicketPriority(
+      settings.find(s => s.key === 'default_ticket_priority')?.value || 'Low'
+    );
+    setDefaultTicketStatus(
+      settings.find(s => s.key === 'default_ticket_status')?.value || 'open'
+    );
+    setDefaultTicketCategoryId(
+      settings.find(s => s.key === 'default_ticket_category_id')?.value || ''
+    );
+    setSessionIdleTimeoutMinutes(
+      settings.find(s => s.key === 'session_idle_timeout_minutes')?.value || '120'
     );
   }, [settings, usersForAssignment]);
 
@@ -155,11 +212,24 @@ export const SettingsAndLogs: React.FC = () => {
 
   const handleLogSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (logsContainerRef.current) {
+      logSearchRestoreRef.current = logsContainerRef.current.scrollTop;
+    }
     setLogPage(1);
+    setLogSearchTerm(logSearchInput.trim());
   };
+
+  useEffect(() => {
+    if (!isLogsTab || isLoadingLogs) return;
+    if (logSearchRestoreRef.current === null) return;
+    if (!logsContainerRef.current) return;
+    logsContainerRef.current.scrollTop = logSearchRestoreRef.current;
+    logSearchRestoreRef.current = null;
+  }, [isLogsTab, isLoadingLogs, logs?.data]);
 
   const canManageCategories = isAdmin || isIT;
   const canManageSla = isAdmin || isIT;
+  const canManageLogs = isAdmin || isIT;
 
   const handleAddCategory = async () => {
     if (!canManageCategories) {
@@ -305,6 +375,73 @@ export const SettingsAndLogs: React.FC = () => {
     }
   };
 
+  const handlePurgeLogs = async () => {
+    const retention = Number(logsRetentionDays);
+    if (!Number.isFinite(retention) || retention < 1) {
+      notifyError('Invalid retention', 'Retention must be at least 1 day');
+      return;
+    }
+
+    setIsPurgingLogs(true);
+    try {
+      const { data, error } = await supabase.rpc('purge_old_logs', {
+        p_retention_days: retention,
+      });
+      if (error) throw error;
+
+      const deleted = typeof data === 'number' ? data : 0;
+      notifySuccess('Logs purged', `${deleted} old logs were removed`);
+      await queryClient.invalidateQueries({ queryKey: ['logs'] });
+    } catch (err: unknown) {
+      notifyError('Failed to purge logs', getErrorMessage(err));
+    } finally {
+      setIsPurgingLogs(false);
+      setPurgeLogsOpen(false);
+    }
+  };
+
+  const handleSaveBusinessCalendar = async () => {
+    const hhmm = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!hhmm.test(businessHoursStart) || !hhmm.test(businessHoursEnd)) {
+      notifyError('Invalid time', 'Use 24-hour format HH:MM');
+      return;
+    }
+
+    if (businessHoursStart >= businessHoursEnd) {
+      notifyError('Invalid window', 'Start time must be earlier than end time');
+      return;
+    }
+
+    const parsedDays = businessDays
+      .split(',')
+      .map((d) => Number(d.trim()))
+      .filter((d) => Number.isInteger(d) && d >= 1 && d <= 7);
+
+    if (!parsedDays.length) {
+      notifyError('Invalid business days', 'Use comma-separated values from 1 to 7');
+      return;
+    }
+
+    const normalizedDays = Array.from(new Set(parsedDays)).sort((a, b) => a - b).join(',');
+    const tz = businessTimezone.trim() || 'UTC';
+
+    setSavingKey('business_calendar');
+    try {
+      await Promise.all([
+        updateSetting.mutateAsync({ key: 'business_timezone', value: tz }),
+        updateSetting.mutateAsync({ key: 'business_hours_start', value: businessHoursStart }),
+        updateSetting.mutateAsync({ key: 'business_hours_end', value: businessHoursEnd }),
+        updateSetting.mutateAsync({ key: 'business_days', value: normalizedDays }),
+      ]);
+      setBusinessDays(normalizedDays);
+      notifySuccess('Business calendar updated');
+    } catch (err: unknown) {
+      notifyError('Failed to save business calendar', getErrorMessage(err));
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
   const totalLogPages = logs
     ? Math.ceil(logs.count / logsPerPage)
     : 0;
@@ -314,8 +451,7 @@ export const SettingsAndLogs: React.FC = () => {
     isLoadingCategories ||
     isLoadingCategoryStats ||
     isLoadingSLAPolicies ||
-    isLoadingUsers ||
-    isLoadingLogs
+    isLoadingUsers
   ) {
     return (
       <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -454,6 +590,137 @@ export const SettingsAndLogs: React.FC = () => {
                   </Select>
                 </div>
               </div>
+
+              <div className="rounded-md border border-border/70 bg-muted/20 p-4">
+                <div className="mb-3">
+                  <div className="font-medium">Default ticket workflow</div>
+                  <div className="text-sm text-muted-foreground">
+                    Applied when creating new tickets.
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div>
+                    <div className="mb-1 text-xs text-muted-foreground">Category</div>
+                    <Select
+                      value={defaultTicketCategoryId || '__none__'}
+                      onValueChange={(value) => {
+                        const previous = defaultTicketCategoryId;
+                        const next = value === '__none__' ? '' : value;
+                        setDefaultTicketCategoryId(next);
+                        void handleUpdateSetting(
+                          'default_ticket_category_id',
+                          next,
+                          () => setDefaultTicketCategoryId(previous),
+                          'Default category updated'
+                        );
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Default category" />
+                      </SelectTrigger>
+                      <SelectContent position="popper" sideOffset={6}>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {categories?.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-xs text-muted-foreground">Priority</div>
+                    <Select
+                      value={defaultTicketPriority}
+                      onValueChange={(value) => {
+                        const previous = defaultTicketPriority;
+                        setDefaultTicketPriority(value);
+                        void handleUpdateSetting(
+                          'default_ticket_priority',
+                          value,
+                          () => setDefaultTicketPriority(previous),
+                          'Default priority updated'
+                        );
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Default priority" />
+                      </SelectTrigger>
+                      <SelectContent position="popper" sideOffset={6}>
+                        {ticketPriorities.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-xs text-muted-foreground">Status</div>
+                    <Select
+                      value={defaultTicketStatus}
+                      onValueChange={(value) => {
+                        const previous = defaultTicketStatus;
+                        setDefaultTicketStatus(value);
+                        void handleUpdateSetting(
+                          'default_ticket_status',
+                          value,
+                          () => setDefaultTicketStatus(previous),
+                          'Default status updated'
+                        );
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Default status" />
+                      </SelectTrigger>
+                      <SelectContent position="popper" sideOffset={6}>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="in_progress">In progress</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border/70 bg-muted/20 p-4">
+                <div className="mb-3">
+                  <div className="font-medium">Security</div>
+                  <div className="text-sm text-muted-foreground">
+                    Automatically sign out users after inactivity.
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 sm:max-w-xs">
+                  <Label>Idle session timeout</Label>
+                  <Select
+                    value={sessionIdleTimeoutMinutes}
+                    onValueChange={(value) => {
+                      const previous = sessionIdleTimeoutMinutes;
+                      setSessionIdleTimeoutMinutes(value);
+                      void handleUpdateSetting(
+                        'session_idle_timeout_minutes',
+                        value,
+                        () => setSessionIdleTimeoutMinutes(previous),
+                        'Security setting updated'
+                      );
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select timeout" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" sideOffset={6}>
+                      <SelectItem value="0">Disabled</SelectItem>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="60">1 hour</SelectItem>
+                      <SelectItem value="120">2 hours</SelectItem>
+                      <SelectItem value="240">4 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </SettingsSection>
         </TabsContent>
@@ -568,6 +835,60 @@ export const SettingsAndLogs: React.FC = () => {
             description="Response & resolution targets"
           >
             <div className="space-y-4">
+              <div className="rounded-md border border-border/70 bg-muted/20 p-4">
+                <div className="mb-3">
+                  <div className="font-medium">Business hours & calendar</div>
+                  <div className="text-sm text-muted-foreground">
+                    SLA due dates are calculated using timezone, workday window, and business days.
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <div className="mb-1 text-xs text-muted-foreground">Timezone</div>
+                    <Input
+                      value={businessTimezone}
+                      onChange={(e) => setBusinessTimezone(e.target.value)}
+                      placeholder="UTC"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-muted-foreground">Start time</div>
+                    <Input
+                      type="time"
+                      value={businessHoursStart}
+                      onChange={(e) => setBusinessHoursStart(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-muted-foreground">End time</div>
+                    <Input
+                      type="time"
+                      value={businessHoursEnd}
+                      onChange={(e) => setBusinessHoursEnd(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-muted-foreground">Business days (1-7)</div>
+                    <Input
+                      value={businessDays}
+                      onChange={(e) => setBusinessDays(e.target.value)}
+                      placeholder="1,2,3,4,5"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Example: Mon-Fri = 1,2,3,4,5 (ISO weekday; 7 = Sunday)
+                  </p>
+                  <Button
+                    onClick={() => void handleSaveBusinessCalendar()}
+                    disabled={savingKey === 'business_calendar'}
+                  >
+                    Save calendar
+                  </Button>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">
                   Edit response and resolution targets per priority
@@ -651,15 +972,65 @@ export const SettingsAndLogs: React.FC = () => {
             title="System Logs"
             description="Audit trail of system activity"
           >
+            {canManageLogs && (
+              <div className="mb-4 rounded-md border border-border/70 bg-muted/20 p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <div className="font-medium">Log retention policy</div>
+                    <div className="text-sm text-muted-foreground">
+                      Logs older than this threshold are eligible for purge.
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="w-full sm:w-[170px]">
+                      <Select
+                        value={logsRetentionDays}
+                        onValueChange={(value) => {
+                          const previous = logsRetentionDays;
+                          setLogsRetentionDays(value);
+                          void handleUpdateSetting(
+                            'logs_retention_days',
+                            value,
+                            () => setLogsRetentionDays(previous),
+                            'Log retention updated'
+                          );
+                        }}
+                        disabled={savingKey === 'logs_retention_days'}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Retention" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" sideOffset={6}>
+                          <SelectItem value="30">30 days</SelectItem>
+                          <SelectItem value="90">90 days</SelectItem>
+                          <SelectItem value="180">180 days</SelectItem>
+                          <SelectItem value="365">365 days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9"
+                      onClick={() => setPurgeLogsOpen(true)}
+                      disabled={isPurgingLogs}
+                    >
+                      Purge old logs
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <form
               onSubmit={handleLogSearch}
               className="flex gap-2 mb-4"
             >
               <Input
                 placeholder="Search logs..."
-                value={logSearchTerm}
+                value={logSearchInput}
                 onChange={e =>
-                  setLogSearchTerm(e.target.value)
+                  setLogSearchInput(e.target.value)
                 }
               />
               <Button type="submit" variant="secondary">
@@ -668,9 +1039,14 @@ export const SettingsAndLogs: React.FC = () => {
               </Button>
             </form>
 
-            {logs?.data.length ? (
+            {isLoadingLogs ? (
+              <LoadingSkeleton count={6} className="md:grid-cols-1" />
+            ) : logs?.data.length ? (
               <>
-                <div className="rounded-md border max-h-[420px] overflow-y-auto">
+                <div
+                  ref={logsContainerRef}
+                  className="rounded-md border max-h-[420px] overflow-y-auto"
+                >
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -722,7 +1098,11 @@ export const SettingsAndLogs: React.FC = () => {
                 </div>
 
                 {totalLogPages > 1 && (
-                  <Pagination className="mt-4">
+                  <div className="mt-4 space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      Page {logPage} of {totalLogPages} • Total {logs?.count ?? 0} logs
+                    </div>
+                    <Pagination>
                     <PaginationContent>
                       {/* Previous */}
                       <PaginationItem>
@@ -768,7 +1148,8 @@ export const SettingsAndLogs: React.FC = () => {
                         />
                       </PaginationItem>
                     </PaginationContent>
-                  </Pagination>
+                    </Pagination>
+                  </div>
                 )}
               </>
             ) : (
@@ -828,6 +1209,28 @@ export const SettingsAndLogs: React.FC = () => {
               disabled={updateSLAPolicy.isPending}
             >
               Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={purgeLogsOpen} onOpenChange={setPurgeLogsOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Purge old logs</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove system logs older than {logsRetentionDays} days.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPurgingLogs}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handlePurgeLogs}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isPurgingLogs}
+            >
+              Purge
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

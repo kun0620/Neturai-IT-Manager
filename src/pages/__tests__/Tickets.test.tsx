@@ -3,11 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Tickets } from '@/pages/Tickets';
+import { TicketDrawerProvider } from '@/context/TicketDrawerContext';
 
 const mockUseAuth = vi.fn();
 const mockUseAllTickets = vi.fn();
 const mockUseTicketCategories = vi.fn();
 const mockUseAssignableUsers = vi.fn();
+const mockUseSLAPolicies = vi.fn();
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
@@ -22,6 +24,10 @@ vi.mock('@/hooks/useTickets', () => ({
 
 vi.mock('@/hooks/useAssignableUsers', () => ({
   useAssignableUsers: () => mockUseAssignableUsers(),
+}));
+
+vi.mock('@/hooks/useSLAPolicies', () => ({
+  useSLAPolicies: () => mockUseSLAPolicies(),
 }));
 
 vi.mock('@/components/tickets/TableView', () => ({
@@ -56,10 +62,10 @@ function renderTickets(initialPath = '/tickets') {
         <Route
           path="/tickets"
           element={
-            <>
+            <TicketDrawerProvider>
               <Tickets />
               <TestLocation />
-            </>
+            </TicketDrawerProvider>
           }
         />
       </Routes>
@@ -107,6 +113,13 @@ describe('Tickets page filters', () => {
     mockUseAssignableUsers.mockReturnValue({
       data: [{ id: 'u-1', name: 'Alice' }],
     });
+
+    mockUseSLAPolicies.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
   });
 
   afterEach(() => {
@@ -130,7 +143,7 @@ describe('Tickets page filters', () => {
     const user = userEvent.setup();
     renderTickets('/tickets?q=vpn&category=cat-1&priority=high&assignee=u-1&status=open');
 
-    await user.click(screen.getByRole('button', { name: 'Clear all' }));
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('')).toBeInTheDocument();
@@ -150,7 +163,11 @@ describe('Tickets page filters', () => {
     await user.click(removeStatusButton);
 
     await waitFor(() => {
-      expect(screen.getByTestId('location-search')).toHaveTextContent('?q=vpn&priority=high');
+      const search = screen.getByTestId('location-search').textContent ?? '';
+      const params = new URLSearchParams(search);
+      expect(params.get('q')).toBe('vpn');
+      expect(params.get('priority')).toBe('high');
+      expect(params.get('status')).toBeNull();
     });
   });
 });

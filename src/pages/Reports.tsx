@@ -15,14 +15,22 @@ import { TicketsByDayBar } from '@/components/reports/TicketsByDayBar';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { createFadeSlideUp } from '@/lib/motion';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { notifyError, notifySuccess } from '@/lib/notify';
+import { exportRowsToExcel, exportRowsToPdf } from '@/lib/export';
 
 
 
 import {
   CircleDot,
+  FileSpreadsheet,
+  FileText,
   Hourglass,
   CheckCircle,
   LayoutDashboard,
+  Printer,
+  RefreshCw,
 } from 'lucide-react';
 
 const Reports: React.FC = () => {
@@ -47,6 +55,8 @@ const Reports: React.FC = () => {
     isLoading,
     isError,
     error,
+    isFetching,
+    refetch,
   } = useReportOverview(from, to);
 
   const {
@@ -56,56 +66,45 @@ const Reports: React.FC = () => {
 
 const navigate = useNavigate();
 
-const exportCSV = () => {
-  if (!data?.tickets || data.tickets.length === 0) return;
+const buildReportRows = () => {
+  if (!data?.tickets) return [];
+  return data.tickets.map((t) => ({
+    ID: t.id,
+    Title: t.title ?? '',
+    Status: t.status ?? '',
+    Priority: t.priority ?? '',
+    'Created At': t.created_at ? format(new Date(t.created_at), 'yyyy-MM-dd HH:mm') : '',
+    'Updated At': t.updated_at ? format(new Date(t.updated_at), 'yyyy-MM-dd HH:mm') : '',
+    'Due At': t.due_at ? format(new Date(t.due_at), 'yyyy-MM-dd HH:mm') : '',
+  }));
+};
 
-  const escapeCsv = (value: unknown) => {
-    if (value === null || value === undefined) return '';
-    const str = String(value);
-    const needsEscape = /[",\n\r]/.test(str);
-    const safe = str.replace(/"/g, '""');
-    const guarded =
-      safe.startsWith('=') ||
-      safe.startsWith('+') ||
-      safe.startsWith('-') ||
-      safe.startsWith('@')
-        ? `'${safe}`
-        : safe;
-    return needsEscape ? `"${guarded}"` : guarded;
-  };
+const handleExportExcel = async () => {
+  const rows = buildReportRows();
+  if (rows.length === 0 || (range === 'custom' && isDateRangeInvalid)) {
+    notifyError('No tickets available to export');
+    return;
+  }
+  await exportRowsToExcel(
+    rows,
+    `tickets_report_${from.slice(0, 10)}_${to.slice(0, 10)}`,
+    'Tickets'
+  );
+  notifySuccess('Excel exported', `${rows.length} ticket(s)`);
+};
 
-  const headers = [
-    'ID',
-    'Title',
-    'Status',
-    'Priority',
-    'Created At',
-    'Updated At',
-    'Due At',
-  ];
-
-  const rows = data.tickets.map(t => [
-    escapeCsv(t.id),
-    escapeCsv(t.title ?? ''),
-    escapeCsv(t.status),
-    escapeCsv(t.priority),
-    escapeCsv(t.created_at),
-    escapeCsv(t.updated_at),
-    escapeCsv(t.due_at),
-  ]);
-
-  const csvContent =
-    [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `tickets_report_${from.slice(0, 10)}_${to.slice(0, 10)}.csv`;
-  link.click();
-
-  URL.revokeObjectURL(url);
+const handleExportPdf = () => {
+  const rows = buildReportRows();
+  if (rows.length === 0 || (range === 'custom' && isDateRangeInvalid)) {
+    notifyError('No tickets available to export');
+    return;
+  }
+  exportRowsToPdf(
+    rows,
+    `IT Ticket Report ${from.slice(0, 10)} to ${to.slice(0, 10)}`,
+    `tickets_report_${from.slice(0, 10)}_${to.slice(0, 10)}`
+  );
+  notifySuccess('PDF exported', `${rows.length} ticket(s)`);
 };
 
   /* ---------- states ---------- */
@@ -148,6 +147,10 @@ const exportCSV = () => {
         <p className="text-sm text-muted-foreground">
           Reporting period: {from.slice(0,10)} → {to.slice(0,10)}
         </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">Range: {range === 'custom' ? 'Custom' : range === '7d' ? 'Last 7 days' : 'Last 30 days'}</Badge>
+          <Badge variant="secondary">Total: {data.total}</Badge>
+        </div>
       </motion.div>
 
       {/* Date Range */}
@@ -155,8 +158,11 @@ const exportCSV = () => {
         className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-card/60 p-2"
         {...createFadeSlideUp(0.08)}
       >
-        <button
-          className={`h-8 rounded-md border px-3 text-sm ${
+        <Button
+          type="button"
+          variant={range === '7d' ? 'default' : 'outline'}
+          size="sm"
+          className={`h-8 ${
             range === '7d' ? 'bg-primary text-primary-foreground' : ''
           }`}
           onClick={() => {
@@ -166,10 +172,13 @@ const exportCSV = () => {
           }}
         >
           Last 7 days
-        </button>
+        </Button>
 
-        <button
-          className={`h-8 rounded-md border px-3 text-sm ${
+        <Button
+          type="button"
+          variant={range === '30d' ? 'default' : 'outline'}
+          size="sm"
+          className={`h-8 ${
             range === '30d' ? 'bg-primary text-primary-foreground' : ''
           }`}
           onClick={() => {
@@ -179,16 +188,19 @@ const exportCSV = () => {
           }}
         >
           Last 30 days
-        </button>
+        </Button>
 
-        <button
-          className={`h-8 rounded-md border px-3 text-sm ${
+        <Button
+          type="button"
+          variant={range === 'custom' ? 'default' : 'outline'}
+          size="sm"
+          className={`h-8 ${
             range === 'custom' ? 'bg-primary text-primary-foreground' : ''
           }`}
           onClick={() => setRange('custom')}
         >
           Custom
-        </button>
+        </Button>
 
         {range === 'custom' && (
           <div className="flex items-center gap-2">
@@ -236,30 +248,65 @@ const exportCSV = () => {
               Export disabled while date range is invalid
             </span>
           )}
-          <button
-            className="h-8 rounded-md border px-3 text-sm hover:bg-muted"
-            onClick={() => exportCSV()}
-            disabled={range === 'custom' && isDateRangeInvalid}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2"
+            onClick={() => {
+              void refetch();
+            }}
+            disabled={isFetching}
+          >
+            <RefreshCw className={isFetching ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+            Refresh
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2"
+            onClick={() => void handleExportExcel()}
+            disabled={range === 'custom' && isDateRangeInvalid || !data.tickets || data.tickets.length === 0}
             title={
               range === 'custom' && isDateRangeInvalid
                 ? 'Fix date range to export'
+                : !data.tickets || data.tickets.length === 0
+                  ? 'No tickets in selected range'
                 : undefined
             }
           >
-            Export CSV
-          </button>
-          <button
-            className="h-8 rounded-md border px-3 text-sm hover:bg-muted"
-            onClick={() => window.print()}
-            disabled={range === 'custom' && isDateRangeInvalid}
+            <FileSpreadsheet className="h-4 w-4" />
+            Export Excel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2"
+            onClick={() => handleExportPdf()}
+            disabled={range === 'custom' && isDateRangeInvalid || !data.tickets || data.tickets.length === 0}
             title={
               range === 'custom' && isDateRangeInvalid
                 ? 'Fix date range to export'
+                : !data.tickets || data.tickets.length === 0
+                  ? 'No tickets in selected range'
                 : undefined
             }
           >
+            <FileText className="h-4 w-4" />
             Export PDF
-          </button>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2"
+            onClick={() => window.print()}
+          >
+            <Printer className="h-4 w-4" />
+            Print
+          </Button>
         </div>
       </motion.div>
 
@@ -283,6 +330,8 @@ const exportCSV = () => {
           icon={CircleDot}
           color="text-green-500"
           description="Currently open"
+          onClick={() => navigate('/tickets?status=open')}
+          clickHint="Open open tickets"
         />
 
         <SummaryCard
@@ -292,6 +341,8 @@ const exportCSV = () => {
           icon={Hourglass}
           color="text-yellow-500"
           description="Being worked on"
+          onClick={() => navigate('/tickets?status=in_progress')}
+          clickHint="Open in-progress tickets"
         />
 
         <SummaryCard
@@ -301,6 +352,8 @@ const exportCSV = () => {
           icon={CheckCircle}
           color="text-blue-500"
           description="Resolved"
+          onClick={() => navigate('/tickets?status=closed')}
+          clickHint="Open closed tickets"
         />
 
         <SummaryCard
@@ -322,6 +375,8 @@ const exportCSV = () => {
           icon={CircleDot}
           color="text-red-600"
           description="Past SLA"
+          onClick={() => navigate('/tickets?filter=overdue')}
+          clickHint="Review overdue tickets"
         />
 
         <SummaryCard

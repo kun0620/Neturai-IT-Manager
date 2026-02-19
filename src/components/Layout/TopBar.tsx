@@ -42,6 +42,7 @@ const SEARCH_SCOPE_STORAGE_KEY = 'neturai_search_scope';
 
 export function TopBar() {
   type SearchScope = 'all' | 'tickets' | 'assets' | 'users';
+  type NotificationFilter = 'all' | 'unread';
   type RecentSearchRecord = SearchOverlayItem & { label: string; scope: SearchScope };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
@@ -51,6 +52,7 @@ export function TopBar() {
   const [recentSearches, setRecentSearches] = useState<RecentSearchRecord[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+  const [notificationFilter, setNotificationFilter] = useState<NotificationFilter>('all');
   const searchListRef = useRef<HTMLDivElement | null>(null);
   const [ticketResults, setTicketResults] = useState<
     Array<{ id: string; title: string; status: string | null; priority: string | null }>
@@ -83,6 +85,7 @@ export function TopBar() {
     { label: 'Tickets', href: '/tickets', keywords: 'incidents tasks support' },
     { label: 'Asset Management', href: '/assets', keywords: 'inventory devices hardware' },
     { label: 'Reports', href: '/reports', keywords: 'analytics metrics export' },
+    { label: 'Notifications', href: '/notifications', keywords: 'alerts inbox updates' },
     { label: 'Settings - General', href: '/settings?tab=general', keywords: 'settings general' },
     { label: 'Settings - Users & Roles', href: '/settings?tab=users', keywords: 'settings users roles permissions' },
     { label: 'Settings - Categories', href: '/settings?tab=categories', keywords: 'settings categories' },
@@ -309,6 +312,56 @@ export function TopBar() {
     };
   }, [mobileMenuOpen, searchOpen]);
 
+  const prefetchRoute = useCallback((href: string) => {
+    if (href.startsWith('/tickets')) {
+      void import('@/pages/Tickets');
+      return;
+    }
+    if (href.startsWith('/assets')) {
+      void import('@/pages/AssetManagement');
+      return;
+    }
+    if (href.startsWith('/dashboard')) {
+      void import('@/pages/Dashboard');
+      return;
+    }
+    if (href.startsWith('/reports')) {
+      void import('@/pages/Reports');
+      return;
+    }
+    if (href.startsWith('/notifications')) {
+      void import('@/pages/Notifications');
+      return;
+    }
+    if (href.startsWith('/settings')) {
+      void import('@/pages/SettingsAndLogs');
+      return;
+    }
+    if (href.startsWith('/profile')) {
+      void import('@/pages/Profile');
+      return;
+    }
+    if (href.startsWith('/users')) {
+      void import('@/pages/Users');
+    }
+  }, []);
+
+  const prefetchSearchItem = useCallback((item: SearchOverlayItem) => {
+    if (item.kind === 'quick') {
+      prefetchRoute(item.href);
+      return;
+    }
+    if (item.kind === 'ticket') {
+      prefetchRoute('/tickets');
+      return;
+    }
+    if (item.kind === 'asset') {
+      prefetchRoute('/assets');
+      return;
+    }
+    prefetchRoute('/users');
+  }, [prefetchRoute]);
+
   const goTo = useCallback((href: string) => {
     navigate(href);
     setMobileMenuOpen(false);
@@ -442,9 +495,31 @@ export function TopBar() {
   const {
     notifications,
     unreadCount,
+    loading: notificationsLoading,
     markAsRead,
     markAllAsRead,
   } = useNotifications(user?.id);
+  const visibleNotifications = useMemo(
+    () =>
+      notificationFilter === 'unread'
+        ? notifications.filter((notification) => !notification.is_read)
+        : notifications,
+    [notificationFilter, notifications]
+  );
+  const unreadBadgeLabel = unreadCount > 99 ? '99+' : String(unreadCount);
+
+  const handleNotificationOpen = useCallback(
+    async (notification: (typeof notifications)[number]) => {
+      if (!notification.is_read) {
+        await markAsRead(notification.id);
+      }
+      if (notification.ticket_id) {
+        prefetchRoute('/tickets');
+        navigate(`/tickets?open_ticket=${encodeURIComponent(notification.ticket_id)}`);
+      }
+    },
+    [markAsRead, navigate, prefetchRoute]
+  );
 
   const getNotificationTitle = (n: typeof notifications[number]) => {
     if (n.title) return n.title;
@@ -504,6 +579,8 @@ export function TopBar() {
               key={item.label}
               type="button"
               className="inline-flex h-10 items-center rounded-[44px] px-3 text-[15px] font-medium leading-none tracking-wide transition-colors duration-200 hover:bg-primary/15 hover:text-primary"
+              onMouseEnter={() => prefetchRoute(item.href)}
+              onFocus={() => prefetchRoute(item.href)}
               onClick={() => navigate(item.href)}
             >
               {item.label}
@@ -529,6 +606,8 @@ export function TopBar() {
                         key={option.tab}
                         type="button"
                         className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary"
+                        onMouseEnter={() => prefetchRoute(`/settings?tab=${option.tab}`)}
+                        onFocus={() => prefetchRoute(`/settings?tab=${option.tab}`)}
                         onClick={() => navigate(`/settings?tab=${option.tab}`)}
                       >
                         <option.icon className="h-4 w-4 text-muted-foreground" />
@@ -588,7 +667,7 @@ export function TopBar() {
                 <Bell className="h-5 w-5" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                    {unreadCount}
+                    {unreadBadgeLabel}
                   </span>
                 )}
               </button>
@@ -612,21 +691,54 @@ export function TopBar() {
                 </button>
               )}
             </DropdownMenuLabel>
+            <div className="px-4 pb-2">
+              <div className="grid w-full grid-cols-2 rounded-md border border-border/70 bg-muted/30 p-1">
+                <button
+                  type="button"
+                  className={clsx(
+                    'h-7 rounded-[6px] px-2 text-xs font-medium leading-none whitespace-nowrap transition-colors',
+                    notificationFilter === 'all'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-background/70'
+                  )}
+                  onClick={() => setNotificationFilter('all')}
+                >
+                  All ({notifications.length})
+                </button>
+                <button
+                  type="button"
+                  className={clsx(
+                    'h-7 rounded-[6px] px-2 text-xs font-medium leading-none whitespace-nowrap transition-colors',
+                    notificationFilter === 'unread'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-background/70'
+                  )}
+                  onClick={() => setNotificationFilter('unread')}
+                >
+                  Unread ({unreadCount})
+                </button>
+              </div>
+            </div>
             <DropdownMenuSeparator className="bg-border" />
 
-            {notifications.length === 0 && (
-              <div className="px-4 py-6 text-sm text-muted-foreground text-center">
-                No notifications
+            {notificationsLoading && (
+              <div className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading notifications...
               </div>
             )}
-            {notifications.map((n) => (
+            {!notificationsLoading && visibleNotifications.length === 0 && (
+              <div className="px-4 py-6 text-sm text-muted-foreground text-center">
+                {notificationFilter === 'unread'
+                  ? 'No unread notifications'
+                  : 'No notifications'}
+              </div>
+            )}
+            {!notificationsLoading && visibleNotifications.map((n) => (
               <DropdownMenuItem
                 key={n.id}
                 onClick={() => {
-                  markAsRead(n.id);
-                  if (n.ticket_id) {
-                    openDrawer(n.ticket_id);
-                  }
+                  void handleNotificationOpen(n);
                 }}
                 className={clsx(
                   'flex flex-col gap-1 items-start cursor-pointer px-4 py-2',
@@ -658,6 +770,14 @@ export function TopBar() {
                 </span>
               </DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              onClick={() => goTo('/notifications')}
+              onMouseEnter={() => prefetchRoute('/notifications')}
+              className="justify-center text-sm font-medium"
+            >
+              View all notifications
+            </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -796,7 +916,13 @@ export function TopBar() {
                               'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
                               isActive && 'bg-primary/15 text-primary'
                             )}
-                            onMouseEnter={() => setActiveSearchIndex(idx)}
+                            onMouseEnter={() => {
+                              setActiveSearchIndex(idx);
+                              if (entry) prefetchSearchItem(entry);
+                            }}
+                            onFocus={() => {
+                              if (entry) prefetchSearchItem(entry);
+                            }}
                             onClick={() => {
                               if (entry) {
                                 applySearchSelection(entry, item.label);
@@ -838,7 +964,11 @@ export function TopBar() {
                                     'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
                                     isActive && 'bg-primary/15 text-primary'
                                   )}
-                                  onMouseEnter={() => setActiveSearchIndex(idx)}
+                                  onMouseEnter={() => {
+                                    setActiveSearchIndex(idx);
+                                    prefetchSearchItem(record);
+                                  }}
+                                  onFocus={() => prefetchSearchItem(record)}
                                   onClick={() => applySearchSelection(record, record.label, record.scope)}
                                 >
                                   <span className="truncate pr-3">{record.label}</span>
@@ -904,7 +1034,13 @@ export function TopBar() {
                                   'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
                                   isActive && 'bg-primary/15 text-primary'
                                 )}
-                                onMouseEnter={() => setActiveSearchIndex(idx)}
+                                onMouseEnter={() => {
+                                  setActiveSearchIndex(idx);
+                                  if (entry) prefetchSearchItem(entry);
+                                }}
+                                onFocus={() => {
+                                  if (entry) prefetchSearchItem(entry);
+                                }}
                                 onClick={() => {
                                   if (entry) {
                                     applySearchSelection(entry, ticket.title);
@@ -946,7 +1082,13 @@ export function TopBar() {
                                   'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
                                   isActive && 'bg-primary/15 text-primary'
                                 )}
-                                onMouseEnter={() => setActiveSearchIndex(idx)}
+                                onMouseEnter={() => {
+                                  setActiveSearchIndex(idx);
+                                  if (entry) prefetchSearchItem(entry);
+                                }}
+                                onFocus={() => {
+                                  if (entry) prefetchSearchItem(entry);
+                                }}
                                 onClick={() => {
                                   if (entry) {
                                     applySearchSelection(
@@ -994,7 +1136,13 @@ export function TopBar() {
                                   'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary',
                                   isActive && 'bg-primary/15 text-primary'
                                 )}
-                                onMouseEnter={() => setActiveSearchIndex(idx)}
+                                onMouseEnter={() => {
+                                  setActiveSearchIndex(idx);
+                                  if (entry) prefetchSearchItem(entry);
+                                }}
+                                onFocus={() => {
+                                  if (entry) prefetchSearchItem(entry);
+                                }}
                                 onClick={() => {
                                   if (entry) {
                                     applySearchSelection(entry, label);
@@ -1073,6 +1221,8 @@ export function TopBar() {
                   key={item.label}
                   type="button"
                   className="flex w-full items-center justify-between border-b border-border/70 py-3 text-left text-2xl font-medium leading-none"
+                  onMouseEnter={() => prefetchRoute(item.href)}
+                  onFocus={() => prefetchRoute(item.href)}
                   onClick={() => goTo(item.href)}
                 >
                   {item.label}
@@ -1097,6 +1247,8 @@ export function TopBar() {
                       key={option.tab}
                       type="button"
                       className="flex w-full items-center gap-2 rounded-md px-1 py-2 text-left text-base text-muted-foreground transition-colors hover:bg-primary/15 hover:text-primary"
+                      onMouseEnter={() => prefetchRoute(`/settings?tab=${option.tab}`)}
+                      onFocus={() => prefetchRoute(`/settings?tab=${option.tab}`)}
                       onClick={() => goTo(`/settings?tab=${option.tab}`)}
                     >
                       <option.icon className="h-4 w-4" />

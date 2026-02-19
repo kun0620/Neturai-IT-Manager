@@ -1,5 +1,7 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
+  FileSpreadsheet,
+  FileText,
   KanbanSquare,
   List,
   ListFilter,
@@ -40,14 +42,10 @@ import {
   DrawerTitle,
 } from '@/components/ui/drawer';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
-import { notifyWarning } from '@/lib/notify';
-
-const SLA_HOURS: Record<string, number> = {
-  Low: 72,
-  Medium: 48,
-  High: 24,
-  Critical: 8,
-};
+import { notifyError, notifySuccess, notifyWarning } from '@/lib/notify';
+import { exportRowsToExcel, exportRowsToPdf } from '@/lib/export';
+import { useSLAPolicies } from '@/hooks/useSLAPolicies';
+import { buildSlaResolutionHoursMap, isTicketSlaBreached } from '@/lib/sla';
 
 const PRIORITY_ORDER: Record<string, number> = {
   low: 0,
@@ -147,6 +145,10 @@ export const Tickets: React.FC = () => {
   const [selectedPreset, setSelectedPreset] = useState<TicketViewPreset>('default');
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const { data: assignableUsers } = useAssignableUsers();
+  const { data: slaPolicies = [] } = useSLAPolicies();
+  const prefetchAssetsRoute = useCallback(() => {
+    void import('@/pages/AssetManagement');
+  }, []);
 
   
   useEffect(() => {
@@ -297,6 +299,10 @@ export const Tickets: React.FC = () => {
       }),
     [tickets]
   );
+  const slaResolutionHoursMap = useMemo(
+    () => buildSlaResolutionHoursMap(slaPolicies),
+    [slaPolicies]
+  );
 
   const filteredTickets = useMemo(
     () =>
@@ -345,20 +351,11 @@ export const Tickets: React.FC = () => {
           );
         }
 
-        // SLA breach logic
-        if (!ticket.created_at || !ticket.priority) return false;
-
-        const sla = SLA_HOURS[ticket.priority];
-        if (!sla) return false;
-
-        const start = new Date(ticket.created_at).getTime();
-        const end = ticket.updated_at
-          ? new Date(ticket.updated_at).getTime()
-          : Date.now();
-
-        const hours = (end - start) / (1000 * 60 * 60);
-
-        const isSlaBreach = hours > sla && ticket.status !== 'closed';
+        const isSlaBreach = isTicketSlaBreached(
+          ticket,
+          slaResolutionHoursMap,
+          now
+        );
 
         return (
           matchKeyword &&
@@ -378,6 +375,7 @@ export const Tickets: React.FC = () => {
       isOverdueFilter,
       priorityFilter,
       slaFilter,
+      slaResolutionHoursMap,
       statusFilter,
       tickets,
     ]
@@ -415,6 +413,21 @@ export const Tickets: React.FC = () => {
       // ignore storage write errors
     }
   }, [viewMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const prefetch = () => {
+      prefetchAssetsRoute();
+    };
+
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(prefetch, { timeout: 1500 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timeoutId = window.setTimeout(prefetch, 500);
+    return () => window.clearTimeout(timeoutId);
+  }, [prefetchAssetsRoute]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -541,6 +554,47 @@ export const Tickets: React.FC = () => {
     });
     return counts;
   }, [tickets]);
+  const assigneeNameById = useMemo(
+    () =>
+      new Map(
+        (assignableUsers || []).map((user) => [user.id, user.name || user.id])
+      ),
+    [assignableUsers]
+  );
+
+  const buildTicketExportRows = () =>
+    displayedTickets.map((ticket) => ({
+      ID: ticket.id,
+      Title: ticket.title ?? '',
+      Status: ticket.status ?? '',
+      Priority: ticket.priority ?? '',
+      Category: ticket.category_id ? categoryMap.get(ticket.category_id) ?? '' : '',
+      Assignee: ticket.assigned_to
+        ? assigneeNameById.get(ticket.assigned_to) ?? ticket.assigned_to
+        : 'Unassigned',
+      'Created At': ticket.created_at
+        ? new Date(ticket.created_at).toLocaleString()
+        : '',
+      'Due At': ticket.due_at ? new Date(ticket.due_at).toLocaleString() : '',
+    }));
+
+  const handleExportTicketsExcel = async () => {
+    if (displayedTickets.length === 0) {
+      notifyError('No tickets to export');
+      return;
+    }
+    await exportRowsToExcel(buildTicketExportRows(), 'tickets-export');
+    notifySuccess('Excel exported', `${displayedTickets.length} ticket(s)`);
+  };
+
+  const handleExportTicketsPdf = () => {
+    if (displayedTickets.length === 0) {
+      notifyError('No tickets to export');
+      return;
+    }
+    exportRowsToPdf(buildTicketExportRows(), 'Tickets Export', 'tickets-export');
+    notifySuccess('PDF exported', `${displayedTickets.length} ticket(s)`);
+  };
 
   const renderFilterSidebarContent = () => (
     <div className="flex flex-col gap-3">
@@ -912,6 +966,22 @@ export const Tickets: React.FC = () => {
               <KanbanSquare className="mr-2 h-4 w-4" /> Kanban View
             </TabsTrigger>
           </TabsList>
+          <Button
+            variant="outline"
+            className="h-9"
+            onClick={() => void handleExportTicketsExcel()}
+            disabled={displayedTickets.length === 0}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9"
+            onClick={handleExportTicketsPdf}
+            disabled={displayedTickets.length === 0}
+          >
+            <FileText className="mr-2 h-4 w-4" /> PDF
+          </Button>
           <Button
             onClick={() => setIsCreateTicketDialogOpen(true)}
             className="btn-motion-primary ml-auto h-9"

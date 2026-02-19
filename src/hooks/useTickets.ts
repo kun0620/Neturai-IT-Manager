@@ -8,6 +8,7 @@ import type { TablesUpdate } from '@/types/database.types';
 type Ticket = Database['public']['Tables']['tickets']['Row'];
 type TicketCategory = Database['public']['Tables']['ticket_categories']['Row'];
 type TicketComment = Database['public']['Tables']['ticket_comments']['Row'];
+type TicketAttachment = Database['public']['Tables']['ticket_attachments']['Row'];
 
 type RecentTicket = Pick<
   Ticket,
@@ -42,6 +43,8 @@ type DashboardMetricsOptions = {
   userId?: string | null;
   onlyMy?: boolean;
 };
+
+const TICKET_ATTACHMENTS_BUCKET = 'ticket-attachments';
 
 const useLogAuthors = (logs?: LogRow[]) => {
   const userIds = Array.from(
@@ -226,6 +229,7 @@ interface CreateTicketPayload {
   category_id: string;
   priority: string;
   status: 'open' | 'in_progress' | 'closed';
+  assigned_to?: string | null;
 }
 
 const useCreateTicket = () => {
@@ -237,6 +241,7 @@ const useCreateTicket = () => {
         .from('tickets')
         .insert({
           created_by: payload.user_id,
+          assigned_to: payload.assigned_to ?? null,
           title: payload.subject,
           description: payload.description,
           category_id: payload.category_id,
@@ -312,6 +317,18 @@ interface AddTicketCommentPayload {
   comment_text: string;
 }
 
+interface UploadTicketAttachmentPayload {
+  ticketId: string;
+  userId: string;
+  file: File;
+}
+
+interface DeleteTicketAttachmentPayload {
+  attachmentId: string;
+  ticketId: string;
+  storagePath: string;
+}
+
 const useTicketComments = (ticketId?: string) =>
   useQuery<TicketComment[]>({
     queryKey: ['ticketComments', ticketId],
@@ -353,6 +370,101 @@ const useAddTicketComment = () => {
   });
 };
 
+/* ================= Attachments ================= */
+
+const useTicketAttachments = (ticketId?: string) =>
+  useQuery<TicketAttachment[]>({
+    queryKey: ['ticketAttachments', ticketId],
+    enabled: !!ticketId,
+    queryFn: async () => {
+      if (!ticketId) return [];
+
+      const { data, error } = await supabase
+        .from('ticket_attachments')
+        .select('*')
+        .eq('ticket_id', ticketId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+const useUploadTicketAttachment = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<TicketAttachment, Error, UploadTicketAttachmentPayload>({
+    mutationFn: async ({ ticketId, userId, file }) => {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const randomId =
+        globalThis.crypto?.randomUUID?.() ??
+        `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const storagePath = `${ticketId}/${Date.now()}-${randomId}-${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(TICKET_ATTACHMENTS_BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type || undefined,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data, error: insertError } = await supabase
+        .from('ticket_attachments')
+        .insert({
+          ticket_id: ticketId,
+          uploaded_by: userId,
+          file_name: file.name,
+          storage_path: storagePath,
+          content_type: file.type || null,
+          size_bytes: file.size,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        await supabase.storage.from(TICKET_ATTACHMENTS_BUCKET).remove([storagePath]);
+        throw insertError;
+      }
+
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['ticketAttachments', variables.ticketId],
+      });
+    },
+  });
+};
+
+const useDeleteTicketAttachment = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, DeleteTicketAttachmentPayload>({
+    mutationFn: async ({ attachmentId, storagePath }) => {
+      const { error: storageError } = await supabase.storage
+        .from(TICKET_ATTACHMENTS_BUCKET)
+        .remove([storagePath]);
+
+      if (storageError) throw storageError;
+
+      const { error: deleteError } = await supabase
+        .from('ticket_attachments')
+        .delete()
+        .eq('id', attachmentId);
+
+      if (deleteError) throw deleteError;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['ticketAttachments', variables.ticketId],
+      });
+    },
+  });
+};
+
 /* ---------------- Ticket Timeline ---------------- */
 
 const useTicketTimeline = (ticketId?: string) => {
@@ -389,6 +501,9 @@ export const useTickets = {
 
   useTicketComments,
   useAddTicketComment,
+  useTicketAttachments,
+  useUploadTicketAttachment,
+  useDeleteTicketAttachment,
   useTicketTimeline,
   useLogAuthors,
 };

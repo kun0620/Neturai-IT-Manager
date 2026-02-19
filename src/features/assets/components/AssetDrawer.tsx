@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AssetWithType } from '@/types/asset';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -94,6 +94,9 @@ export function AssetDrawer({
   const { session } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const prefetchTicketsRoute = useCallback(() => {
+    void import('@/pages/Tickets');
+  }, []);
 
   const assetId: string | undefined = asset?.id;
   const assetTypeId: string | undefined = asset?.asset_type?.id;
@@ -618,6 +621,8 @@ export function AssetDrawer({
                           type="button"
                           className="w-full rounded-md border p-3 text-left transition-colors hover:bg-muted/50"
                           onClick={() => goToTicketDetails(ticket.id)}
+                          onMouseEnter={prefetchTicketsRoute}
+                          onFocus={prefetchTicketsRoute}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <p className="line-clamp-1 text-sm font-medium">{ticket.title}</p>
@@ -639,6 +644,8 @@ export function AssetDrawer({
                     <Button
                       size="sm"
                       variant="outline"
+                      onMouseEnter={prefetchTicketsRoute}
+                      onFocus={prefetchTicketsRoute}
                       onClick={() => {
                         const q = asset.asset_code || asset.name;
                         navigate(`/tickets?q=${encodeURIComponent(q)}`);

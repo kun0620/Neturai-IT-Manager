@@ -24,6 +24,8 @@ import {
   ArrowDownUp,
   ArrowUpDown,
   Download,
+  FileSpreadsheet,
+  FileText,
   ListFilter,
   Pencil,
   Save,
@@ -63,6 +65,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
+import { exportRowsToExcel, exportRowsToPdf } from '@/lib/export';
 
 type AssetSortField = 'updated_at' | 'name' | 'asset_code' | 'status';
 type AssetSortDirection = 'asc' | 'desc';
@@ -187,6 +190,9 @@ export function AssetManagement() {
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>(null);
   const [lastBulkUndo, setLastBulkUndo] = useState<BulkUndoState | null>(null);
+  const prefetchTicketsRoute = React.useCallback(() => {
+    void import('@/pages/Tickets');
+  }, []);
 
 
   const applyPreset = React.useCallback(
@@ -520,6 +526,21 @@ export function AssetManagement() {
   }, [searchTerm]);
 
   React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const prefetch = () => {
+      prefetchTicketsRoute();
+    };
+
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(prefetch, { timeout: 1500 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timeoutId = window.setTimeout(prefetch, 500);
+    return () => window.clearTimeout(timeoutId);
+  }, [prefetchTicketsRoute]);
+
+  React.useEffect(() => {
     setSearchTerm(searchQuery);
     setDebouncedSearchTerm(searchQuery);
     setStatusFilter(statusQuery);
@@ -825,6 +846,40 @@ export function AssetManagement() {
     link.remove();
     URL.revokeObjectURL(url);
     notifySuccess('Export complete', `${selectedAssets.length} asset(s)`);
+  };
+
+  const buildAssetExportRows = (sourceAssets: AssetWithType[]) =>
+    sourceAssets.map((asset) => ({
+      Name: asset.name ?? '',
+      'Asset Code': asset.asset_code ?? '',
+      Type: asset.asset_type?.name ?? '',
+      Category: asset.category?.name ?? '',
+      Status: asset.status ?? '',
+      Location: asset.location ?? '',
+      'Assigned To': asset.assigned_to
+        ? assigneeNameById[asset.assigned_to] ?? asset.assigned_to
+        : 'Unassigned',
+      'Updated At': asset.updated_at
+        ? new Date(asset.updated_at).toLocaleString()
+        : '',
+    }));
+
+  const handleExportAssetsExcel = async () => {
+    if (sortedAssets.length === 0) {
+      notifyError('No assets to export');
+      return;
+    }
+    await exportRowsToExcel(buildAssetExportRows(sortedAssets), 'assets-export');
+    notifySuccess('Excel exported', `${sortedAssets.length} asset(s)`);
+  };
+
+  const handleExportAssetsPdf = () => {
+    if (sortedAssets.length === 0) {
+      notifyError('No assets to export');
+      return;
+    }
+    exportRowsToPdf(buildAssetExportRows(sortedAssets), 'Assets Export', 'assets-export');
+    notifySuccess('PDF exported', `${sortedAssets.length} asset(s)`);
   };
 
   const handleBulkDeleteSelected = async () => {
@@ -1515,6 +1570,28 @@ export function AssetManagement() {
                   Select
                 </Button>
               )}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8"
+                onClick={() => void handleExportAssetsExcel()}
+                disabled={sortedAssets.length === 0}
+              >
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                Excel
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8"
+                onClick={handleExportAssetsPdf}
+                disabled={sortedAssets.length === 0}
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                PDF
+              </Button>
 
               <Badge variant="secondary" className="ml-auto whitespace-nowrap">
                 Showing: {sortedAssets.length}

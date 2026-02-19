@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 
 import { useTickets } from '@/hooks/useTickets';
+import { useSettings } from '@/hooks/useSettings';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { Loader2 } from 'lucide-react';
 
@@ -41,6 +42,7 @@ export function CreateTicketDialog({
 }: CreateTicketDialogProps) {
   const { useCreateTicket } = useTickets;
   const createTicketMutation = useCreateTicket();
+  const { data: settings = [] } = useSettings();
 
   /* ---------------- State ---------------- */
 
@@ -51,6 +53,7 @@ export function CreateTicketDialog({
     categories[0]?.id ?? ''
   );
   const [priority, setPriority] = useState<string>('Low');
+  const [status, setStatus] = useState<'open' | 'in_progress' | 'closed'>('open');
 
   /* ---------------- Load priorities ---------------- */
 
@@ -74,13 +77,38 @@ export function CreateTicketDialog({
 
   /* ---------------- Helpers ---------------- */
 
+  const settingMap = useMemo(
+    () => new Map(settings.map((s) => [s.key, s.value ?? ''])),
+    [settings]
+  );
+
+  const defaultCategoryId = settingMap.get('default_ticket_category_id') ?? '';
+  const defaultPriority = settingMap.get('default_ticket_priority') ?? 'Low';
+  const defaultStatusRaw = settingMap.get('default_ticket_status') ?? 'open';
+  const defaultStatus: 'open' | 'in_progress' | 'closed' =
+    defaultStatusRaw === 'in_progress' || defaultStatusRaw === 'closed'
+      ? defaultStatusRaw
+      : 'open';
+  const defaultAssigneeId = settingMap.get('default_assignee_id') ?? '';
+
   const resetForm = () => {
     setStep(1);
     setSubject('');
     setDescription('');
-    setCategoryId(categories[0]?.id ?? '');
-    setPriority('Low');
+    setCategoryId(
+      categories.some((c) => c.id === defaultCategoryId)
+        ? defaultCategoryId
+        : (categories[0]?.id ?? '')
+    );
+    setPriority(defaultPriority);
+    setStatus(defaultStatus);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    resetForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, categories, defaultCategoryId, defaultPriority, defaultStatus]);
   
   const handleNext = () => {
     if (!subject.trim()) {
@@ -117,7 +145,8 @@ export function CreateTicketDialog({
         description,
         category_id: categoryId,
         priority,
-        status: 'open',
+        status,
+        assigned_to: defaultAssigneeId || null,
       });
 
       notifySuccess('Ticket created successfully');
@@ -198,6 +227,25 @@ export function CreateTicketDialog({
                       {p.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <Select
+                value={status}
+                onValueChange={(value: 'open' | 'in_progress' | 'closed') =>
+                  setStatus(value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="in_progress">In progress</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
                 </SelectContent>
               </Select>
             </div>

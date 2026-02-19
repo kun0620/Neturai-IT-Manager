@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   HardDrive,
   LayoutDashboard,
@@ -42,6 +42,14 @@ const Dashboard: React.FC = () => {
   const canManageTickets = hasPermission(role, 'ticket.manage');
   const myUserId = session?.user?.id ?? null;
   const [showOnlyMyTickets, setShowOnlyMyTickets] = useState(!canManageTickets);
+
+  const prefetchTicketsRoute = useCallback(() => {
+    void import('@/pages/Tickets');
+  }, []);
+
+  const prefetchAssetsRoute = useCallback(() => {
+    void import('@/pages/AssetManagement');
+  }, []);
   
   const {
     useDashboardMetrics,
@@ -117,6 +125,22 @@ const Dashboard: React.FC = () => {
     };
   }, [autoRefreshEnabled, refetchDashboardMetrics]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const prefetch = () => {
+      prefetchTicketsRoute();
+      prefetchAssetsRoute();
+    };
+
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(prefetch, { timeout: 1500 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timeoutId = window.setTimeout(prefetch, 500);
+    return () => window.clearTimeout(timeoutId);
+  }, [prefetchAssetsRoute, prefetchTicketsRoute]);
+
   return (
     <motion.div
       className="flex flex-col gap-6 p-4 md:p-6"
@@ -136,6 +160,9 @@ const Dashboard: React.FC = () => {
             </Badge>
             <Badge variant="outline" className="text-[11px]">
               Showing: {showOnlyMyTickets ? 'My tickets' : 'All tickets'}
+            </Badge>
+            <Badge variant={hasOverdueAlert ? 'destructive' : 'secondary'} className="text-[11px]">
+              SLA breached: {overdueTicketsCount}
             </Badge>
           </div>
           <div className="mt-3 space-y-2">
@@ -167,6 +194,8 @@ const Dashboard: React.FC = () => {
 
         <Button
           onClick={() => navigate('/tickets')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
           variant="outline"
           className="flex items-center gap-2"
         >
@@ -175,6 +204,8 @@ const Dashboard: React.FC = () => {
 
         <Button
           onClick={() => navigate('/assets/new')}
+          onMouseEnter={prefetchAssetsRoute}
+          onFocus={prefetchAssetsRoute}
           variant="outline"
           className="flex items-center gap-2"
         >
@@ -268,6 +299,8 @@ const Dashboard: React.FC = () => {
               variant="outline"
               className="ml-auto border-red-300/80 text-red-800 hover:bg-red-100 hover:text-red-900 dark:border-red-500/40 dark:text-red-200 dark:hover:bg-red-900/30"
               onClick={() => navigate('/tickets?filter=overdue')}
+              onMouseEnter={prefetchTicketsRoute}
+              onFocus={prefetchTicketsRoute}
             >
               Review overdue
             </Button>
@@ -287,6 +320,8 @@ const Dashboard: React.FC = () => {
           variant="outline"
           className="h-8 rounded-full"
           onClick={() => navigate('/tickets?status=open')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
         >
           Open ({dashboardMetrics?.openTicketsCount || 0})
         </Button>
@@ -295,6 +330,8 @@ const Dashboard: React.FC = () => {
           variant="outline"
           className="h-8 rounded-full"
           onClick={() => navigate('/tickets?status=in_progress')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
         >
           In Progress ({dashboardMetrics?.inProgressTicketsCount || 0})
         </Button>
@@ -303,6 +340,8 @@ const Dashboard: React.FC = () => {
           variant="outline"
           className="h-8 rounded-full"
           onClick={() => navigate('/tickets?status=closed')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
         >
           Closed ({dashboardMetrics?.closedTicketsCount || 0})
         </Button>
@@ -311,6 +350,8 @@ const Dashboard: React.FC = () => {
           variant="outline"
           className="h-8 rounded-full text-red-600 hover:text-red-600"
           onClick={() => navigate('/tickets?filter=overdue')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
         >
           Overdue ({dashboardMetrics?.overdueTicketsCount || 0})
         </Button>
@@ -347,6 +388,8 @@ const Dashboard: React.FC = () => {
             mode: 'increase_is_bad',
           }}
           onClick={() => navigate('/tickets?status=open')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
           clickHint="Open open-ticket queue"
         />
         <SummaryCard
@@ -362,6 +405,8 @@ const Dashboard: React.FC = () => {
             mode: 'increase_is_good',
           }}
           onClick={() => navigate('/tickets?status=in_progress')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
           clickHint="Open in-progress queue"
         />
         <SummaryCard
@@ -377,6 +422,8 @@ const Dashboard: React.FC = () => {
             mode: 'increase_is_good',
           }}
           onClick={() => navigate('/tickets?status=closed')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
           clickHint="Open resolved tickets"
         />
         <SummaryCard
@@ -387,6 +434,8 @@ const Dashboard: React.FC = () => {
           color="text-blue-500"
           description="All IT assets managed"
           onClick={() => navigate('/assets')}
+          onMouseEnter={prefetchAssetsRoute}
+          onFocus={prefetchAssetsRoute}
           clickHint="Open asset inventory"
         />
         <SummaryCard
@@ -405,11 +454,11 @@ const Dashboard: React.FC = () => {
         />
         <SummaryCard
           index={5}
-          title="Overdue Tickets"
+          title="SLA Breached"
           value={dashboardMetrics?.overdueTicketsCount || 0}
           icon={AlertTriangle}
           color="text-red-500"
-          description="Tickets past their due date"
+          description="Open tickets beyond SLA due time"
           className="border-red-200"
           trend={{
             value: dashboardMetrics?.overdueTrendDelta || 0,
@@ -417,6 +466,8 @@ const Dashboard: React.FC = () => {
             mode: 'increase_is_bad',
           }}
           onClick={() => navigate('/tickets?filter=overdue')}
+          onMouseEnter={prefetchTicketsRoute}
+          onFocus={prefetchTicketsRoute}
           clickHint="Review overdue tickets"
         />
         <SummaryCard

@@ -1,6 +1,7 @@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useITUsers } from '@/hooks/useITUsers';
 import {
   Drawer,
@@ -15,6 +16,14 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -22,9 +31,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Download, Paperclip, RotateCcw, Trash2, Upload, ZoomIn, ZoomOut } from 'lucide-react';
 
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import { notifyError, notifySuccess } from '@/lib/notify';
+import { supabase } from '@/lib/supabase';
 
 import { useTickets } from '@/hooks/useTickets';
 import { useAuth } from '@/hooks/useAuth';
@@ -37,6 +48,7 @@ import { logAppearance } from '@/features/logs/logAppearance';
 
 type Ticket = Database['public']['Tables']['tickets']['Row'];
 type TicketCategory = Database['public']['Tables']['ticket_categories']['Row'];
+type TicketAttachment = Database['public']['Tables']['ticket_attachments']['Row'];
 type TimelineItem =
   | {
       type: 'log';
@@ -72,13 +84,33 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
     useUpdateTicket,
     useTicketComments,
     useAddTicketComment,
+    useTicketAttachments,
+    useUploadTicketAttachment,
+    useDeleteTicketAttachment,
     useTicketTimeline,
     useLogAuthors,
   } = useTickets;
 
   const ticketQuery = useTicketById(safeTicketId);
   const commentsQuery = useTicketComments(safeTicketId);
+  const attachmentsQuery = useTicketAttachments(safeTicketId);
   const timelineQuery = useTicketTimeline(safeTicketId);
+  const ticketSlaQuery = useQuery({
+    queryKey: ['ticket-sla-deadlines', safeTicketId],
+    enabled: !!safeTicketId,
+    queryFn: async () => {
+      if (!safeTicketId) return null;
+      const { data, error } = await supabase.rpc('calculate_ticket_sla_deadlines', {
+        p_ticket_id: safeTicketId,
+      });
+      if (error) return null;
+      if (!Array.isArray(data) || !data[0]) return null;
+      return data[0] as {
+        response_due_at: string | null;
+        resolution_due_at: string | null;
+      };
+    },
+  });
 
   const ticket = ticketQuery.data;
   const comments = commentsQuery.data ?? [];
@@ -113,6 +145,10 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
     useUpdateTicket();
   const { mutate: addComment, isPending: isAddingComment } =
     useAddTicketComment();
+  const { mutate: uploadAttachment, isPending: isUploadingAttachment } =
+    useUploadTicketAttachment();
+  const { mutate: deleteAttachment, isPending: isDeletingAttachment } =
+    useDeleteTicketAttachment();
 
   const { session } = useAuth();
   const { role } = useCurrentProfile();
@@ -133,6 +169,16 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
   const [assignedUser, setAssignedUser] = useState('');
   const [draftDueDate, setDraftDueDate] = useState<Date | undefined>();
   const [draftDueTime, setDraftDueTime] = useState('09:00');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentPreviewUrls, setAttachmentPreviewUrls] = useState<Record<string, string>>({});
+  const [selectedPreview, setSelectedPreview] = useState<{
+    name: string;
+    url: string;
+  } | null>(null);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number } | null>(null);
 
   /* ================= Sync from ticket ================= */
   useEffect(() => {
@@ -225,6 +271,90 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
     );
   };
 
+  const handleUploadAttachment = () => {
+    if (!ticketId || !user || !attachmentFile) return;
+
+    uploadAttachment(
+      { ticketId, userId: user.id, file: attachmentFile },
+      {
+        onSuccess: () => {
+          setAttachmentFile(null);
+          notifySuccess('Attachment uploaded');
+        },
+        onError: (err) => notifyError(err.message),
+      }
+    );
+  };
+
+  const handleDownloadAttachment = async (attachment: TicketAttachment) => {
+    const { data, error } = await supabase.storage
+      .from('ticket-attachments')
+      .download(attachment.storage_path);
+
+    if (error) {
+      notifyError(error.message);
+      return;
+    }
+
+    const blobUrl = URL.createObjectURL(data);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = attachment.file_name;
+    link.click();
+    URL.revokeObjectURL(blobUrl);
+  };
+
+  const handleDeleteAttachment = (attachment: TicketAttachment) => {
+    if (!ticketId) return;
+
+    deleteAttachment(
+      {
+        attachmentId: attachment.id,
+        ticketId,
+        storagePath: attachment.storage_path,
+      },
+      {
+        onSuccess: () => notifySuccess('Attachment deleted'),
+        onError: (err) => notifyError(err.message),
+      }
+    );
+  };
+
+  const openImagePreview = (name: string, url: string) => {
+    setPreviewZoom(1);
+    setPreviewOffset({ x: 0, y: 0 });
+    setSelectedPreview({ name, url });
+  };
+
+  const handlePreviewWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setPreviewZoom((prev) => {
+      const next = prev + (event.deltaY < 0 ? 0.1 : -0.1);
+      return Math.min(3, Math.max(0.5, Number(next.toFixed(2))));
+    });
+  };
+
+  const handlePreviewMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    setIsPanning(true);
+    panStartRef.current = {
+      x: event.clientX - previewOffset.x,
+      y: event.clientY - previewOffset.y,
+    };
+  };
+
+  const handlePreviewMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning || !panStartRef.current) return;
+    setPreviewOffset({
+      x: event.clientX - panStartRef.current.x,
+      y: event.clientY - panStartRef.current.y,
+    });
+  };
+
+  const stopPreviewPan = () => {
+    setIsPanning(false);
+    panStartRef.current = null;
+  };
+
   /* ================= Helpers ================= */
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
   const getCategoryName = (id: string | null) =>
@@ -235,9 +365,72 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
     new Date(ticket.due_at).getTime() < Date.now() &&
     ticket.status !== 'closed';
 
+  const getSlaMeta = (dueAt: string | null) => {
+    if (!dueAt) {
+      return { text: 'N/A', badge: 'outline' as const };
+    }
+
+    const dueDate = new Date(dueAt);
+    if (Number.isNaN(dueDate.getTime())) {
+      return { text: 'N/A', badge: 'outline' as const };
+    }
+
+    if (ticket?.status === 'closed') {
+      return { text: 'Closed', badge: 'secondary' as const };
+    }
+
+    if (dueDate.getTime() < Date.now()) {
+      return { text: `Breached ${formatDistanceToNowStrict(dueDate)} ago`, badge: 'destructive' as const };
+    }
+
+    return { text: `Due in ${formatDistanceToNowStrict(dueDate)}`, badge: 'secondary' as const };
+  };
+
+  const responseSlaMeta = getSlaMeta(ticketSlaQuery.data?.response_due_at ?? null);
+  const resolutionSlaMeta = getSlaMeta(ticketSlaQuery.data?.resolution_due_at ?? null);
+
   const itUserMap = new Map(
     (itUsers ?? []).map((u) => [u.id, u.name ?? u.id])
   );
+  const attachments = useMemo(() => attachmentsQuery.data ?? [], [attachmentsQuery.data]);
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+  const isImageAttachment = (attachment: TicketAttachment) => {
+    if (attachment.content_type?.startsWith('image/')) return true;
+    return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(attachment.file_name);
+  };
+
+  useEffect(() => {
+    const loadAttachmentPreviews = async () => {
+      const imageAttachments = attachments.filter(isImageAttachment);
+      if (imageAttachments.length === 0) {
+        setAttachmentPreviewUrls({});
+        return;
+      }
+
+      const uniquePaths = Array.from(
+        new Set(imageAttachments.map((attachment) => attachment.storage_path))
+      );
+      const { data, error } = await supabase.storage
+        .from('ticket-attachments')
+        .createSignedUrls(uniquePaths, 3600);
+
+      if (error || !data) return;
+
+      const nextUrls: Record<string, string> = {};
+      data.forEach((item, index) => {
+        if (item.signedUrl) {
+          nextUrls[uniquePaths[index]] = item.signedUrl;
+        }
+      });
+      setAttachmentPreviewUrls(nextUrls);
+    };
+
+    void loadAttachmentPreviews();
+  }, [attachments]);
 
   
 
@@ -495,6 +688,214 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
                     </p>
                   )}
                 </div>
+
+                <div className="my-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-md border border-border/70 p-3">
+                    <p className="text-xs text-muted-foreground">SLA Response Due</p>
+                    <p className="mt-1 text-sm font-medium">
+                      {ticketSlaQuery.data?.response_due_at
+                        ? format(new Date(ticketSlaQuery.data.response_due_at), 'MMM dd, yyyy HH:mm')
+                        : 'N/A'}
+                    </p>
+                    <Badge variant={responseSlaMeta.badge} className="mt-2">
+                      {responseSlaMeta.text}
+                    </Badge>
+                  </div>
+
+                  <div className="rounded-md border border-border/70 p-3">
+                    <p className="text-xs text-muted-foreground">SLA Resolution Due</p>
+                    <p className="mt-1 text-sm font-medium">
+                      {ticketSlaQuery.data?.resolution_due_at
+                        ? format(new Date(ticketSlaQuery.data.resolution_due_at), 'MMM dd, yyyy HH:mm')
+                        : 'N/A'}
+                    </p>
+                    <Badge variant={resolutionSlaMeta.badge} className="mt-2">
+                      {resolutionSlaMeta.text}
+                    </Badge>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="my-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Attachments</h3>
+                    <Badge variant="outline">{attachments.length}</Badge>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input
+                      type="file"
+                      onChange={(event) =>
+                        setAttachmentFile(event.target.files?.[0] ?? null)
+                      }
+                      className="sm:max-w-sm"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleUploadAttachment}
+                      disabled={!attachmentFile || !user || isUploadingAttachment}
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload
+                    </Button>
+                  </div>
+
+                  {attachmentsQuery.isLoading ? (
+                    <Skeleton className="h-16 w-full" />
+                  ) : attachments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No attachments</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {attachments.map((attachment) => (
+                        <div
+                          key={attachment.id}
+                          className="flex items-center justify-between rounded-md border border-border/70 p-2"
+                        >
+                          <div className="min-w-0 flex items-center gap-3">
+                            {isImageAttachment(attachment) &&
+                            attachmentPreviewUrls[attachment.storage_path] ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openImagePreview(
+                                    attachment.file_name,
+                                    attachmentPreviewUrls[attachment.storage_path]
+                                  )
+                                }
+                                className="h-10 w-10 shrink-0 overflow-hidden rounded border border-border/70"
+                                title="Preview image"
+                              >
+                                <img
+                                  src={attachmentPreviewUrls[attachment.storage_path]}
+                                  alt={attachment.file_name}
+                                  className="h-full w-full object-cover"
+                                />
+                              </button>
+                            ) : (
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-border/70 text-muted-foreground">
+                                <Paperclip className="h-4 w-4" />
+                              </span>
+                            )}
+
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">
+                                {attachment.file_name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatSize(attachment.size_bytes)} •{' '}
+                                {format(new Date(attachment.created_at), 'MMM dd, yyyy HH:mm')}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="ml-3 flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDownloadAttachment(attachment)}
+                              title="Download attachment"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            {(isStaff || attachment.uploaded_by === user?.id) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteAttachment(attachment)}
+                                disabled={isDeletingAttachment}
+                                title="Delete attachment"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Dialog
+                  open={!!selectedPreview}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setSelectedPreview(null);
+                      setPreviewZoom(1);
+                      setPreviewOffset({ x: 0, y: 0 });
+                    }
+                  }}
+                >
+                  <DialogContent className="max-w-4xl">
+                    <DialogHeader>
+                      <DialogTitle>{selectedPreview?.name ?? 'Image preview'}</DialogTitle>
+                      <DialogDescription className="sr-only">
+                        Preview ticket attachment image.
+                      </DialogDescription>
+                    </DialogHeader>
+                    {selectedPreview?.url && (
+                      <>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() =>
+                              setPreviewZoom((prev) => Math.max(0.5, Number((prev - 0.25).toFixed(2))))
+                            }
+                            title="Zoom out"
+                          >
+                            <ZoomOut className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => {
+                              setPreviewZoom(1);
+                              setPreviewOffset({ x: 0, y: 0 });
+                            }}
+                            title="Reset zoom"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() =>
+                              setPreviewZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))
+                            }
+                            title="Zoom in"
+                          >
+                            <ZoomIn className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        <div
+                          className={`max-h-[70vh] overflow-hidden rounded-md border border-border/70 p-2 ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+                          onWheel={handlePreviewWheel}
+                          onMouseDown={handlePreviewMouseDown}
+                          onMouseMove={handlePreviewMouseMove}
+                          onMouseUp={stopPreviewPan}
+                          onMouseLeave={stopPreviewPan}
+                        >
+                          <img
+                            src={selectedPreview.url}
+                            alt={selectedPreview.name}
+                            className="mx-auto h-auto max-h-[65vh] w-auto object-contain transition-transform"
+                            style={{
+                              transform: `translate(${previewOffset.x}px, ${previewOffset.y}px) scale(${previewZoom})`,
+                              transformOrigin: 'center center',
+                              userSelect: 'none',
+                              pointerEvents: 'none',
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </DialogContent>
+                </Dialog>
 
                 <Separator />
 

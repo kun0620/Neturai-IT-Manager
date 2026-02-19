@@ -26,13 +26,13 @@ async function fetchLogs(
           name,
           email
         )
-      `)
+      `, { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (searchTerm) {
     query = query.or(
-      `action.ilike.%${searchTerm}%,details.ilike.%${searchTerm}%`
+      `action.ilike.%${searchTerm}%,details::text.ilike.%${searchTerm}%`
     );
   }
 
@@ -51,11 +51,13 @@ async function fetchLogs(
 export function useLogs(
   page: number,
   limit: number,
-  searchTerm: string
+  searchTerm: string,
+  enabled = true
 ) {
   return useQuery<PaginatedLogs, Error>({
     queryKey: ['logs', page, limit, searchTerm],
     queryFn: () => fetchLogs(page, limit, searchTerm),
+    enabled,
     placeholderData: (previousData) => previousData,
   });
 }

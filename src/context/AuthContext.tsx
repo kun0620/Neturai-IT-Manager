@@ -6,6 +6,8 @@ import React, {
   ReactNode,
   useState,
   useEffect,
+  useCallback,
+  useRef,
 } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -28,7 +30,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<Session['user'] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [idleTimeoutMs, setIdleTimeoutMs] = useState(120 * 60 * 1000);
+  const lastActivityRef = useRef(Date.now());
+  const isIdleSignoutRef = useRef(false);
   const navigate = useNavigate(); // Initialize useNavigate
+
+  const signOut = useCallback(async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      notifyError('Logout failed', error.message);
+    }
+    setSession(null);
+    setUser(null);
+    setLoading(false);
+    navigate('/login'); // Redirect to login after sign out
+  }, [navigate]);
 
   useEffect(() => {
     const getSession = async () => {
@@ -70,17 +87,65 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     return () => subscription.unsubscribe();
   }, [navigate]); // Add navigate to dependency array
 
-  const signOut = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      notifyError('Logout failed', error.message);
-    }
-    setSession(null);
-    setUser(null);
-    setLoading(false);
-    navigate('/login'); // Redirect to login after sign out
-  };
+  useEffect(() => {
+    const loadIdleTimeout = async () => {
+      if (!session) return;
+      const { data, error } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'session_idle_timeout_minutes')
+        .maybeSingle();
+      if (error) return;
+
+      const parsed = Number(data?.value ?? '120');
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        setIdleTimeoutMs(120 * 60 * 1000);
+        return;
+      }
+      setIdleTimeoutMs(Math.floor(parsed) * 60 * 1000);
+    };
+
+    void loadIdleTimeout();
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || idleTimeoutMs <= 0) return;
+
+    const markActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    isIdleSignoutRef.current = false;
+    markActivity();
+
+    const events: Array<keyof WindowEventMap> = [
+      'mousemove',
+      'keydown',
+      'click',
+      'scroll',
+      'touchstart',
+    ];
+    events.forEach((eventName) =>
+      window.addEventListener(eventName, markActivity, { passive: true })
+    );
+
+    const timer = window.setInterval(() => {
+      if (isIdleSignoutRef.current) return;
+      const idleFor = Date.now() - lastActivityRef.current;
+      if (idleFor >= idleTimeoutMs) {
+        isIdleSignoutRef.current = true;
+        notifyError('Session expired', 'You were signed out due to inactivity');
+        void signOut();
+      }
+    }, 30_000);
+
+    return () => {
+      window.clearInterval(timer);
+      events.forEach((eventName) =>
+        window.removeEventListener(eventName, markActivity)
+      );
+    };
+  }, [session, idleTimeoutMs, signOut]);
 
   if (loading) {
     return (

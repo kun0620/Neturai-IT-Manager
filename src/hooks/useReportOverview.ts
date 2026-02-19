@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { buildSlaResolutionHoursMap, isTicketSlaBreached } from '@/lib/sla';
 
 type TicketRow = {
   id: string;
@@ -19,8 +20,12 @@ export function useReportOverview(from: string, to: string) {
         .select('id, title, status, priority, created_at, updated_at, due_at')
         .gte('created_at', from)
         .lte('created_at', to);
+      const { data: slaPolicies, error: slaPoliciesError } = await supabase
+        .from('sla_policies')
+        .select('priority, resolution_time_hours');
 
       if (error) throw error;
+      if (slaPoliciesError) throw slaPoliciesError;
 
       const tickets = (data ?? []) as TicketRow[];
 
@@ -70,35 +75,12 @@ export function useReportOverview(from: string, to: string) {
         medianResolutionHours = Number(medianResolutionHours.toFixed(1));
       }
 
-      /* ---------- SLA Breach ---------- */
-
-      const SLA_HOURS: Record<'low' | 'medium' | 'high' | 'critical', number> = {
-        low: 72,
-        medium: 48,
-        high: 24,
-        critical: 8,
-      };
-
       const now = Date.now();
+      const slaResolutionHoursMap = buildSlaResolutionHoursMap(slaPolicies ?? []);
 
-      const slaBreaches = tickets.filter(t => {
-        if (!t.created_at || !t.priority) return false;
-        if (t.status === 'closed') return false;
-
-        const priorityKey = t.priority.toLowerCase() as
-          | 'low'
-          | 'medium'
-          | 'high'
-          | 'critical';
-
-        const sla = SLA_HOURS[priorityKey];
-        if (!sla) return false;
-
-        const created = new Date(t.created_at).getTime();
-        const hoursPassed = (now - created) / (1000 * 60 * 60);
-
-        return hoursPassed > sla;
-      }).length;
+      const slaBreaches = tickets.filter((t) =>
+        isTicketSlaBreached(t, slaResolutionHoursMap, now)
+      ).length;
 
       /* ---------- Overdue (due_at) ---------- */
 

@@ -249,6 +249,10 @@ export function TableView({
               {currentTickets.map((ticket) => {
                 const statusUi = getTicketStatusUi(ticket.status);
                 const priorityUi = getTicketPriorityUi(ticket.priority);
+                const isSlaBreached =
+                  !!ticket.due_at &&
+                  ticket.status !== 'closed' &&
+                  new Date(ticket.due_at).getTime() < Date.now();
                 const assignedToLabel = isUsersLoading
                   ? 'Loading...'
                   : ticket.assigned_to
@@ -287,12 +291,19 @@ export function TableView({
                     </TableCell>
 
                     <TableCell className="text-center">
-                      <Badge
-                        variant={statusUi.variant}
-                        className={cn(statusUi.badgeClass)}
-                      >
-                        {statusUi.label}
-                      </Badge>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Badge
+                          variant={statusUi.variant}
+                          className={cn(statusUi.badgeClass)}
+                        >
+                          {statusUi.label}
+                        </Badge>
+                        {isSlaBreached && (
+                          <Badge variant="destructive" className="text-[10px]">
+                            SLA Breached
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
 
                     <TableCell className="text-center text-muted-foreground">
