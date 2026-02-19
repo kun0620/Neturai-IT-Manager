@@ -37,11 +37,21 @@ function buildLineText(job: NotificationJob) {
   const body = String(payload.body ?? '').trim();
   const priority = String(payload.priority ?? '').trim();
   const ticketId = job.ticket_id ?? String(payload.ticket_id ?? '').trim();
+  const appBaseUrl = (Deno.env.get('APP_BASE_URL') ?? '').trim();
 
   const lines = [title];
   if (priority) lines.push(`Priority: ${priority}`);
   if (body) lines.push(body);
   if (ticketId) lines.push(`Ticket ID: ${ticketId}`);
+  if (appBaseUrl && ticketId) {
+    try {
+      const url = new URL('/tickets', appBaseUrl);
+      url.searchParams.set('open_ticket', ticketId);
+      lines.push(`Open: ${url.toString()}`);
+    } catch {
+      // Ignore malformed APP_BASE_URL and continue sending base message.
+    }
+  }
 
   return lines.join('\n').slice(0, 5000);
 }

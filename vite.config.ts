@@ -39,9 +39,6 @@ export default defineConfig({
             if (id.includes('@supabase')) {
               return 'vendor-supabase';
             }
-            if (id.includes('recharts') || id.includes('d3-')) {
-              return 'vendor-charts';
-            }
             if (id.includes('@tanstack')) {
               return 'vendor-tanstack';
             }
