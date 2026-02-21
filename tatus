@@ -1,0 +1,52 @@
+[33mf376a99[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m feat: Add initial vercel.json configuration for URL rewrites
+[33m5ff3a7e[m Refactor code structure for improved readability and maintainability
+[33m74f7c6c[m feat: Add LINE group notification queue and worker integration
+[33mab3f6f0[m Add comprehensive tests for Notifications page and implement new database migrations
+[33m0962bae[m feat: enhance CommandDialog with title and description; improve DataTable row selection handling; update AssetDrawer ticket navigation; implement selection mode in AssetManagement; add notifications for unavailable tickets in Tickets; improve user role change confirmation dialog
+[33m6f8d857[m feat: add KpiCardSkeleton and TicketsPageSkeleton components for loading states
+[33m677cf24[m feat: enhance TopBar with search functionality and results display; update asset columns for better status styling; improve DataTable layout; adjust AssetManagement for assetId handling; add user edit functionality via search params
+[33ma31bcf5[m feat(auth): enhance user authentication pages with animations and improved UI
+[33m1ce97f0[m refactor: Update type definitions and improve error handling across various components
+[33maa87c5a[m feat: add HTML entry point, Python snippet for ticket lines, and SQL function for ticket updates with logging
+[33m83a1c61[m feat: add tooltip component and integrate into asset management table
+[33m8b4a86f[m feat: enhance asset management with logging and history tracking features
+[33m57a0b9d[m feat: update color variables in CSS for improved UI clarity
+[33m5f2797b[m refactor: streamline asset management components and enhance inline editing
+[33mcc54113[m feat: implement asset management features including assignment, status change, and logging
+[33mdd816d1[m feat: integrate dynamic asset fields and improve asset management functionality
+[33me7cb6ac[m feat: Implement Kanban board with drag-and-drop functionality for ticket management
+[33m67ad50d[m feat: Implement ticket drawer context and notifications system
+[33m634bb66[m feat: enhance ticket assignment functionality and improve user role checks in TicketDetailsDrawer
+[33m1d22cc0[m feat: enhance ticket management with user assignment and improved UI
+[33m5d2ef90[m feat: update user role management and improve profile handling
+[33m59ed645[m Refactor user management components; update imports and improve role handling in Users page
+[33m516bae3[m Refactor user management hooks and components; implement role update functionality and improve user data fetching
+[33ma9356d9[m Refactor Navbar and User components; implement useAdminUsers hook for user management
+[33mdca0ee0[m Add useCurrentProfile hook to manage user roles and loading state
+[33mcf1dbe2[m Update dependencies and adjust dashboard components
+[33mf70f520[m Revamp ticket dashboard and details with history tracking
+[33m43ad56f[m Refactor ticket details and comments handling
+[33ma3744af[m Add ticket editing and improve ticket UI
+[33mff7533b[m Refactor app to remove CRUD and editing features
+[33ma47f362[m Add asset management and update dependencies
+[33m70baf53[m Merge branch 'main' of https://github.com/kun0620/Neturai-IT-Manager
+[33mab44fc1[m Refactor ticket system to use category table
+[33md5dc827[m Add DialogTitle for accessibility
+[33m190608f[m Updated package-lock.json
+[33mc20ae35[m Updated package-lock.json
+[33mc14f135[m Add ticketing, asset, user dialogs and Kanban view
+[33m25fd552[m Add auth context and protected route, recreate RPC functions
+[33m9857a5e[m Revamp dashboard and routing, add asset stats
+[33m2b7d7ec[m Add authentication pages and common UI states
+[33m75aa616[m Update dependencies and rename project
+[33m3bf86b0[m Add new pages, hooks, and UI components
+[33m48907b5[m Initialize project with UI components and Supabase
+[33med353c5[m Remove license fields from package-lock.json
+[33mf4d126f[m Update dependencies in package-lock.json
+[33m8aa7d8b[m Add user profile seeding script and new components
+[33m4d4856d[m Updated package-lock.json
+[33m3c91af6[m Merge branch 'main' of https://github.com/kun0620/Neturai-IT-Manager
+[33m6436c2d[m Add authentication context and registration page
+[33m5af1531[m Added .gitignore
+[33mb67987d[m Initial project setup with Supabase and UI components
+[33m9174349[m Initial commit
