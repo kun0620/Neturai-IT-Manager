@@ -18,6 +18,7 @@ const AssetManagementPage = lazy(() =>
     default: module.AssetManagement,
   }))
 );
+const AssetsWorkspacePage = lazy(() => import('@/pages/AssetsWorkspace'));
 const UsersPage = lazy(() => import('@/pages/Users'));
 const ReportsPage = lazy(() => import('@/pages/Reports'));
 const NotificationsPage = lazy(() => import('@/pages/Notifications'));
@@ -51,8 +52,8 @@ function App() {
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="tickets" element={<TicketsPage />} />
                 {/* Removed: <Route path="tickets/:ticketId" element={<TicketDetailsPage />} /> */}
-                <Route path="assets" element={<AssetManagementPage />} />
-                <Route path="assets/new" element={<AssetManagementPage />} /> {/* New route for adding asset */}
+                <Route path="assets" element={<AssetsWorkspacePage />} />
+                <Route path="assets/new" element={<AssetManagementPage />} />
                 <Route path="users" element={<UsersPage />} />
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="notifications" element={<NotificationsPage />} />
