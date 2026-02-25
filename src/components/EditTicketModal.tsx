@@ -1,282 +1,185 @@
-import React, { useState, useEffect } from 'react';
-import { X, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import { notifyError } from '@/lib/notify';
-import { Tables, TablesUpdate } from '../types/supabase';
+import React from 'react';
+import { format } from 'date-fns';
+import { Loader2 } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
-interface EditTicketModalProps {
+type UserOption = {
+  id: string;
+  name: string | null;
+};
+
+type EditTicketModalProps = {
   isOpen: boolean;
-  onClose: () => void;
-  onTicketUpdated: () => void;
-  ticket: Tables<'tickets'> | null; // The ticket data to edit
-}
+  onClose: (open: boolean) => void;
+  isStaff: boolean;
+  isUpdatingTicket: boolean;
+  selectedStatus: string;
+  onStatusChange: (status: 'open' | 'in_progress' | 'closed') => void;
+  assignedUser: string;
+  onAssignUser: (userId: string) => void;
+  users: UserOption[];
+  draftDueDate?: Date;
+  draftDueTime: string;
+  onDraftDueDateChange: (date: Date | undefined) => void;
+  onDraftDueTimeChange: (value: string) => void;
+  onSaveDueDate: () => void;
+  currentAssigneeLabel: string;
+  currentDueDateLabel: string;
+};
 
-type Status = Tables<'statuses'>;
-type Category = Tables<'categories'>;
-type Profile = Tables<'profiles'>;
-
-const EditTicketModal: React.FC<EditTicketModalProps> = ({ isOpen, onClose, onTicketUpdated, ticket }) => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [statusId, setStatusId] = useState<string | null>(null);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [assignedTo, setAssignedTo] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  const [statuses, setStatuses] = useState<Status[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      // Reset form when modal closes
-      setTitle('');
-      setDescription('');
-      setStatusId(null);
-      setCategoryId(null);
-      setAssignedTo(null);
-      setError(null);
-      setSuccess(null);
-      return;
-    }
-
-    // Populate form fields with existing ticket data
-    if (ticket) {
-      setTitle(ticket.title || '');
-      setDescription(ticket.description || '');
-      setStatusId(ticket.status_id);
-      setCategoryId(ticket.category_id);
-      setAssignedTo(ticket.assigned_to);
-    }
-
-    const fetchDropdownData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data: statusData, error: statusError } = await supabase.from('statuses').select('*');
-        if (statusError) throw statusError;
-        setStatuses(statusData);
-
-        const { data: categoryData, error: categoryError } = await supabase.from('categories').select('*');
-        if (categoryError) throw categoryError;
-        setCategories(categoryData);
-
-        const { data: profileData, error: profileError } = await supabase.from('profiles').select('id, full_name');
-        if (profileError) throw profileError;
-        setProfiles(profileData);
-
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to load ticket data';
-        notifyError('Failed to load ticket data', message);
-        setError('Failed to load necessary data for ticket editing.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDropdownData();
-  }, [isOpen, ticket]); // Re-run when modal opens or ticket changes
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-
-    if (!ticket?.id) {
-      setError('No ticket selected for editing.');
-      setLoading(false);
-      return;
-    }
-
-    if (!title.trim()) {
-      setError('Ticket title cannot be empty.');
-      setLoading(false);
-      return;
-    }
-
-    // Convert empty strings from select inputs to null for UUID fields
-    const finalStatusId = statusId === '' ? null : statusId;
-    const finalCategoryId = categoryId === '' ? null : categoryId;
-    const finalAssignedTo = assignedTo === '' ? null : assignedTo;
-
-    const updatedTicket: TablesUpdate<'tickets'> = {
-      title: title.trim(),
-      description: description.trim(),
-      status_id: finalStatusId,
-      category_id: finalCategoryId,
-      assigned_to: finalAssignedTo,
-      updated_at: new Date().toISOString(), // Update the updated_at timestamp
-    };
-
-    try {
-      const { error: updateError } = await supabase
-        .from('tickets')
-        .update(updatedTicket)
-        .eq('id', ticket.id);
-
-      if (updateError) throw updateError;
-
-      setSuccess('Ticket updated successfully!');
-      onTicketUpdated(); // Notify parent to refresh list
-      setTimeout(onClose, 1500); // Close modal after a short delay
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to update ticket';
-      notifyError('Failed to update ticket', message);
-      setError(`Failed to update ticket: ${message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
+const EditTicketModal: React.FC<EditTicketModalProps> = ({
+  isOpen,
+  onClose,
+  isStaff,
+  isUpdatingTicket,
+  selectedStatus,
+  onStatusChange,
+  assignedUser,
+  onAssignUser,
+  users,
+  draftDueDate,
+  draftDueTime,
+  onDraftDueDateChange,
+  onDraftDueTimeChange,
+  onSaveDueDate,
+  currentAssigneeLabel,
+  currentDueDateLabel,
+}) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-card-light dark:bg-card-dark rounded-xl shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-100 opacity-100">
-        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-text-light dark:text-text-dark">Edit Ticket</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-200"
-            aria-label="Close"
-          >
-            <X className="h-6 w-6" />
-          </button>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="w-[95vw] max-w-2xl overflow-hidden rounded-xl border border-slate-200 p-0 dark:border-slate-800 max-sm:h-screen max-sm:w-screen max-sm:max-w-none max-sm:rounded-none">
+        <DialogHeader className="border-b border-slate-100 bg-slate-50/50 px-6 py-5 dark:border-slate-800 dark:bg-slate-800/50">
+          <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            Edit Ticket
+          </DialogTitle>
+          <DialogDescription className="text-sm text-slate-500 dark:text-slate-400">
+            Update status, assignee, and due date.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[65vh] space-y-5 overflow-y-auto p-6 max-sm:max-h-[calc(100vh-140px)]">
+          <div>
+            <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-300">Status</p>
+            <Select
+              value={selectedStatus}
+              onValueChange={(v) => onStatusChange(v as 'open' | 'in_progress' | 'closed')}
+              disabled={!isStaff || isUpdatingTicket}
+            >
+              <SelectTrigger className="h-11 w-full rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-800">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-300">Assigned To</p>
+            {isStaff ? (
+              <Select value={assignedUser ?? ''} onValueChange={onAssignUser}>
+                <SelectTrigger className="h-11 w-full rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-800">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">
+                    <span className="text-muted-foreground">Unassigned</span>
+                  </SelectItem>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name || u.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-sm">{currentAssigneeLabel}</p>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-1.5 text-sm font-semibold text-slate-700 dark:text-slate-300">Due Date</p>
+            {isStaff ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-10 rounded-lg border-slate-200 dark:border-slate-700 dark:bg-slate-800">
+                      {draftDueDate ? format(draftDueDate, 'MMM dd, yyyy') : 'Pick date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={draftDueDate}
+                      onSelect={onDraftDueDateChange}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <input
+                  type="time"
+                  value={draftDueTime}
+                  onChange={(e) => onDraftDueTimeChange(e.target.value)}
+                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                />
+
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Click "Save Due Date" below to apply.
+                </span>
+              </div>
+            ) : (
+              <p className="text-sm">{currentDueDateLabel}</p>
+            )}
+          </div>
+
+          {!isStaff && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+              You have read-only permission for ticket editing fields.
+            </p>
+          )}
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {error && (
-            <div className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 p-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 p-3 rounded-lg text-sm">
-              {success}
-            </div>
-          )}
 
-          <div>
-            <label htmlFor="title" className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-              Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-background-light dark:bg-gray-700 text-text-light dark:text-text-dark focus:ring-primary focus:border-primary transition-colors duration-200"
-              placeholder="Enter ticket title"
-              required
-            />
-          </div>
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/30 max-sm:sticky max-sm:bottom-0">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-10 rounded-lg px-5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            onClick={() => onClose(false)}
+          >
+            Close
+          </Button>
 
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-              Description
-            </label>
-            <textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-background-light dark:bg-gray-700 text-text-light dark:text-text-dark focus:ring-primary focus:border-primary transition-colors duration-200"
-              placeholder="Provide a detailed description of the issue"
-            ></textarea>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="status" className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-                Status
-              </label>
-              <select
-                id="status"
-                value={statusId || ''}
-                onChange={(e) => setStatusId(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-background-light dark:bg-gray-700 text-text-light dark:text-text-dark focus:ring-primary focus:border-primary transition-colors duration-200"
-              >
-                {loading ? (
-                  <option value="">Loading statuses...</option>
-                ) : (
-                  statuses.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="category" className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-                Category
-              </label>
-              <select
-                id="category"
-                value={categoryId || ''}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-background-light dark:bg-gray-700 text-text-light dark:text-text-dark focus:ring-primary focus:border-primary transition-colors duration-200"
-              >
-                {loading ? (
-                  <option value="">Loading categories...</option>
-                ) : (
-                  categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="assignedTo" className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">
-              Assigned To
-            </label>
-            <select
-              id="assignedTo"
-              value={assignedTo || ''}
-              onChange={(e) => setAssignedTo(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-background-light dark:bg-gray-700 text-text-light dark:text-text-dark focus:ring-primary focus:border-primary transition-colors duration-200"
-            >
-              <option value="">Unassigned</option>
-              {loading ? (
-                <option value="">Loading profiles...</option>
-              ) : (
-                profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 shadow-md flex items-center justify-center"
-              disabled={loading}
-            >
-              {loading && <Loader2 className="animate-spin h-5 w-5 mr-2" />}
-              Update Ticket
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <Button
+            type="button"
+            className="h-10 rounded-lg bg-primary px-5 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
+            onClick={onSaveDueDate}
+            disabled={!isStaff || isUpdatingTicket || !draftDueDate}
+          >
+            {isUpdatingTicket ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save Due Date
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 

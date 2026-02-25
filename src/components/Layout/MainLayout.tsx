@@ -11,6 +11,7 @@ import { createFadeSlideUp } from '@/lib/motion';
 export const MainLayout: React.FC = () => {
   const location = useLocation();
   const { user } = useAuth();
+  const isTicketsRoute = location.pathname.startsWith('/tickets');
 
   if (!user) {
     return (
@@ -32,7 +33,13 @@ export const MainLayout: React.FC = () => {
     <TicketDrawerProvider>
       <div className="min-h-screen w-full bg-background text-foreground">
         <TopBar />
-        <main className="bg-background p-4 pt-20 text-foreground md:ml-64 md:p-6 md:pt-24">
+        <main
+          className={
+            isTicketsRoute
+              ? 'bg-background pt-16 text-foreground md:ml-64 md:pt-16'
+              : 'bg-background p-4 pt-20 text-foreground md:ml-64 md:p-6 md:pt-24'
+          }
+        >
           <motion.div key={location.pathname} {...createFadeSlideUp(0)}>
             <Outlet />
           </motion.div>

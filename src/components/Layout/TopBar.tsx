@@ -5,6 +5,7 @@ import {
   Bell,
   User,
   Github,
+  Shield,
   Search,
   Loader2,
   ChevronDown,
@@ -576,6 +577,7 @@ export function TopBar() {
 
     return location.pathname.startsWith(href);
   };
+  const isTicketsRoute = location.pathname.startsWith('/tickets');
   const isDarkMode = theme === 'dark' || (theme === 'system' && resolvedTheme === 'dark');
   const toggleTheme = () => {
     setTheme(isDarkMode ? 'light' : 'dark');
@@ -583,18 +585,27 @@ export function TopBar() {
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-primary/10 bg-white dark:bg-slate-900 md:flex">
-        <div className="flex h-full flex-col p-6">
-          <div className="mb-8 flex items-center gap-2">
-            <span className="rounded-lg bg-primary p-1.5 text-white">
-              <Github className="h-5 w-5" />
+      <aside
+        className={clsx(
+          'fixed inset-y-0 left-0 z-50 hidden w-64 flex-col md:flex',
+          isTicketsRoute
+            ? 'border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+            : 'border-r border-primary/10 bg-white dark:bg-slate-900'
+        )}
+      >
+        <div className={clsx('flex h-full flex-col', isTicketsRoute ? 'p-6' : 'p-6')}>
+          <div className="mb-8 flex items-center gap-3">
+            <span className="rounded-lg bg-primary p-2 text-white">
+              <Shield className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-sm font-bold uppercase tracking-tight text-primary">Neturai IT</p>
-              <p className="text-[10px] font-medium text-muted-foreground">Enterprise Admin</p>
+              <p className="text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">Neturai IT</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {isTicketsRoute ? 'Manager Suite' : 'Enterprise Admin'}
+              </p>
             </div>
           </div>
-          <nav className="space-y-1">
+          <nav className="custom-scrollbar flex-1 space-y-1 overflow-y-auto">
             {topNav.map((item) => {
               const Icon = item.icon;
               return (
@@ -603,9 +614,11 @@ export function TopBar() {
                   type="button"
                   className={clsx(
                     'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
-                    isRouteActive(item.href)
-                      ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                      : 'text-slate-600 hover:bg-primary/10 hover:text-primary dark:text-slate-400'
+                    isRouteActive(item.href) && isTicketsRoute
+                      ? 'bg-primary/10 text-primary'
+                      : isRouteActive(item.href)
+                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                        : 'text-slate-600 hover:bg-primary/10 hover:text-primary dark:text-slate-400'
                   )}
                   onMouseEnter={() => prefetchRoute(item.href)}
                   onFocus={() => prefetchRoute(item.href)}
@@ -617,7 +630,7 @@ export function TopBar() {
               );
             })}
           </nav>
-          <div className="mt-8 space-y-1 border-t border-primary/10 pt-8">
+          <div className="mt-4 space-y-1 border-t border-slate-200 pt-6 dark:border-slate-800">
             <button
               type="button"
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-primary/10 hover:text-primary dark:text-slate-400"
@@ -640,7 +653,12 @@ export function TopBar() {
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-900/20"
+              className={clsx(
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
+                isTicketsRoute
+                  ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+                  : 'text-slate-600 hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-900/20'
+              )}
               onClick={handleLogout}
             >
               <LogOut className="h-4.5 w-4.5" />
@@ -650,7 +668,14 @@ export function TopBar() {
         </div>
       </aside>
 
-      <header className="fixed left-0 right-0 top-0 z-40 h-16 border-b border-primary/10 bg-background/80 backdrop-blur-md md:left-64">
+      <header
+        className={clsx(
+          'fixed left-0 right-0 top-0 z-40 h-16 md:left-64',
+          isTicketsRoute
+            ? 'border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+            : 'border-b border-primary/10 bg-background/80 backdrop-blur-md'
+        )}
+      >
         <div className="flex h-full items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 flex-1 items-center md:max-w-xl">
             <button
@@ -663,13 +688,20 @@ export function TopBar() {
             </button>
             <button
               type="button"
-              className="relative hidden h-10 w-full items-center rounded-xl border border-primary/20 bg-white px-3 text-sm text-muted-foreground transition-colors hover:border-primary/30 dark:bg-slate-800 md:flex"
+              className={clsx(
+                'relative hidden h-10 items-center px-3 text-sm text-muted-foreground transition-colors md:flex',
+                isTicketsRoute
+                  ? 'w-96 rounded-lg border border-transparent bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-800'
+                  : 'w-full rounded-xl border border-primary/20 bg-white hover:border-primary/30 dark:bg-slate-800'
+              )}
               onClick={() => setSearchOpen(true)}
               aria-label="Open search"
               title="Search (Ctrl/Cmd + K)"
             >
               <Search className="h-4 w-4 text-slate-400" />
-              <span className="ml-2">Search resources or tickets...</span>
+              <span className="ml-2">
+                {isTicketsRoute ? 'Global search (Ctrl + K)' : 'Search resources or tickets...'}
+              </span>
               <kbd className="ml-auto hidden rounded border border-slate-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-400 sm:inline-block">
                 Ctrl K
               </kbd>
@@ -686,6 +718,15 @@ export function TopBar() {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-primary/10 dark:text-slate-400"
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+            >
+              {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -804,17 +845,7 @@ export function TopBar() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
-            <button
-              type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-primary/10 dark:text-slate-400"
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-            >
-              {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </button>
-
-            <div className="hidden h-6 w-px bg-primary/20 sm:block"></div>
+            <div className="hidden h-6 w-px bg-slate-200 sm:block dark:bg-slate-800"></div>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

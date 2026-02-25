@@ -1,13 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
   FileSpreadsheet,
-  FileText,
   KanbanSquare,
   List,
   ListFilter,
   PlusCircle,
-  RotateCcw,
-  Search,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,17 +30,9 @@ import { motion } from 'motion/react';
 import { createFadeSlideUp } from '@/lib/motion';
 import { TicketsPageSkeleton } from '@/components/tickets/TicketsPageSkeleton';
 import { useAssignableUsers } from '@/hooks/useAssignableUsers';
-import { Badge } from '@/components/ui/badge';
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from '@/components/ui/drawer';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import { notifyError, notifySuccess, notifyWarning } from '@/lib/notify';
-import { exportRowsToExcel, exportRowsToPdf } from '@/lib/export';
+import { exportRowsToExcel } from '@/lib/export';
 import { useSLAPolicies } from '@/hooks/useSLAPolicies';
 import { buildSlaResolutionHoursMap, isTicketSlaBreached } from '@/lib/sla';
 
@@ -143,7 +132,6 @@ export const Tickets: React.FC = () => {
   const TICKETS_VIEW_MODE_KEY = 'neturai_tickets_view_mode';
   const TICKETS_PRESET_KEY = 'neturai_tickets_preset';
   const [selectedPreset, setSelectedPreset] = useState<TicketViewPreset>('default');
-  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const { data: assignableUsers } = useAssignableUsers();
   const { data: slaPolicies = [] } = useSLAPolicies();
   const prefetchAssetsRoute = useCallback(() => {
@@ -158,16 +146,6 @@ export const Tickets: React.FC = () => {
     }
     setShowMyTickets(scopeFilter === 'my');
   }, [canManageTickets, scopeFilter]);
-
-  const applyScopeFilter = (scope: 'all' | 'my') => {
-    const nextParams = new URLSearchParams(searchParams);
-    if (scope === 'my') {
-      nextParams.set('scope', 'my');
-    } else {
-      nextParams.delete('scope');
-    }
-    setSearchParams(nextParams);
-  };
 
   const applyPreset = (preset: TicketViewPreset) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -527,33 +505,17 @@ export const Tickets: React.FC = () => {
     setSearchParams(new URLSearchParams());
   };
 
-  const removeUrlFilter = (key: 'status' | 'filter' | 'sla' | 'scope') => {
+  const applySlaFilter = (value: 'all' | 'breach') => {
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete(key);
-    if (key === 'filter') {
-      nextParams.delete('fillet');
+    if (value === 'breach') {
+      nextParams.set('sla', 'breach');
+    } else {
+      nextParams.delete('sla');
     }
     setSearchParams(nextParams);
   };
 
-  const selectedCategoryName =
-    categoryFilter !== 'all' ? categoryMap.get(categoryFilter) ?? 'Unknown category' : null;
-  const selectedAssigneeName =
-    assigneeFilter === 'all'
-      ? null
-      : assigneeFilter === 'unassigned'
-        ? 'Unassigned'
-        : (assignableUsers || []).find((user) => user.id === assigneeFilter)?.name ||
-          assigneeFilter;
-  const ticketStatusCounts = useMemo(() => {
-    const counts = { open: 0, in_progress: 0, closed: 0 };
-    (tickets || []).forEach((ticket) => {
-      if (ticket.status === 'open') counts.open += 1;
-      if (ticket.status === 'in_progress') counts.in_progress += 1;
-      if (ticket.status === 'closed') counts.closed += 1;
-    });
-    return counts;
-  }, [tickets]);
+  const statusFilterValue = isOverdueFilter ? 'overdue' : statusFilter ?? 'all';
   const assigneeNameById = useMemo(
     () =>
       new Map(
@@ -587,179 +549,6 @@ export const Tickets: React.FC = () => {
     notifySuccess('Excel exported', `${displayedTickets.length} ticket(s)`);
   };
 
-  const handleExportTicketsPdf = () => {
-    if (displayedTickets.length === 0) {
-      notifyError('No tickets to export');
-      return;
-    }
-    exportRowsToPdf(buildTicketExportRows(), 'Tickets Export', 'tickets-export');
-    notifySuccess('PDF exported', `${displayedTickets.length} ticket(s)`);
-  };
-
-  const renderFilterSidebarContent = () => (
-    <div className="flex flex-col gap-3">
-      <div className="rounded-lg border border-border/70 bg-card/70 p-3">
-        <h3 className="mb-2 text-sm font-semibold">Presets</h3>
-        <Select
-          value={selectedPreset}
-          onValueChange={(value) => applyPreset(value as TicketViewPreset)}
-        >
-          <SelectTrigger className="h-8 text-sm">
-            <SelectValue placeholder="Select preset" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="default">Default</SelectItem>
-            {canManageTickets && <SelectItem value="my_tickets">My tickets</SelectItem>}
-            <SelectItem value="open">Open tickets</SelectItem>
-            <SelectItem value="in_progress">In progress</SelectItem>
-            <SelectItem value="overdue">Overdue</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="rounded-lg border border-border/70 bg-card/70 p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Status</h3>
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={clearAllFilters}>
-            <RotateCcw className="mr-1 h-3.5 w-3.5" />
-            Reset
-          </Button>
-        </div>
-        <div className="flex flex-col gap-1">
-          <button
-            type="button"
-            onClick={() => applyStatusFilter('all')}
-            className={`flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-              !statusFilter && !isOverdueFilter ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-            }`}
-          >
-            <span>All</span>
-            <span className="text-xs text-muted-foreground">{tickets?.length ?? 0}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => applyStatusFilter('open')}
-            className={`flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-              statusFilter === 'open' && !isOverdueFilter ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-            }`}
-          >
-            <span>Open</span>
-            <span className="text-xs text-muted-foreground">{ticketStatusCounts.open}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => applyStatusFilter('in_progress')}
-            className={`flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-              statusFilter === 'in_progress' && !isOverdueFilter
-                ? 'bg-primary/10 text-primary'
-                : 'hover:bg-muted'
-            }`}
-          >
-            <span>In progress</span>
-            <span className="text-xs text-muted-foreground">{ticketStatusCounts.in_progress}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => applyStatusFilter('closed')}
-            className={`flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-              statusFilter === 'closed' && !isOverdueFilter ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-            }`}
-          >
-            <span>Closed</span>
-            <span className="text-xs text-muted-foreground">{ticketStatusCounts.closed}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => applyOverdueFilter(true)}
-            className={`flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-              isOverdueFilter ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-            }`}
-          >
-            <span>Overdue</span>
-          </button>
-        </div>
-      </div>
-
-      {canManageTickets && (
-        <div className="rounded-lg border border-border/70 bg-card/70 p-3">
-          <h3 className="mb-2 text-sm font-semibold">Scope</h3>
-          <div className="flex flex-col gap-1">
-            <button
-              type="button"
-              onClick={() => applyScopeFilter('all')}
-              className={`rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                !showMyTickets ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-              }`}
-            >
-              All tickets
-            </button>
-            <button
-              type="button"
-              onClick={() => applyScopeFilter('my')}
-              className={`rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                showMyTickets ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-              }`}
-            >
-              My tickets
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="rounded-lg border border-border/70 bg-card/70 p-3">
-        <h3 className="mb-2 text-sm font-semibold">Category</h3>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="h-8 text-sm">
-            <SelectValue placeholder="All categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All categories</SelectItem>
-            {(categories || []).map((category) => (
-              <SelectItem key={category.id} value={category.id}>
-                {category.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="rounded-lg border border-border/70 bg-card/70 p-3">
-        <h3 className="mb-2 text-sm font-semibold">Priority</h3>
-        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="h-8 text-sm">
-            <SelectValue placeholder="All priorities" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All priorities</SelectItem>
-            {priorityOptions.map((priority) => (
-              <SelectItem key={priority} value={priority}>
-                {formatPriorityLabel(priority)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="rounded-lg border border-border/70 bg-card/70 p-3">
-        <h3 className="mb-2 text-sm font-semibold">Assignee</h3>
-        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-          <SelectTrigger className="h-8 text-sm">
-            <SelectValue placeholder="All assignees" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All assignees</SelectItem>
-            <SelectItem value="unassigned">Unassigned</SelectItem>
-            {(assignableUsers || []).map((user) => (
-              <SelectItem key={user.id} value={user.id}>
-                {user.name || user.id}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
-  );
-
 
   if (isLoadingTickets || isLoadingCategories) {
     return <TicketsPageSkeleton />;
@@ -775,7 +564,7 @@ export const Tickets: React.FC = () => {
   }
 
   return (
-    <motion.div className="flex flex-col gap-6 p-4 md:p-6" {...createFadeSlideUp(0)}>
+    <motion.div className="relative flex flex-col gap-6 p-8" {...createFadeSlideUp(0)}>
       <motion.div
         className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
         {...createFadeSlideUp(0.04)}
@@ -784,57 +573,45 @@ export const Tickets: React.FC = () => {
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
             Neturai IT Manager
           </p>
-          <h1 className="text-3xl font-semibold text-foreground">
+          <h1 className="text-4xl font-black tracking-tight text-foreground">
             Ticket Management
           </h1>
-          <p className="text-muted-foreground text-lg">
-            Manage all incoming, in-progress, and resolved support tickets.
+          <p className="text-sm text-muted-foreground">
+            Manage, track and resolve incoming technical requests.
           </p>
-          <div className="flex flex-wrap gap-2">
-            {isOverdueFilter && (
-              <div className="rounded-full border border-red-300/50 bg-red-50 px-3 py-1 text-xs text-red-700 dark:border-red-500/40 dark:bg-red-950/30 dark:text-red-300">
-                Filter: overdue
-              </div>
-            )}
-            {slaFilter === 'breach' && (
-              <div className="rounded-full border border-red-300/50 bg-red-50 px-3 py-1 text-xs text-red-700 dark:border-red-500/40 dark:bg-red-950/30 dark:text-red-300">
-                Filter: SLA breach
-              </div>
-            )}
-          </div>
         </div>
-
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            className="h-10 rounded-lg border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
+            onClick={() => void handleExportTicketsExcel()}
+            disabled={displayedTickets.length === 0}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" /> Export
+          </Button>
+          <Button
+            onClick={() => setIsCreateTicketDialogOpen(true)}
+            className="btn-motion-primary h-10 rounded-lg px-5 text-sm font-semibold shadow-lg shadow-primary/20"
+          >
+            <PlusCircle className="mr-2 h-4 w-4" /> Create Ticket
+          </Button>
+        </div>
       </motion.div>
 
-      <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="hidden lg:block">
-          {renderFilterSidebarContent()}
-        </aside>
-
-        <section className="space-y-3">
+      <section className="space-y-4">
           <motion.div
-            className="rounded-lg border border-border/70 bg-card/70 p-2"
+            className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
             {...createFadeSlideUp(0.08)}
           >
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 lg:hidden"
-                onClick={() => setIsFilterDrawerOpen(true)}
-              >
-                <ListFilter className="mr-1.5 h-3.5 w-3.5" />
-                Filters
-              </Button>
-
-              <div className="relative min-w-[260px] flex-1">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <div className="relative min-w-[240px] flex-1">
+                <ListFilter className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   aria-label="Search tickets"
-                  placeholder="Search tickets..."
+                  placeholder="Filter tickets..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-8 pl-8 pr-8 text-sm"
+                  className="h-8 rounded-lg border-slate-200 bg-slate-50 pl-8 pr-8 text-sm dark:border-slate-700 dark:bg-slate-800"
                 />
                 {searchTerm.trim().length > 0 && (
                   <button
@@ -848,159 +625,126 @@ export const Tickets: React.FC = () => {
                 )}
               </div>
 
-              <Badge variant="secondary" className="ml-auto whitespace-nowrap">
-                Showing: {displayedTickets.length}
-              </Badge>
+              <Select
+                value={statusFilterValue}
+                onValueChange={(value) => {
+                  if (value === 'overdue') {
+                    applyOverdueFilter(true);
+                    return;
+                  }
+                  applyStatusFilter(value as 'all' | 'open' | 'in_progress' | 'closed');
+                }}
+              >
+                <SelectTrigger className="h-8 w-[120px] rounded-lg border-none bg-slate-100 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                <SelectTrigger className="h-8 w-[120px] rounded-lg border-none bg-slate-100 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <SelectValue placeholder="Priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {priorityOptions.map((priority) => (
+                    <SelectItem key={priority} value={priority}>
+                      {formatPriorityLabel(priority)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+                <SelectTrigger className="h-8 w-[130px] rounded-lg border-none bg-slate-100 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <SelectValue placeholder="Assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {(assignableUsers || []).map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name || user.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={slaFilter === 'breach' ? 'breach' : 'all'} onValueChange={(value) => applySlaFilter(value as 'all' | 'breach')}>
+                <SelectTrigger className="h-8 w-[90px] rounded-lg border-none bg-slate-100 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <SelectValue placeholder="SLA" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="breach">Breach</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button type="button" variant="ghost" className="h-8 px-2 text-sm font-medium text-primary" onClick={clearAllFilters}>
+                Clear All
+              </Button>
             </div>
-          </motion.div>
 
-      <motion.div className="flex flex-wrap gap-2" {...createFadeSlideUp(0.095)}>
-        {searchTerm.trim().length > 0 && (
-          <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
-            Search: {searchTerm.trim()}
-            <button
-              type="button"
-              onClick={() => setSearchTerm('')}
-              aria-label="Remove search filter"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        )}
-        {selectedCategoryName && (
-          <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
-            Category: {selectedCategoryName}
-            <button
-              type="button"
-              onClick={() => setCategoryFilter('all')}
-              aria-label="Remove category filter"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        )}
-        {priorityFilter !== 'all' && (
-          <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
-            Priority: {formatPriorityLabel(priorityFilter)}
-            <button
-              type="button"
-              onClick={() => setPriorityFilter('all')}
-              aria-label="Remove priority filter"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        )}
-        {selectedAssigneeName && (
-          <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
-            Assignee: {selectedAssigneeName}
-            <button
-              type="button"
-              onClick={() => setAssigneeFilter('all')}
-              aria-label="Remove assignee filter"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        )}
-        {isOverdueFilter && (
-          <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
-            Overdue
-            <button
-              type="button"
-              onClick={() => removeUrlFilter('filter')}
-              aria-label="Remove overdue filter"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        )}
-        {slaFilter === 'breach' && (
-          <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
-            SLA breach
-            <button
-              type="button"
-              onClick={() => removeUrlFilter('sla')}
-              aria-label="Remove SLA filter"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        )}
-        {canManageTickets && scopeFilter === 'my' && (
-          <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
-            Scope: my tickets
-            <button
-              type="button"
-              onClick={() => removeUrlFilter('scope')}
-              aria-label="Remove scope filter"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        )}
-          </motion.div>
-
-          <motion.div
-            className="text-sm text-muted-foreground"
-            {...createFadeSlideUp(0.1)}
-          >
-            Showing {displayedTickets.length} of {tickets?.length ?? 0} tickets
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Saved Presets:</span>
+              <button
+                type="button"
+                onClick={() => applyPreset('overdue')}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  selectedPreset === 'overdue'
+                    ? 'border-primary/30 bg-primary/10 text-primary'
+                    : 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                }`}
+              >
+                Unassigned Urgent
+              </button>
+              {canManageTickets && (
+                <button
+                  type="button"
+                  onClick={() => applyPreset('my_tickets')}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                    selectedPreset === 'my_tickets'
+                      ? 'border-primary/30 bg-primary/10 text-primary'
+                      : 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                  }`}
+                >
+                  My Active Tasks
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => applyPreset('open')}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  selectedPreset === 'open'
+                    ? 'border-primary/30 bg-primary/10 text-primary'
+                    : 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                }`}
+              >
+                Network Outages
+              </button>
+            </div>
           </motion.div>
 
           <motion.div {...createFadeSlideUp(0.16)}>
         <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'table' | 'kanban')}>
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <TabsList className="grid w-fit grid-cols-2">
-            <TabsTrigger value="table">
+        <div className="mb-0 flex flex-wrap items-center justify-between gap-3 rounded-t-xl border border-slate-200 border-b-0 bg-white px-4 pt-1 dark:border-slate-800 dark:bg-slate-900">
+          <TabsList className="grid h-auto w-fit grid-cols-2 bg-transparent p-0">
+            <TabsTrigger value="table" className="rounded-none border-b-2 border-transparent px-2 py-3 text-sm font-medium data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">
               <List className="mr-2 h-4 w-4" /> Table View
             </TabsTrigger>
-            <TabsTrigger value="kanban">
+            <TabsTrigger value="kanban" className="rounded-none border-b-2 border-transparent px-2 py-3 text-sm font-medium data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">
               <KanbanSquare className="mr-2 h-4 w-4" /> Kanban View
             </TabsTrigger>
           </TabsList>
-          <Button
-            variant="outline"
-            className="h-9"
-            onClick={() => void handleExportTicketsExcel()}
-            disabled={displayedTickets.length === 0}
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel
-          </Button>
-          <Button
-            variant="outline"
-            className="h-9"
-            onClick={handleExportTicketsPdf}
-            disabled={displayedTickets.length === 0}
-          >
-            <FileText className="mr-2 h-4 w-4" /> PDF
-          </Button>
-          <Button
-            onClick={() => setIsCreateTicketDialogOpen(true)}
-            className="btn-motion-primary ml-auto h-9"
-          >
-            <PlusCircle className="mr-2 h-4 w-4" /> New Ticket
-          </Button>
-          {statusFilter && (
-            <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
-              Status: {statusFilter.replace('_', ' ')}
-              <button
-                type="button"
-                onClick={() => removeUrlFilter('status')}
-                aria-label="Remove status filter"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
+          <p className="text-xs font-medium text-slate-400">
+            Showing {displayedTickets.length} of {tickets?.length ?? 0} tickets
+          </p>
         </div>
         <TabsContent value="table">
           {displayedTickets.length === 0 ? (
@@ -1037,20 +781,7 @@ export const Tickets: React.FC = () => {
         </TabsContent>
         </Tabs>
           </motion.div>
-        </section>
-      </div>
-
-      <Drawer open={isFilterDrawerOpen} onOpenChange={setIsFilterDrawerOpen}>
-        <DrawerContent className="max-h-[85vh]">
-          <DrawerHeader>
-            <DrawerTitle>Filters</DrawerTitle>
-            <DrawerDescription>Refine tickets by status, scope, category, priority, and assignee.</DrawerDescription>
-          </DrawerHeader>
-          <div className="overflow-auto px-4 pb-6">
-            {renderFilterSidebarContent()}
-          </div>
-        </DrawerContent>
-      </Drawer>
+      </section>
 
       <CreateTicketDialog
         isOpen={isCreateTicketDialogOpen}

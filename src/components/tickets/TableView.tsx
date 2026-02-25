@@ -7,13 +7,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tables, Database } from '@/types/database.types';
 import { format } from 'date-fns';
@@ -41,6 +34,7 @@ export function TableView({
   categories,
 }: TableViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Ticket;
@@ -100,6 +94,16 @@ export function TableView({
   );
 
   useEffect(() => {
+    if (!currentTickets.length) {
+      setActiveRowId(null);
+      return;
+    }
+    if (!activeRowId || !currentTickets.some((ticket) => ticket.id === activeRowId)) {
+      setActiveRowId(currentTickets[0].id);
+    }
+  }, [activeRowId, currentTickets]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       const raw = window.localStorage.getItem(TICKETS_TABLE_PAGE_SIZE_KEY);
@@ -154,83 +158,81 @@ export function TableView({
     );
   };
 
+  const statusDotClass = (status: string | null) => {
+    const normalized = (status || '').toLowerCase();
+    if (normalized === 'closed') return 'bg-emerald-500';
+    if (normalized === 'in_progress') return 'bg-amber-500';
+    if (normalized === 'open') return 'bg-slate-300';
+    return 'bg-blue-500';
+  };
+
   /* ---------------- Render ---------------- */
 
   return (
     <motion.div {...createFadeSlideUp(0)}>
-      <Card>
-        <motion.div {...createFadeSlideUp(0.04)}>
-          <CardHeader>
-            <CardTitle>All Tickets</CardTitle>
-            <CardDescription>
-              A comprehensive list of all IT service desk tickets.
-            </CardDescription>
-          </CardHeader>
-        </motion.div>
-
+      <div className="rounded-b-xl border border-slate-200 border-t-0 bg-white dark:border-slate-800 dark:bg-slate-900">
         <motion.div {...createFadeSlideUp(0.08)}>
-          <CardContent>
-          <div className="max-h-[62vh] overflow-auto rounded-lg border border-border/70">
+          <div className="max-h-[62vh] overflow-auto">
           <Table className="min-w-[760px] table-fixed">
-            <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+            <TableHeader className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/50">
               <TableRow>
-                <TableHead className="w-[30%]">
+                <TableHead className="w-[14%] px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <button
+                    type="button"
+                    onClick={() => requestSort('id')}
+                    className="flex w-full items-center gap-1.5 text-left font-semibold hover:text-foreground"
+                  >
+                    <span>ID</span>
+                    {getSortIcon('id')}
+                  </button>
+                </TableHead>
+                <TableHead className="w-[32%] px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <button
                     type="button"
                     onClick={() => requestSort('title')}
-                    className="flex w-full items-center gap-1.5 text-left font-medium hover:text-foreground"
+                    className="flex w-full items-center gap-1.5 text-left font-semibold hover:text-foreground"
                   >
-                    <span>Title</span>
+                    <span>Subject</span>
                     {getSortIcon('title')}
                   </button>
                 </TableHead>
-                <TableHead className="w-[17%]">
-                  <button
-                    type="button"
-                    onClick={() => requestSort('category_id')}
-                    className="flex w-full items-center gap-1.5 text-left font-medium hover:text-foreground"
-                  >
-                    <span>Category</span>
-                    {getSortIcon('category_id')}
-                  </button>
-                </TableHead>
-                <TableHead className="w-[12%]">
+                <TableHead className="w-[14%] px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <button
                     type="button"
                     onClick={() => requestSort('priority')}
-                    className="mx-auto flex items-center justify-center gap-1.5 font-medium hover:text-foreground"
+                    className="mx-auto flex items-center justify-center gap-1.5 font-semibold hover:text-foreground"
                   >
                     <span>Priority</span>
                     {getSortIcon('priority')}
                   </button>
                 </TableHead>
-                <TableHead className="w-[12%]">
+                <TableHead className="w-[14%] px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <button
                     type="button"
                     onClick={() => requestSort('status')}
-                    className="mx-auto flex items-center justify-center gap-1.5 font-medium hover:text-foreground"
+                    className="mx-auto flex items-center justify-center gap-1.5 font-semibold hover:text-foreground"
                   >
                     <span>Status</span>
                     {getSortIcon('status')}
                   </button>
                 </TableHead>
-                <TableHead className="w-[14%]">
+                <TableHead className="w-[14%] px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <button
                     type="button"
                     onClick={() => requestSort('assigned_to')}
-                    className="mx-auto flex items-center justify-center gap-1.5 font-medium hover:text-foreground"
+                    className="mx-auto flex items-center justify-center gap-1.5 font-semibold hover:text-foreground"
                   >
                     <span>Assigned To</span>
                     {getSortIcon('assigned_to')}
                   </button>
                 </TableHead>
-                <TableHead className="w-[15%]">
+                <TableHead className="w-[12%] px-6 py-4 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <button
                     type="button"
                     onClick={() => requestSort('created_at')}
-                    className="flex w-full items-center gap-1.5 text-left font-medium hover:text-foreground"
+                    className="flex w-full items-center gap-1.5 text-left font-semibold hover:text-foreground"
                   >
-                    <span>Created At</span>
+                    <span>Created</span>
                     {getSortIcon('created_at')}
                   </button>
                 </TableHead>
@@ -240,7 +242,7 @@ export function TableView({
             <TableBody>
               {currentTickets.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={6} className="py-8 text-center">
                     No tickets found.
                   </TableCell>
                 </TableRow>
@@ -267,37 +269,40 @@ export function TableView({
                     aria-label={`Open ticket ${ticket.title}`}
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest('button,a')) return;
+                      setActiveRowId(ticket.id);
                       openDrawer(ticket.id);
                     }}
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter' && e.key !== ' ') return;
                       e.preventDefault();
+                      setActiveRowId(ticket.id);
                       openDrawer(ticket.id);
                     }}
-                    className="cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    className={cn(
+                      'cursor-pointer transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+                      activeRowId === ticket.id && 'border-l-4 border-l-primary bg-primary/5'
+                    )}
                   >
-                    <TableCell className="font-medium">
+                    <TableCell className="px-6 py-4 font-mono text-sm font-bold text-slate-400">
+                      #TIC-{ticket.id.slice(0, 4).toUpperCase()}
+                    </TableCell>
+
+                    <TableCell className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-slate-100">
                       {ticket.title}
                     </TableCell>
 
-                    <TableCell className="truncate">
-                      {ticket.category_id
-                        ? categoryMap.get(ticket.category_id) ?? 'N/A'
-                        : 'N/A'}
+                    <TableCell className="px-6 py-4">
+                      <Badge variant={priorityUi.variant} className="px-2.5 py-1 text-[11px] font-black uppercase">
+                        {priorityUi.label}
+                      </Badge>
                     </TableCell>
 
-                    <TableCell className="text-center">
-                      <Badge variant={priorityUi.variant}>{priorityUi.label}</Badge>
-                    </TableCell>
-
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <Badge
-                          variant={statusUi.variant}
-                          className={cn(statusUi.badgeClass)}
-                        >
+                    <TableCell className="px-6 py-4">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className={cn('h-2 w-2 rounded-full', statusDotClass(ticket.status))} />
+                        <span className="font-medium">
                           {statusUi.label}
-                        </Badge>
+                        </span>
                         {isSlaBreached && (
                           <Badge variant="destructive" className="text-[10px]">
                             SLA Breached
@@ -306,15 +311,15 @@ export function TableView({
                       </div>
                     </TableCell>
 
-                    <TableCell className="text-center text-muted-foreground">
+                    <TableCell className="px-6 py-4 text-sm text-muted-foreground">
                       {assignedToLabel}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="px-6 py-4 text-right text-xs font-medium text-slate-500">
                       {ticket.created_at
                         ? format(
                             new Date(ticket.created_at),
-                            'MMM dd, yyyy HH:mm'
+                            'MMM dd, hh:mm a'
                           )
                         : 'N/A'}
                     </TableCell>
@@ -325,13 +330,11 @@ export function TableView({
           </Table>
           </div>
 
-          <motion.div className="flex flex-wrap items-center justify-between gap-3 py-4" {...createFadeSlideUp(0.12)}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                Rows {startRow}-{endRow} of {totalRows}
-              </span>
-              <span className="text-xs text-muted-foreground">|</span>
-              <span className="text-xs text-muted-foreground">Show</span>
+          <motion.div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-4 dark:border-slate-800" {...createFadeSlideUp(0.12)}>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span>Rows {startRow}-{endRow} of {totalRows}</span>
+              <span>|</span>
+              <span>Show</span>
               {PAGE_SIZE_OPTIONS.map((size) => (
                 <Button
                   key={size}
@@ -373,9 +376,8 @@ export function TableView({
               </div>
             )}
           </motion.div>
-          </CardContent>
         </motion.div>
-      </Card>
+      </div>
     </motion.div>
   );
 }

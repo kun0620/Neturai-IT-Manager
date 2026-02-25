@@ -31,7 +31,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Download, Paperclip, RotateCcw, Trash2, Upload, ZoomIn, ZoomOut } from 'lucide-react';
+import {
+  CheckCircle2,
+  Download,
+  Edit3,
+  Paperclip,
+  RotateCcw,
+  Trash2,
+  Upload,
+  UserPlus,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { notifyError, notifySuccess } from '@/lib/notify';
@@ -44,6 +56,7 @@ import type { Database } from '@/types/database.types';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import { mapLogToText } from '@/features/logs/mapLogToText';
 import { logAppearance } from '@/features/logs/logAppearance';
+import EditTicketModal from '@/components/EditTicketModal';
 
 
 type Ticket = Database['public']['Tables']['tickets']['Row'];
@@ -179,6 +192,7 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
   const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   /* ================= Sync from ticket ================= */
   useEffect(() => {
@@ -355,6 +369,10 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
     panStartRef.current = null;
   };
 
+  const handleEditShortcut = () => {
+    setIsEditDialogOpen(true);
+  };
+
   /* ================= Helpers ================= */
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
   const getCategoryName = (id: string | null) =>
@@ -437,15 +455,29 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
   /* ================= Render ================= */
   return (
     <Drawer open={isOpen} onOpenChange={(o) => !o && closeDrawer()}>
-      <DrawerContent className="h-[90%] mt-24">
-        <ScrollArea className="h-full">
-          <div className="mx-auto w-full max-w-3xl p-4">
-            <DrawerHeader>
-              <DrawerTitle>Ticket Details</DrawerTitle>
-              <DrawerDescription>
-                View the selected ticket information, comments and history
-              </DrawerDescription>
-            </DrawerHeader>
+      <DrawerContent className="mt-0 h-screen rounded-none border-l border-slate-200 border-t-0 p-0 lg:inset-y-0 lg:right-0 lg:left-auto lg:w-[400px] dark:border-slate-800 lg:[&>div:first-child]:hidden">
+        <DrawerHeader className="h-16 flex-row items-center justify-between border-b border-slate-200 px-6 py-0 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <span className="rounded bg-primary/10 px-2 py-1 text-xs font-black text-primary">
+              {ticket?.id ? `#TIC-${ticket.id.slice(0, 4).toUpperCase()}` : '#TIC-0000'}
+            </span>
+            <DrawerTitle className="text-sm font-bold">Ticket Details</DrawerTitle>
+          </div>
+          <button
+            type="button"
+            onClick={closeDrawer}
+            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+            aria-label="Close ticket details"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <DrawerDescription className="sr-only">
+            View the selected ticket information, comments and history
+          </DrawerDescription>
+        </DrawerHeader>
+
+        <ScrollArea className="h-[calc(100vh-8rem)]">
+          <div className="w-full p-6">
 
             {!ticketId ? (
               <p className="text-center text-muted-foreground">
@@ -459,15 +491,62 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
               </p>
             ) : (
               <>
-                <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+                <h2 className="mb-4 text-3xl font-bold leading-tight tracking-tight">
                   {ticket.title}
-                  {isOverdue && <Badge variant="destructive">Overdue</Badge>}
                 </h2>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <Badge variant="destructive" className="text-[10px] font-black uppercase">
+                    {ticket.priority || 'priority'}
+                  </Badge>
+                  <Badge variant="secondary" className="text-[10px] font-black uppercase">
+                    {ticket.status?.replace('_', ' ') || 'status'}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] font-black uppercase">
+                    {getCategoryName(ticket.category_id)}
+                  </Badge>
+                  {isOverdue && (
+                    <Badge variant="destructive" className="text-[10px] font-black uppercase">
+                      Overdue
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="mb-6 space-y-4 text-sm">
+                  <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                    <span className="font-medium text-slate-500">Created</span>
+                    <span className="font-semibold">
+                      {ticket.created_at
+                        ? format(new Date(ticket.created_at), 'MMM dd, yyyy HH:mm')
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                    <span className="font-medium text-slate-500">Assignee</span>
+                    <span className="font-semibold">
+                      {ticket.assigned_to ? itUserMap.get(ticket.assigned_to) : 'Unassigned'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                    <span className="font-medium text-slate-500">SLA Deadline</span>
+                    <span className="font-bold text-rose-600">
+                      {resolutionSlaMeta.text}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mb-8">
+                  <h4 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">
+                    Description
+                  </h4>
+                  <p className="rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-600 dark:bg-slate-800/50 dark:text-slate-400">
+                    {ticket.description || 'N/A'}
+                  </p>
+                </div>
 
                 <Separator />
 
                 {/* BASIC INFO */}
-                <div className="grid grid-cols-2 gap-4 my-4">
+                <div className="my-4 grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Description</p>
                     <p>{ticket.description || 'N/A'}</p>
@@ -897,12 +976,39 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
                   </DialogContent>
                 </Dialog>
 
+                <EditTicketModal
+                  isOpen={isEditDialogOpen}
+                  onClose={setIsEditDialogOpen}
+                  isStaff={isStaff}
+                  isUpdatingTicket={isUpdatingTicket}
+                  selectedStatus={selectedStatus}
+                  onStatusChange={(status) => handleStatusChange(status as Ticket['status'])}
+                  assignedUser={assignedUser}
+                  onAssignUser={handleAssignUser}
+                  users={itUsers ?? []}
+                  draftDueDate={draftDueDate}
+                  draftDueTime={draftDueTime}
+                  onDraftDueDateChange={setDraftDueDate}
+                  onDraftDueTimeChange={setDraftDueTime}
+                  onSaveDueDate={handleConfirmDueDate}
+                  currentAssigneeLabel={
+                    ticket.assigned_to
+                      ? itUserMap.get(ticket.assigned_to) ?? 'Unassigned'
+                      : 'Unassigned'
+                  }
+                  currentDueDateLabel={
+                    ticket.due_at
+                      ? format(new Date(ticket.due_at), 'MMM dd, yyyy')
+                      : 'N/A'
+                  }
+                />
+
                 <Separator />
 
                 {/* ===== ACTIVITY TIMELINE ===== */}
-                <h3 className="font-semibold my-4">Activity</h3>
+                <h3 className="my-4 text-xs font-black uppercase tracking-widest text-slate-400">Activity Log</h3>
 
-                <div className="space-y-4">
+                <div className="relative space-y-4 before:absolute before:bottom-0 before:left-[11px] before:top-2 before:w-px before:bg-slate-200 dark:before:bg-slate-800">
                   {timelineItems.map((item) => {
                     if (item.type === 'comment') {
                       const author =
@@ -915,11 +1021,11 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
                         <div key={`c-${item.id}`} className="relative pl-8">
                           <span className="absolute left-0 top-1">💬</span>
 
-                          <p className="text-sm font-medium">
+                          <p className="text-xs font-bold">
                             {author} commented
                           </p>
 
-                          <p className="text-sm text-muted-foreground whitespace-pre-line">
+                          <p className="mt-1 rounded bg-slate-50 p-2 text-xs text-muted-foreground whitespace-pre-line dark:bg-slate-800">
                             {item.comment_text}
                           </p>
 
@@ -972,9 +1078,9 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
                           <Icon size={16} />
                         </span>
 
-                        <p className="text-sm font-medium">
+                        <p className="text-xs font-bold">
                           {text.title}
-                          <span className="text-muted-foreground font-normal">
+                          <span className="font-normal text-slate-400">
                             {' '}
                             by {author}
                           </span>
@@ -1018,6 +1124,35 @@ export function TicketDetailsDrawer({ categories }: TicketDetailsDrawerProps) {
             )}
           </div>
         </ScrollArea>
+        <div className="grid h-16 grid-cols-3 gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-full flex-col gap-1 rounded-lg text-[10px] font-bold uppercase tracking-wide"
+          >
+            <UserPlus className="h-4 w-4" />
+            Assign
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={handleEditShortcut}
+            className="h-full flex-col gap-1 rounded-lg text-[10px] font-bold uppercase tracking-wide"
+          >
+            <Edit3 className="h-4 w-4" />
+            Edit
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => handleStatusChange('closed')}
+            disabled={!isStaff || isUpdatingTicket}
+            className="h-full flex-col gap-1 rounded-lg bg-emerald-500/10 text-[10px] font-bold uppercase tracking-wide text-emerald-600 hover:bg-emerald-500/20"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Close
+          </Button>
+        </div>
       </DrawerContent>
     </Drawer>
   );

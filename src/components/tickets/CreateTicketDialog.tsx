@@ -162,35 +162,48 @@ export function CreateTicketDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[450px]">
-        <DialogHeader>
-          <DialogTitle>Create New Ticket</DialogTitle>
-          <DialogDescription>
-            Fill in the details to create a support ticket.
-          </DialogDescription>
+      <DialogContent className="w-[95vw] max-w-xl overflow-hidden rounded-xl border border-slate-200 p-0 dark:border-slate-800 max-sm:h-screen max-sm:w-screen max-sm:max-w-none max-sm:rounded-none">
+        <DialogHeader className="border-b border-slate-100 bg-slate-50/70 px-6 py-5 dark:border-slate-800 dark:bg-slate-800/50">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <DialogTitle className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                Create New Ticket
+              </DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Fill in the details to create a support ticket.
+              </DialogDescription>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              Step {step} / 2
+            </span>
+          </div>
         </DialogHeader>
+
+        <div className="max-h-[65vh] overflow-y-auto p-6 max-sm:max-h-[calc(100vh-150px)]">
 
         {/* STEP 1 */}
         {step === 1 && (
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="subject">Subject</Label>
+          <div className="grid gap-5">
+            <div className="grid gap-1.5">
+              <Label htmlFor="subject" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Subject</Label>
               <Input
                 id="subject"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="Brief summary of the issue"
+                className="h-11 rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-800"
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+            <div className="grid gap-1.5">
+              <Label htmlFor="description" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Description</Label>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Detailed explanation of the problem"
-                rows={5}
+                rows={6}
+                className="rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-800"
               />
             </div>
           </div>
@@ -198,11 +211,11 @@ export function CreateTicketDialog({
 
         {/* STEP 2 */}
         {step === 2 && (
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Category</Label>
+          <div className="grid gap-5">
+            <div className="grid gap-1.5">
+              <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Category</Label>
               <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-800">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -215,10 +228,10 @@ export function CreateTicketDialog({
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <Label>Priority</Label>
+            <div className="grid gap-1.5">
+              <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-800">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
@@ -231,15 +244,15 @@ export function CreateTicketDialog({
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <Label>Status</Label>
+            <div className="grid gap-1.5">
+              <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Status</Label>
               <Select
                 value={status}
                 onValueChange={(value: 'open' | 'in_progress' | 'closed') =>
                   setStatus(value)
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-800">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -251,20 +264,23 @@ export function CreateTicketDialog({
             </div>
           </div>
         )}
+        </div>
 
-        <DialogFooter className="flex justify-between">
-          {step === 2 && (
-            <Button variant="outline" onClick={() => setStep(1)}>
-              Back
-            </Button>
-          )}
+        <DialogFooter className="flex items-center justify-between gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/30 max-sm:sticky max-sm:bottom-0">
+          <div>
+            {step === 2 && (
+              <Button variant="outline" onClick={() => setStep(1)} className="h-10 rounded-lg border-slate-200 px-5 text-sm font-bold dark:border-slate-700">
+                Back
+              </Button>
+            )}
+          </div>
 
           {step === 1 ? (
-            <Button onClick={handleNext} className="btn-motion-primary">Next</Button>
+            <Button onClick={handleNext} className="btn-motion-primary h-10 rounded-lg px-5 text-sm font-bold">Next</Button>
           ) : (
             <Button
               onClick={handleSubmit}
-              className="btn-motion-primary"
+              className="btn-motion-primary h-10 rounded-lg px-5 text-sm font-bold"
               disabled={createTicketMutation.isPending}
             >
               {createTicketMutation.isPending && (
