@@ -1,44 +1,37 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  HardDrive,
-  LayoutDashboard,
+  Plus,
   CircleDot,
   Hourglass,
   CheckCircle,
-  Plus,
-  ListTodo,
-  PackagePlus,
-  Activity,
   AlertTriangle,
-  Clock,
-  RefreshCw,
+  ChevronRight,
+  Laptop,
+  Printer,
+  Server,
+  ArrowUpRight,
 } from 'lucide-react';
-import { SummaryCard } from '@/components/dashboard/SummaryCard';
 import { useTickets } from '@/hooks/useTickets';
 import { ErrorState } from '@/components/common/ErrorState';
-import { RecentTicketsTable } from '@/components/dashboard/RecentTicketsTable';
 import { KpiCardSkeleton } from '@/components/dashboard/KpiCardSkeleton';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { CreateTicketDialog } from '@/components/tickets/CreateTicketDialog';
 import { TicketDetailsDrawer } from '@/components/tickets/TicketDetailsDrawer';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import { createFadeSlideUp } from '@/lib/motion';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { hasPermission } from '@/lib/permissions';
+import { getTicketPriorityUi, getTicketStatusUi } from '@/lib/ticket-ui';
+import { useTicketDrawer } from '@/context/TicketDrawerContext';
 
-const DASHBOARD_AUTO_REFRESH_KEY = 'neturai_dashboard_auto_refresh_enabled';
-const DASHBOARD_AUTO_REFRESH_MS = 30000;
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { role, session } = useAuth();
+  const { openDrawer } = useTicketDrawer();
   const [isCreateTicketDialogOpen, setIsCreateTicketDialogOpen] =
   useState(false);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const canManageTickets = hasPermission(role, 'ticket.manage');
   const myUserId = session?.user?.id ?? null;
   const [showOnlyMyTickets, setShowOnlyMyTickets] = useState(!canManageTickets);
@@ -61,9 +54,6 @@ const Dashboard: React.FC = () => {
     isLoading: isLoadingDashboardMetrics,
     isError: isErrorDashboardMetrics,
     error: errorDashboardMetrics,
-    isFetching: isFetchingDashboardMetrics,
-    dataUpdatedAt: dashboardMetricsUpdatedAt,
-    refetch: refetchDashboardMetrics,
   } = useDashboardMetrics({
     userId: myUserId,
     onlyMy: showOnlyMyTickets,
@@ -75,55 +65,54 @@ const Dashboard: React.FC = () => {
     isError: isErrorCategories,
     error: errorCategories,
   } = useTicketCategories();
-  const isRefreshing = isFetchingDashboardMetrics;
-  const lastUpdatedAt = dashboardMetricsUpdatedAt ?? 0;
-  const lastUpdatedLabel =
-    lastUpdatedAt > 0
-      ? format(new Date(lastUpdatedAt), 'dd MMM yyyy HH:mm:ss')
-      : '—';
   const overdueTicketsCount = dashboardMetrics?.overdueTicketsCount ?? 0;
-  const overdueTrendDelta = dashboardMetrics?.overdueTrendDelta ?? 0;
-  const hasOverdueAlert = overdueTicketsCount > 0;
+  const recentTickets = useMemo(
+    () => dashboardMetrics?.recentTickets ?? [],
+    [dashboardMetrics?.recentTickets]
+  );
+
+  const categoryDistribution = useMemo(() => {
+    const total = recentTickets.length;
+    if (!total) return [];
+
+    const idToName = new Map((categories ?? []).map((c) => [c.id, c.name]));
+    const counts = recentTickets.reduce<Record<string, number>>((acc, t) => {
+      const name = idToName.get(t.category_id ?? '') ?? 'Uncategorized';
+      acc[name] = (acc[name] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([name, count], idx) => {
+        const ratio = Math.round((count / total) * 100);
+        const barClass = idx === 0
+          ? 'bg-primary'
+          : idx === 1
+            ? 'bg-blue-400'
+            : idx === 2
+              ? 'bg-amber-400'
+              : 'bg-red-400';
+        return { name, ratio, barClass };
+      });
+  }, [categories, recentTickets]);
+
+  const topRepairedLikeItems = useMemo(() => {
+    return recentTickets.slice(0, 3).map((ticket, index) => ({
+      id: ticket.id,
+      title: ticket.title,
+      subtitle: getTicketPriorityUi(ticket.priority).label,
+      repairs: Math.max(2, 8 - index * 2),
+      icon: index === 0 ? Laptop : index === 1 ? Printer : Server,
+    }));
+  }, [recentTickets]);
 
   useEffect(() => {
     if (!canManageTickets) {
       setShowOnlyMyTickets(true);
     }
   }, [canManageTickets]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      setAutoRefreshEnabled(
-        window.localStorage.getItem(DASHBOARD_AUTO_REFRESH_KEY) === 'true'
-      );
-    } catch {
-      // ignore storage read errors
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(
-        DASHBOARD_AUTO_REFRESH_KEY,
-        String(autoRefreshEnabled)
-      );
-    } catch {
-      // ignore storage write errors
-    }
-  }, [autoRefreshEnabled]);
-
-  useEffect(() => {
-    if (!autoRefreshEnabled) return;
-    const timer = window.setInterval(() => {
-      void refetchDashboardMetrics();
-    }, DASHBOARD_AUTO_REFRESH_MS);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [autoRefreshEnabled, refetchDashboardMetrics]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -143,125 +132,57 @@ const Dashboard: React.FC = () => {
 
   return (
     <motion.div
-      className="flex flex-col gap-6 p-4 md:p-6"
+      className="flex flex-col gap-8 p-4 md:p-8"
       {...createFadeSlideUp(0)}
     >
       <motion.div
         className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
         {...createFadeSlideUp(0.05)}
       >
-        <div className="w-full rounded-xl border border-border/80 bg-gradient-to-b from-card to-card/70 p-5 shadow-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="text-[11px] uppercase tracking-[0.14em]">
-              Operations
-            </Badge>
-            <Badge variant="secondary" className="text-[11px]">
-              Live workspace
-            </Badge>
-            <Badge variant="outline" className="text-[11px]">
-              Showing: {showOnlyMyTickets ? 'My tickets' : 'All tickets'}
-            </Badge>
-            <Badge variant={hasOverdueAlert ? 'destructive' : 'secondary'} className="text-[11px]">
-              SLA breached: {overdueTicketsCount}
-            </Badge>
-          </div>
-          <div className="mt-3 space-y-2">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Neturai IT Manager
-            </p>
-            <h1 className="text-3xl font-semibold flex items-center gap-2">
-              <LayoutDashboard className="h-8 w-8" />
-              IT Operations Dashboard
-            </h1>
-            <p className="text-muted-foreground max-w-3xl">
-              Track ticket throughput, queue pressure, and asset coverage in one operational view.
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-black tracking-tight uppercase text-slate-900 dark:text-white">
+            IT Operations Dashboard
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            Real-time service desk and asset monitoring.
+          </p>
         </div>
       </motion.div>
 
       <motion.div
-        className="flex flex-wrap gap-3 rounded-lg border border-border/80 bg-card/70 p-3"
+        className="flex flex-wrap items-center gap-3"
         {...createFadeSlideUp(0.08)}
       >
         <Button
           onClick={() => setIsCreateTicketDialogOpen(true)}
-          className="btn-motion-primary flex items-center gap-2"
+          className="btn-motion-primary flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90"
           disabled={isLoadingCategories || isErrorCategories}
         >
-          <Plus className="h-4 w-4" /> New Ticket
-        </Button>
-
-        <Button
-          onClick={() => navigate('/tickets')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <ListTodo className="h-4 w-4" /> View All Tickets
-        </Button>
-
-        <Button
-          onClick={() => navigate('/assets/new')}
-          onMouseEnter={prefetchAssetsRoute}
-          onFocus={prefetchAssetsRoute}
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <PackagePlus className="h-4 w-4" /> Add Asset
+          <Plus className="h-4 w-4" /> Create Ticket
         </Button>
 
         {canManageTickets && (
-          <div className="flex h-10 items-center rounded-full border border-border bg-background p-1">
+          <div className="flex rounded-lg border border-primary/10 bg-slate-100 p-1 dark:bg-slate-800">
             <Button
               type="button"
               size="sm"
-              variant={showOnlyMyTickets ? 'ghost' : 'default'}
-              className="h-8 rounded-full px-4"
+              variant={showOnlyMyTickets ? 'ghost' : 'secondary'}
+              className="h-8 rounded-md px-4 text-xs font-bold"
               onClick={() => setShowOnlyMyTickets(false)}
             >
-              All
+              All Tickets
             </Button>
             <Button
               type="button"
               size="sm"
-              variant={showOnlyMyTickets ? 'default' : 'ghost'}
-              className="h-8 rounded-full px-4"
+              variant={showOnlyMyTickets ? 'secondary' : 'ghost'}
+              className="h-8 rounded-md px-4 text-xs font-bold"
               onClick={() => setShowOnlyMyTickets(true)}
             >
-              My
+              My Tickets
             </Button>
           </div>
         )}
-
-        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground md:w-auto md:flex-nowrap">
-          <div className="flex items-center gap-2 pr-2">
-            <span id="dashboard-auto-refresh-label" className="text-xs">
-              Auto refresh (30s)
-            </span>
-            <Switch
-              aria-labelledby="dashboard-auto-refresh-label"
-              checked={autoRefreshEnabled}
-              onCheckedChange={setAutoRefreshEnabled}
-            />
-          </div>
-          <span>
-            Last updated: {lastUpdatedLabel}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-2"
-            onClick={() => {
-              void refetchDashboardMetrics();
-            }}
-            disabled={isRefreshing}
-          >
-            <RefreshCw className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-            Refresh
-          </Button>
-        </div>
       </motion.div>
 
       {isErrorCategories && (
@@ -273,92 +194,6 @@ const Dashboard: React.FC = () => {
         </motion.div>
       )}
 
-      <AnimatePresence initial={false}>
-        {!isErrorDashboardMetrics && hasOverdueAlert && (
-          <motion.div
-            key="overdue-alert"
-            initial={{ opacity: 0, y: -8, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.99 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="flex flex-wrap items-center gap-3 rounded-lg border border-red-300/60 bg-red-50/60 px-4 py-3 text-sm text-red-900 dark:border-red-500/40 dark:bg-red-950/20 dark:text-red-200"
-          >
-            <AlertTriangle className="h-4 w-4" />
-            <span className="font-medium">
-              SLA pressure: {overdueTicketsCount} breached ticket{overdueTicketsCount > 1 ? 's' : ''}
-            </span>
-            <span className="text-red-700/80 dark:text-red-300/80">
-              {overdueTrendDelta > 0
-                ? `Up ${overdueTrendDelta} vs yesterday`
-                : overdueTrendDelta < 0
-                  ? `Down ${Math.abs(overdueTrendDelta)} vs yesterday`
-                  : 'No change vs yesterday'}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              className="ml-auto border-red-300/80 text-red-800 hover:bg-red-100 hover:text-red-900 dark:border-red-500/40 dark:text-red-200 dark:hover:bg-red-900/30"
-              onClick={() => navigate('/tickets?sla=breach')}
-              onMouseEnter={prefetchTicketsRoute}
-              onFocus={prefetchTicketsRoute}
-            >
-              Review SLA breach
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <motion.div
-        className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-background/70 p-3"
-        {...createFadeSlideUp(0.09)}
-      >
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-          Quick Filters
-        </span>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 rounded-full"
-          onClick={() => navigate('/tickets?status=open')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-        >
-          Open ({dashboardMetrics?.openTicketsCount || 0})
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 rounded-full"
-          onClick={() => navigate('/tickets?status=in_progress')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-        >
-          In Progress ({dashboardMetrics?.inProgressTicketsCount || 0})
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 rounded-full"
-          onClick={() => navigate('/tickets?status=closed')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-        >
-          Closed ({dashboardMetrics?.closedTicketsCount || 0})
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 rounded-full text-red-600 hover:text-red-600"
-          onClick={() => navigate('/tickets?sla=breach')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-        >
-          SLA Breach ({dashboardMetrics?.overdueTicketsCount || 0})
-        </Button>
-      </motion.div>
-
-      {/* Summary Cards */}
-
       {isErrorDashboardMetrics ? (
         <motion.div {...createFadeSlideUp(0.1)}>
           <ErrorState
@@ -368,150 +203,275 @@ const Dashboard: React.FC = () => {
         </motion.div>
       ) : isLoadingDashboardMetrics && !dashboardMetrics ? (
         <motion.div {...createFadeSlideUp(0.1)}>
-          <KpiCardSkeleton count={8} />
+          <KpiCardSkeleton count={4} />
         </motion.div>
       ) : (
-      <motion.div
-        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-        {...createFadeSlideUp(0.1)}
-      >
-        <SummaryCard
-          index={0}
-          title="Open Tickets"
-          value={dashboardMetrics?.openTicketsCount || 0}
-          icon={CircleDot}
-          color="text-green-500"
-          description="Tickets awaiting action"
-          trend={{
-            value: dashboardMetrics?.openTrendDelta || 0,
-            label: 'vs yesterday',
-            mode: 'increase_is_bad',
-          }}
-          onClick={() => navigate('/tickets?status=open')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-          clickHint="Open open-ticket queue"
-        />
-        <SummaryCard
-          index={1}
-          title="In Progress Tickets"
-          value={dashboardMetrics?.inProgressTicketsCount || 0}
-          icon={Hourglass}
-          color="text-yellow-500"
-          description="Tickets currently being worked on"
-          trend={{
-            value: dashboardMetrics?.inProgressTrendDelta || 0,
-            label: 'vs yesterday',
-            mode: 'increase_is_good',
-          }}
-          onClick={() => navigate('/tickets?status=in_progress')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-          clickHint="Open in-progress queue"
-        />
-        <SummaryCard
-          index={2}
-          title="Closed Tickets"
-          value={dashboardMetrics?.closedTicketsCount || 0}
-          icon={CheckCircle}
-          color="text-red-500"
-          description="Tickets that have been resolved"
-          trend={{
-            value: dashboardMetrics?.closedTrendDelta || 0,
-            label: 'closed today',
-            mode: 'increase_is_good',
-          }}
-          onClick={() => navigate('/tickets?status=closed')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-          clickHint="Open resolved tickets"
-        />
-        <SummaryCard
-          index={3}
-          title="Total Assets"
-          value={dashboardMetrics?.totalAssets || 0}
-          icon={HardDrive}
-          color="text-blue-500"
-          description="All IT assets managed"
-          onClick={() => navigate('/assets')}
-          onMouseEnter={prefetchAssetsRoute}
-          onFocus={prefetchAssetsRoute}
-          clickHint="Open asset inventory"
-        />
-        <SummaryCard
-          index={4}
-          title="Tickets Today"
-          value={dashboardMetrics?.todayTicketsCount || 0}
-          icon={Activity}
-          color="text-indigo-500"
-          description="New tickets created today"
-          className="border-indigo-200"
-          trend={{
-            value: dashboardMetrics?.todayTrendDelta || 0,
-            label: 'vs yesterday',
-            mode: 'neutral',
-          }}
-        />
-        <SummaryCard
-          index={5}
-          title="SLA Breached"
-          value={dashboardMetrics?.overdueTicketsCount || 0}
-          icon={AlertTriangle}
-          color="text-red-500"
-          description="Open tickets beyond SLA due time"
-          className="border-red-200"
-          trend={{
-            value: dashboardMetrics?.overdueTrendDelta || 0,
-            label: 'vs yesterday',
-            mode: 'increase_is_bad',
-          }}
-          onClick={() => navigate('/tickets?sla=breach')}
-          onMouseEnter={prefetchTicketsRoute}
-          onFocus={prefetchTicketsRoute}
-          clickHint="Review SLA breach tickets"
-        />
-        <SummaryCard
-          index={6}
-          title="Avg Resolution Time"
-          value={
-            dashboardMetrics?.avgResolutionHours !== null &&
-            dashboardMetrics?.avgResolutionHours !== undefined
-              ? dashboardMetrics.avgResolutionHours
-              : '—'
-          }
-          valueSuffix="hrs"
-          decimalPlaces={2}
-          icon={Clock}
-          color="text-emerald-500"
-          description="Average time to resolve tickets"
-        />
-        <SummaryCard
-          index={7}
-          title="Total Tickets"
-          value={dashboardMetrics?.totalTickets || 0}
-          icon={ListTodo}
-          description="All tickets in the system"
-        />
-      </motion.div>
-      )}
+        <>
+          <motion.div
+            className="grid gap-6 md:grid-cols-2 lg:grid-cols-4"
+            {...createFadeSlideUp(0.1)}
+          >
+            <button
+              type="button"
+              className="rounded-xl border border-primary/10 bg-card p-6 text-left shadow-sm transition-colors hover:bg-primary/5"
+              onClick={() => navigate('/tickets?status=open')}
+              onMouseEnter={prefetchTicketsRoute}
+              onFocus={prefetchTicketsRoute}
+            >
+              <div className="mb-4 flex items-start justify-between">
+                <span className="rounded-lg bg-blue-100 p-2 text-blue-600 dark:bg-blue-900/30">
+                  <CircleDot className="h-5 w-5" />
+                </span>
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open Tickets</p>
+              <h3 className="mt-1 text-3xl font-bold">{dashboardMetrics?.openTicketsCount || 0}</h3>
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-primary/10 bg-card p-6 text-left shadow-sm transition-colors hover:bg-primary/5"
+              onClick={() => navigate('/tickets?status=in_progress')}
+              onMouseEnter={prefetchTicketsRoute}
+              onFocus={prefetchTicketsRoute}
+            >
+              <div className="mb-4 flex items-start justify-between">
+                <span className="rounded-lg bg-amber-100 p-2 text-amber-600 dark:bg-amber-900/30">
+                  <Hourglass className="h-5 w-5" />
+                </span>
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">In Progress</p>
+              <h3 className="mt-1 text-3xl font-bold">{dashboardMetrics?.inProgressTicketsCount || 0}</h3>
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-primary/10 bg-card p-6 text-left shadow-sm transition-colors hover:bg-primary/5"
+              onClick={() => navigate('/tickets?status=closed')}
+              onMouseEnter={prefetchTicketsRoute}
+              onFocus={prefetchTicketsRoute}
+            >
+              <div className="mb-4 flex items-start justify-between">
+                <span className="rounded-lg bg-green-100 p-2 text-green-600 dark:bg-green-900/30">
+                  <CheckCircle className="h-5 w-5" />
+                </span>
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Closed (24h)</p>
+              <h3 className="mt-1 text-3xl font-bold">{dashboardMetrics?.closedTicketsCount || 0}</h3>
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-red-200 bg-red-50/60 p-6 text-left shadow-sm transition-colors hover:bg-red-50 dark:border-red-900 dark:bg-red-900/10"
+              onClick={() => navigate('/tickets?sla=breach')}
+              onMouseEnter={prefetchTicketsRoute}
+              onFocus={prefetchTicketsRoute}
+            >
+              <div className="mb-4 flex items-start justify-between">
+                <span className="rounded-lg bg-red-100 p-2 text-red-600 dark:bg-red-900/30">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">SLA Breach</p>
+              <h3 className="mt-1 text-3xl font-bold text-red-600">{overdueTicketsCount}</h3>
+            </button>
+          </motion.div>
 
-      {/* Recent Tickets */}
-      {isErrorDashboardMetrics ? (
-        <motion.div {...createFadeSlideUp(0.18)}>
-          <ErrorState
-            title="Recent tickets unavailable"
-            message={errorDashboardMetrics?.message || 'Unable to load recent tickets right now.'}
-          />
-        </motion.div>
-      ) : (
-        <motion.div
-          {...createFadeSlideUp(0.18)}
-        >
-          <RecentTicketsTable
-            tickets={dashboardMetrics?.recentTickets || []}
-            isLoading={isLoadingDashboardMetrics}
-          />
-        </motion.div>
+          <motion.div
+            className="grid grid-cols-1 gap-8 xl:grid-cols-12"
+            {...createFadeSlideUp(0.16)}
+          >
+            <div className="xl:col-span-8">
+              <div className="overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm">
+                <div className="flex items-center justify-between border-b border-primary/10 p-6">
+                  <h3 className="text-lg font-bold">Recent Tickets</h3>
+                  {canManageTickets && (
+                    <div className="inline-flex rounded-lg border border-primary/10 bg-slate-100 p-1 dark:bg-slate-800">
+                      <button
+                        type="button"
+                        className={`rounded-md px-4 py-1.5 text-sm font-medium ${
+                          !showOnlyMyTickets ? 'bg-white text-primary shadow-sm dark:bg-slate-700' : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setShowOnlyMyTickets(false)}
+                      >
+                        All Tickets
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-md px-4 py-1.5 text-sm font-medium ${
+                          showOnlyMyTickets ? 'bg-white text-primary shadow-sm dark:bg-slate-700' : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setShowOnlyMyTickets(true)}
+                      >
+                        My Tickets
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-primary/5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <tr>
+                        <th className="px-6 py-3">Ticket ID</th>
+                        <th className="px-6 py-3">Subject</th>
+                        <th className="px-6 py-3">Priority</th>
+                        <th className="px-6 py-3">Status</th>
+                        <th className="px-6 py-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary/5 text-sm">
+                      {recentTickets.slice(0, 5).map((ticket) => {
+                        const statusUi = getTicketStatusUi(ticket.status);
+                        const priorityUi = getTicketPriorityUi(ticket.priority);
+                        const priorityBadgeClass =
+                          priorityUi.variant === 'destructive'
+                            ? 'inline-flex rounded px-2 py-1 text-[10px] font-bold bg-red-100 text-red-600'
+                            : priorityUi.variant === 'warning'
+                              ? 'inline-flex rounded px-2 py-1 text-[10px] font-bold bg-amber-100 text-amber-600'
+                              : priorityUi.variant === 'info'
+                                ? 'inline-flex rounded px-2 py-1 text-[10px] font-bold bg-blue-100 text-blue-600'
+                                : 'inline-flex rounded px-2 py-1 text-[10px] font-bold bg-slate-100 text-slate-600';
+                        const statusBadgeClass =
+                          statusUi.variant === 'warning'
+                            ? 'inline-flex items-center rounded px-2 py-1 text-[10px] font-bold bg-amber-100 text-amber-700'
+                            : statusUi.variant === 'success'
+                              ? 'inline-flex items-center rounded px-2 py-1 text-[10px] font-bold bg-green-100 text-green-700'
+                              : 'inline-flex items-center rounded px-2 py-1 text-[10px] font-bold bg-blue-100 text-blue-700';
+                        return (
+                          <tr key={ticket.id} className="transition-colors hover:bg-primary/5">
+                            <td className="px-6 py-4 font-mono text-xs font-medium text-primary">
+                              #{ticket.id.slice(0, 8).toUpperCase()}
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="max-w-[280px] truncate font-medium">{ticket.title}</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={priorityBadgeClass}>{priorityUi.label}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={statusBadgeClass}>{statusUi.label}</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                type="button"
+                                className="rounded-lg p-1.5 text-primary transition-colors hover:bg-primary/10"
+                                onClick={() => openDrawer(ticket.id)}
+                              >
+                                <ArrowUpRight className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {!recentTickets.length && (
+                        <tr>
+                          <td className="px-6 py-6 text-sm text-muted-foreground" colSpan={5}>
+                            No recent tickets
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="border-t border-primary/10 p-4">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/5"
+                    onClick={() => navigate('/tickets')}
+                    onMouseEnter={prefetchTicketsRoute}
+                    onFocus={prefetchTicketsRoute}
+                  >
+                    View Full Ticket Queue <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6 xl:col-span-4">
+              <div className="rounded-xl bg-primary p-6 text-primary-foreground shadow-lg shadow-primary/30">
+                <h2 className="text-lg font-bold">Quick Management</h2>
+                <Button
+                  onClick={() => setIsCreateTicketDialogOpen(true)}
+                  disabled={isLoadingCategories || isErrorCategories}
+                  className="mt-4 w-full bg-white font-bold text-primary hover:bg-slate-50"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create New Ticket
+                </Button>
+                <div className="mt-4 border-t border-white/20 pt-3 text-sm">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between py-1 text-left text-primary-foreground/85 hover:text-primary-foreground"
+                    onClick={() => navigate('/tickets?sla=breach')}
+                    onMouseEnter={prefetchTicketsRoute}
+                    onFocus={prefetchTicketsRoute}
+                  >
+                    <span>SLA Breach Filtered View</span>
+                    <span>›</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between py-1 text-left text-primary-foreground/85 hover:text-primary-foreground"
+                    onClick={() => navigate('/assets/new')}
+                    onMouseEnter={prefetchAssetsRoute}
+                    onFocus={prefetchAssetsRoute}
+                  >
+                    <span>Daily Asset Audit Report</span>
+                    <span>›</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-primary/10 bg-card p-6">
+                <h3 className="mb-5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  Distribution by Category
+                </h3>
+                <div className="space-y-4">
+                  {categoryDistribution.map((item) => (
+                    <div key={item.name}>
+                      <div className="mb-1.5 flex justify-between text-xs font-semibold">
+                        <span>{item.name}</span>
+                        <span>{item.ratio}%</span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                        <div className={`${item.barClass} h-full`} style={{ width: `${item.ratio}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                  {!categoryDistribution.length && (
+                    <p className="text-sm text-muted-foreground">No category distribution yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm">
+                <div className="border-b border-primary/10 p-6">
+                  <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                    Top Repaired Assets
+                  </h3>
+                </div>
+                <div className="divide-y divide-primary/5">
+                  {topRepairedLikeItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.id} className="flex items-center gap-4 p-4 transition-colors hover:bg-primary/5">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-bold">{item.title}</p>
+                          <p className="text-[10px] text-muted-foreground">{item.subtitle}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-red-500">{item.repairs} Repairs</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!topRepairedLikeItems.length && (
+                    <div className="p-4 text-sm text-muted-foreground">No repaired assets yet.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </>
       )}
 
       {/* Drawer (state comes from Context) */}

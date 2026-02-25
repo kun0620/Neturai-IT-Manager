@@ -18,7 +18,9 @@
     --border: 220 16% 84%;
     --input: 220 16% 84%;
 
-    --primary: 231 74% 61%;
+    --primary: 257 64% 33%;
+    --primary-light: 257 63% 45%;
+    --primary-dark: 258 65% 24%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 220 18% 96%;
@@ -29,6 +31,8 @@
 
     --destructive: 0 77% 56%;
     --destructive-foreground: 0 0% 100%;
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
 
     --success: 156 72% 40%;
     --success-foreground: 0 0% 100%;
@@ -55,8 +59,10 @@
     --border: 226 14% 31%;
     --input: 226 14% 31%;
 
-    --primary: 231 84% 72%;
-    --primary-foreground: 226 22% 12%;
+    --primary: 257 64% 33%;
+    --primary-light: 257 63% 45%;
+    --primary-dark: 258 65% 24%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 226 16% 24%;
     --secondary-foreground: 220 30% 92%;
@@ -66,6 +72,8 @@
 
     --destructive: 0 66% 43%;
     --destructive-foreground: 210 32% 95%;
+    --danger: 0 84% 60%;
+    --danger-foreground: 210 32% 95%;
 
     --success: 156 64% 43%;
     --success-foreground: 210 32% 95%;
@@ -94,9 +102,23 @@
       radial-gradient(circle at 0% 0%, hsl(var(--primary) / 0.08), transparent 40%),
       radial-gradient(circle at 100% 0%, hsl(var(--primary) / 0.05), transparent 32%);
   }
+
+  section {
+    scroll-margin-top: 5rem;
+  }
 }
 
 @layer components {
+  .nav-link {
+    @apply block rounded-md px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-primary/5 hover:text-primary;
+  }
+
+  .code-block {
+    @apply bg-neutral-800 text-neutral-100;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+      'Courier New', monospace;
+  }
+
   .btn-motion-primary {
     @apply motion-safe:transition-all motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-safe:active:translate-y-0;
   }

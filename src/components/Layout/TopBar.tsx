@@ -13,7 +13,15 @@ import {
   Tags,
   ShieldCheck,
   ClipboardList,
-  ArrowRight,
+  Sun,
+  Moon,
+  Settings,
+  LogOut,
+  UserCircle2,
+  LayoutDashboard,
+  Ticket,
+  HardDrive,
+  BarChart3,
   Menu,
   X,
 } from 'lucide-react';
@@ -25,15 +33,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ModeToggle } from '@/components/mode-toggle';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useAuth } from '@/hooks/useAuth';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import { AnimatePresence, motion } from 'motion/react';
 import { Input } from '@/components/ui/input';
+import { useTheme } from 'next-themes';
 
 
 
@@ -64,13 +72,16 @@ export function TopBar() {
     Array<{ id: string; name: string | null; email: string | null; department: string | null }>
   >([]);
   const { user } = useAuth();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const { openDrawer } = useTicketDrawer();
   const topNav = [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Tickets', href: '/tickets' },
-    { label: 'Asset Management', href: '/assets' },
-    { label: 'Reports', href: '/reports' },
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Tickets', href: '/tickets', icon: Ticket },
+    { label: 'Assets', href: '/assets', icon: HardDrive },
+    { label: 'Reports', href: '/reports', icon: BarChart3 },
+    { label: 'Notifications', href: '/notifications', icon: Bell },
   ];
   const settingsOptions = [
     { label: 'General', tab: 'general', icon: SlidersHorizontal },
@@ -558,269 +569,316 @@ export function TopBar() {
   const visibleTicketCount = searchScope === 'all' || searchScope === 'tickets' ? ticketResults.length : 0;
   const visibleAssetCount = searchScope === 'all' || searchScope === 'assets' ? assetResults.length : 0;
   const visibleUserCount = searchScope === 'all' || searchScope === 'users' ? userResults.length : 0;
+  const isRouteActive = (href: string) => {
+    if (href === '/dashboard') {
+      return location.pathname === '/' || location.pathname === '/dashboard';
+    }
+
+    return location.pathname.startsWith(href);
+  };
+  const isDarkMode = theme === 'dark' || (theme === 'system' && resolvedTheme === 'dark');
+  const toggleTheme = () => {
+    setTheme(isDarkMode ? 'light' : 'dark');
+  };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-card shadow-sm">
-      <nav className="mx-auto flex h-[68px] w-full max-w-[1920px] items-center justify-between px-4 transition-all duration-200 sm:h-[64px] sm:px-6 lg:h-[60px] lg:px-10">
-      <div className="flex min-w-0 items-center gap-4 lg:gap-6">
-        <Link to="/dashboard" className="shrink-0 transition-colors duration-200">
-          <span className="flex items-center gap-2 font-semibold tracking-tight text-foreground">
-          <span className="rounded-md bg-primary/12 p-1 text-primary">
-            <Github className="h-4 w-4" />
-          </span>
-          <span className="text-lg">Neturai</span>
-          </span>
-        </Link>
-
-        <ul className="ml-4 mt-0.5 hidden items-center gap-0.5 text-sm text-muted-foreground lg:ml-8 md:flex">
-          {topNav.map((item) => (
-            <li key={item.label}>
+    <>
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-primary/10 bg-white dark:bg-slate-900 md:flex">
+        <div className="flex h-full flex-col p-6">
+          <div className="mb-8 flex items-center gap-2">
+            <span className="rounded-lg bg-primary p-1.5 text-white">
+              <Github className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-bold uppercase tracking-tight text-primary">Neturai IT</p>
+              <p className="text-[10px] font-medium text-muted-foreground">Enterprise Admin</p>
+            </div>
+          </div>
+          <nav className="space-y-1">
+            {topNav.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  className={clsx(
+                    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
+                    isRouteActive(item.href)
+                      ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                      : 'text-slate-600 hover:bg-primary/10 hover:text-primary dark:text-slate-400'
+                  )}
+                  onMouseEnter={() => prefetchRoute(item.href)}
+                  onFocus={() => prefetchRoute(item.href)}
+                  onClick={() => goTo(item.href)}
+                >
+                  <Icon className="h-4.5 w-4.5" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+          <div className="mt-8 space-y-1 border-t border-primary/10 pt-8">
             <button
-              key={item.label}
               type="button"
-              className="inline-flex h-10 items-center rounded-[44px] px-3 text-[15px] font-medium leading-none tracking-wide transition-colors duration-200 hover:bg-primary/15 hover:text-primary"
-              onMouseEnter={() => prefetchRoute(item.href)}
-              onFocus={() => prefetchRoute(item.href)}
-              onClick={() => navigate(item.href)}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-primary/10 hover:text-primary dark:text-slate-400"
+              onMouseEnter={() => prefetchRoute('/settings?tab=general')}
+              onFocus={() => prefetchRoute('/settings?tab=general')}
+              onClick={() => goTo('/settings?tab=general')}
             >
-              {item.label}
+              <Settings className="h-4.5 w-4.5" />
+              <span>Settings</span>
             </button>
-            </li>
-          ))}
-
-          <li className="group relative">
             <button
               type="button"
-              className="inline-flex h-10 items-center gap-1 rounded-[44px] px-3 text-[15px] font-medium leading-none tracking-wide transition-colors duration-200 hover:bg-primary/15 hover:text-primary"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-primary/10 hover:text-primary dark:text-slate-400"
+              onMouseEnter={() => prefetchRoute('/profile')}
+              onFocus={() => prefetchRoute('/profile')}
+              onClick={() => goTo('/profile')}
             >
-              Settings
-              <ChevronDown className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-rotate-180" />
+              <UserCircle2 className="h-4.5 w-4.5" />
+              <span>Profile</span>
             </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-900/20"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4.5 w-4.5" />
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+      </aside>
 
-            <div className="invisible absolute left-0 top-full z-50 pt-2 opacity-0 transition-[opacity,visibility] duration-150 group-hover:visible group-hover:opacity-100">
-              <div className="w-[560px] rounded-md border border-border/70 bg-card p-3 shadow-xl">
-                <div className="grid grid-cols-[1fr_240px] gap-3">
-                  <div className="space-y-1">
-                    {settingsOptions.map((option) => (
-                      <button
-                        key={option.tab}
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-primary/15 hover:text-primary"
-                        onMouseEnter={() => prefetchRoute(`/settings?tab=${option.tab}`)}
-                        onFocus={() => prefetchRoute(`/settings?tab=${option.tab}`)}
-                        onClick={() => navigate(`/settings?tab=${option.tab}`)}
-                      >
-                        <option.icon className="h-4 w-4 text-muted-foreground" />
-                        <span>{option.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="rounded-lg border border-primary/20 bg-primary/10 p-4">
-                    <p className="text-lg font-semibold">Settings</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Manage system behavior, users, categories, SLA rules, and audit logs from one control panel.
-                    </p>
+      <header className="fixed left-0 right-0 top-0 z-40 h-16 border-b border-primary/10 bg-background/80 backdrop-blur-md md:left-64">
+        <div className="flex h-full items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 flex-1 items-center md:max-w-xl">
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-md bg-background/60 hover:bg-muted md:hidden"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              className="relative hidden h-10 w-full items-center rounded-xl border border-primary/20 bg-white px-3 text-sm text-muted-foreground transition-colors hover:border-primary/30 dark:bg-slate-800 md:flex"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Open search"
+              title="Search (Ctrl/Cmd + K)"
+            >
+              <Search className="h-4 w-4 text-slate-400" />
+              <span className="ml-2">Search resources or tickets...</span>
+              <kbd className="ml-auto hidden rounded border border-slate-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-400 sm:inline-block">
+                Ctrl K
+              </kbd>
+            </button>
+            <button
+              type="button"
+              className="relative flex h-9 w-9 items-center justify-center rounded-md bg-background/60 hover:bg-muted md:hidden"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Open search"
+              title="Search (Ctrl/Cmd + K)"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-primary/10 dark:text-slate-400"
+                >
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                      {unreadBadgeLabel}
+                    </span>
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                className="w-80 max-h-96 overflow-y-auto border border-border/70 bg-card shadow-xl"
+              >
+                <DropdownMenuLabel className="flex items-center justify-between px-4 py-2">
+                  <span>Notifications</span>
+
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllAsRead}
+                      className="text-xs text-muted-foreground hover:underline"
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                </DropdownMenuLabel>
+                <div className="px-4 pb-2">
+                  <div className="grid w-full grid-cols-2 rounded-md border border-border/70 bg-muted/30 p-1">
                     <button
                       type="button"
-                      onClick={() => navigate('/settings?tab=general')}
-                      className="mt-5 inline-flex items-center gap-1 text-sm font-semibold"
+                      className={clsx(
+                        'h-7 rounded-[6px] px-2 text-xs font-medium leading-none whitespace-nowrap transition-colors',
+                        notificationFilter === 'all'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-background/70'
+                      )}
+                      onClick={() => setNotificationFilter('all')}
                     >
-                      Open Control Panel <ArrowRight className="h-4 w-4" />
+                      All ({notifications.length})
+                    </button>
+                    <button
+                      type="button"
+                      className={clsx(
+                        'h-7 rounded-[6px] px-2 text-xs font-medium leading-none whitespace-nowrap transition-colors',
+                        notificationFilter === 'unread'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-background/70'
+                      )}
+                      onClick={() => setNotificationFilter('unread')}
+                    >
+                      Unread ({unreadCount})
                     </button>
                   </div>
                 </div>
-              </div>
-            </div>
-          </li>
-        </ul>
-      </div>
+                <DropdownMenuSeparator className="bg-border" />
 
-      <div className="flex items-center gap-1.5 sm:gap-2">
-        <button
-          type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-md bg-background/60 hover:bg-muted md:hidden"
-          onClick={() => setMobileMenuOpen(true)}
-          aria-label="Open menu"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-
-        <div className="hidden items-center gap-2 md:flex">
-          <button
-            type="button"
-            className="relative flex h-9 w-9 items-center justify-center rounded-md bg-background/60 hover:bg-muted"
-            onClick={() => setSearchOpen(true)}
-            aria-label="Open search"
-            title="Search (Ctrl/Cmd + K)"
-          >
-            <Search className="h-5 w-5" />
-          </button>
-          <ModeToggle />
-
-          {/* 🔔 Notifications */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="relative flex h-9 w-9 items-center justify-center rounded-md bg-background/60 hover:bg-muted"
-              >
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                    {unreadBadgeLabel}
-                  </span>
+                {notificationsLoading && (
+                  <div className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading notifications...
+                  </div>
                 )}
-              </button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent
-              align="end"
-              sideOffset={8}
-              className="w-80 max-h-96 overflow-y-auto border border-border/70 bg-card shadow-xl"
-            >
-
-            <DropdownMenuLabel className="flex items-center justify-between px-4 py-2">
-              <span>Notifications</span>
-
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllAsRead}
-                  className="text-xs text-muted-foreground hover:underline"
-                >
-                  Mark all as read
-                </button>
-              )}
-            </DropdownMenuLabel>
-            <div className="px-4 pb-2">
-              <div className="grid w-full grid-cols-2 rounded-md border border-border/70 bg-muted/30 p-1">
-                <button
-                  type="button"
-                  className={clsx(
-                    'h-7 rounded-[6px] px-2 text-xs font-medium leading-none whitespace-nowrap transition-colors',
-                    notificationFilter === 'all'
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:bg-background/70'
-                  )}
-                  onClick={() => setNotificationFilter('all')}
-                >
-                  All ({notifications.length})
-                </button>
-                <button
-                  type="button"
-                  className={clsx(
-                    'h-7 rounded-[6px] px-2 text-xs font-medium leading-none whitespace-nowrap transition-colors',
-                    notificationFilter === 'unread'
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:bg-background/70'
-                  )}
-                  onClick={() => setNotificationFilter('unread')}
-                >
-                  Unread ({unreadCount})
-                </button>
-              </div>
-            </div>
-            <DropdownMenuSeparator className="bg-border" />
-
-            {notificationsLoading && (
-              <div className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading notifications...
-              </div>
-            )}
-            {!notificationsLoading && visibleNotifications.length === 0 && (
-              <div className="px-4 py-6 text-sm text-muted-foreground text-center">
-                {notificationFilter === 'unread'
-                  ? 'No unread notifications'
-                  : 'No notifications'}
-              </div>
-            )}
-            {!notificationsLoading && visibleNotifications.map((n) => (
-              <DropdownMenuItem
-                key={n.id}
-                onClick={() => {
-                  void handleNotificationOpen(n);
-                }}
-                className={clsx(
-                  'flex flex-col gap-1 items-start cursor-pointer px-4 py-2',
-                  !n.is_read &&
-                    'border-l-2 border-primary bg-muted/50 font-medium'
+                {!notificationsLoading && visibleNotifications.length === 0 && (
+                  <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                    {notificationFilter === 'unread'
+                      ? 'No unread notifications'
+                      : 'No notifications'}
+                  </div>
                 )}
-              >
-                {/* Title */}
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getNotificationMeta(n).color}`}
+                {!notificationsLoading && visibleNotifications.map((n) => (
+                  <DropdownMenuItem
+                    key={n.id}
+                    onClick={() => {
+                      void handleNotificationOpen(n);
+                    }}
+                    className={clsx(
+                      'flex cursor-pointer flex-col items-start gap-1 px-4 py-2',
+                      !n.is_read && 'border-l-2 border-primary bg-muted/50 font-medium'
+                    )}
                   >
-                    {getNotificationMeta(n).label}
-                  </span>
-                  <span className="text-sm">{getNotificationTitle(n)}</span>
-                </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getNotificationMeta(n).color}`}
+                      >
+                        {getNotificationMeta(n).label}
+                      </span>
+                      <span className="text-sm">{getNotificationTitle(n)}</span>
+                    </div>
 
-                {n.body && (
-                  <span className="text-xs text-muted-foreground">
-                    {n.body}
-                  </span>
-                )}
+                    {n.body && (
+                      <span className="text-xs text-muted-foreground">
+                        {n.body}
+                      </span>
+                    )}
 
-                {/* Time */}
-                <span className="text-xs text-muted-foreground">
-                  {n.created_at
-                    ? format(new Date(n.created_at), 'dd MMM yyyy HH:mm')
-                    : ''}
-                </span>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator className="bg-border" />
-            <DropdownMenuItem
-              onClick={() => goTo('/notifications')}
-              onMouseEnter={() => prefetchRoute('/notifications')}
-              className="justify-center text-sm font-medium"
+                    <span className="text-xs text-muted-foreground">
+                      {n.created_at
+                        ? format(new Date(n.created_at), 'dd MMM yyyy HH:mm')
+                        : ''}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem
+                  onClick={() => goTo('/notifications')}
+                  onMouseEnter={() => prefetchRoute('/notifications')}
+                  className="justify-center text-sm font-medium"
+                >
+                  View all notifications
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-primary/10 dark:text-slate-400"
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
             >
-              View all notifications
-            </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
 
-          {/* 👤 User Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-background/60 hover:bg-muted"
+            <div className="hidden h-6 w-px bg-primary/20 sm:block"></div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="group flex items-center gap-2 rounded-lg pl-1 pr-2 transition-colors hover:bg-primary/10"
+                >
+                  <div className="hidden text-right sm:block">
+                    <p className="max-w-[120px] truncate text-xs font-semibold leading-none">
+                      {user?.email?.split('@')[0] ?? 'User'}
+                    </p>
+                    <p className="mt-1 max-w-[120px] truncate text-[10px] text-muted-foreground">
+                      {user?.email ?? 'No email'}
+                    </p>
+                  </div>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/60 ring-2 ring-primary/20">
+                    <User className="h-5 w-5" />
+                  </span>
+                </button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                className="z-[9999] w-48 border border-border/70 bg-card shadow-xl"
               >
-                <User className="h-5 w-5" />
-              </button>
-            </DropdownMenuTrigger>
+                <DropdownMenuLabel className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold">
+                        {user?.email?.split('@')[0] ?? 'User'}
+                      </p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {user?.email ?? 'No email'}
+                      </p>
+                    </div>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
 
-          <DropdownMenuContent
-            align="end"
-            sideOffset={8}
-            className="z-[9999] w-48 border border-border/70 bg-card shadow-xl"
-          >
-            <DropdownMenuLabel className="flex items-center justify-between px-4 py-2">My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/settings?tab=general">Settings</Link>
+                </DropdownMenuItem>
 
-            <DropdownMenuItem asChild>
-              <Link to="/settings?tab=general">Settings</Link>
-            </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/profile">Profile</Link>
+                </DropdownMenuItem>
 
-            <DropdownMenuItem asChild>
-              <Link to="/profile">Profile</Link>
-            </DropdownMenuItem>
+                <DropdownMenuSeparator />
 
-            <DropdownMenuSeparator />
-
-          <DropdownMenuItem
-            className="text-red-600 focus:text-red-600"
-            onClick={handleLogout}
-          >
-            Logout
-          </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem
+                  className="text-red-600 focus:text-red-600"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-      </div>
-      </nav>
+      </header>
 
       <AnimatePresence>
         {searchOpen && (
@@ -1262,6 +1320,6 @@ export function TopBar() {
           </div>
         )}
       </AnimatePresence>
-    </header>
+    </>
   );
 }

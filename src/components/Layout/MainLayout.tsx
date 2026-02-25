@@ -32,7 +32,7 @@ export const MainLayout: React.FC = () => {
     <TicketDrawerProvider>
       <div className="min-h-screen w-full bg-background text-foreground">
         <TopBar />
-        <main className="bg-background p-4 text-foreground md:p-6">
+        <main className="bg-background p-4 pt-20 text-foreground md:ml-64 md:p-6 md:pt-24">
           <motion.div key={location.pathname} {...createFadeSlideUp(0)}>
             <Outlet />
           </motion.div>
