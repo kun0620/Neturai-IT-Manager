@@ -47,6 +47,13 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData, index: number) => string;
   onSelectedRowsChange?: (rows: TData[]) => void;
   clearSelectionKey?: number;
+  showToolbar?: boolean;
+  tableWrapperClassName?: string;
+  tableClassName?: string;
+  headerRowClassName?: string;
+  rowClassName?: (row: TData, index: number) => string | undefined;
+  footerClassName?: string;
+  rowLabel?: string;
 }
 
 type TableDensity = 'compact' | 'comfortable';
@@ -64,6 +71,13 @@ export function DataTable<TData, TValue>({
   getRowId,
   onSelectedRowsChange,
   clearSelectionKey,
+  showToolbar = true,
+  tableWrapperClassName,
+  tableClassName,
+  headerRowClassName,
+  rowClassName,
+  footerClassName,
+  rowLabel,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -83,8 +97,11 @@ export function DataTable<TData, TValue>({
     window.localStorage.setItem(TABLE_DENSITY_KEY, density);
   }, [density]);
 
-  const headerClassName = density === 'compact' ? 'h-8 px-2 text-xs' : 'h-10 px-3';
-  const cellClassName = density === 'compact' ? 'px-2 py-1.5' : 'px-3 py-2.5';
+  const headerClassName =
+    density === 'compact'
+      ? 'h-8 px-3 text-[11px] font-bold uppercase tracking-[0.14em]'
+      : 'px-4 py-3 text-[11px] font-bold uppercase tracking-[0.14em]';
+  const cellClassName = density === 'compact' ? 'px-3 py-2' : 'px-4 py-3';
 
   const table = useReactTable({
     data,
@@ -121,80 +138,94 @@ export function DataTable<TData, TValue>({
     table.resetRowSelection();
   }, [clearSelectionKey, table]);
 
+  const totalRows = table.getFilteredRowModel().rows.length;
+  const pageIndex = table.getState().pagination.pageIndex;
+  const pageSize = table.getState().pagination.pageSize;
+  const pageCount = table.getPageCount();
+  const startRow = totalRows === 0 ? 0 : pageIndex * pageSize + 1;
+  const endRow = totalRows === 0 ? 0 : Math.min((pageIndex + 1) * pageSize, totalRows);
+  const footerSummary = rowLabel
+    ? `Showing ${startRow} to ${endRow} of ${totalRows} ${rowLabel}`
+    : table.getFilteredSelectedRowModel().rows.length > 0
+      ? `${table.getFilteredSelectedRowModel().rows.length} of ${table.getFilteredRowModel().rows.length} row(s) selected.`
+      : '';
+
   return (
     <div className="w-full">
-      <div className="flex flex-wrap items-center gap-2 py-2">
-        {showGlobalFilter && (
-          <Input
-            placeholder={globalFilterPlaceholder || 'Search all columns...'}
-            value={(table.getState().globalFilter as string) ?? ''}
-            onChange={(event) => table.setGlobalFilter(event.target.value)}
-            className="h-8 w-full max-w-sm text-sm"
-          />
-        )}
-        {filterColumnId && (
-          <Input
-            placeholder={filterPlaceholder || `Filter ${filterColumnId}...`}
-            value={(table.getColumn(filterColumnId)?.getFilterValue() as string) ?? ''}
-            onChange={(event) =>
-              table.getColumn(filterColumnId)?.setFilterValue(event.target.value)
-            }
-            className="h-8 w-full max-w-sm text-sm"
-          />
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto h-8 text-sm">
-              Density
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Table density</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuRadioGroup
-              value={density}
-              onValueChange={(value) => setDensity(value as TableDensity)}
-            >
-              <DropdownMenuRadioItem value="comfortable">
-                Comfortable
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="compact">
-                Compact
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-2 h-8 text-sm">
-              Columns
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {table
-              .getAllColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                  >
-                    {column.id}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <div className="rounded-md border bg-background text-foreground">
+      {showToolbar && (
+        <div className="flex flex-wrap items-center gap-2 py-2">
+          {showGlobalFilter && (
+            <Input
+              placeholder={globalFilterPlaceholder || 'Search all columns...'}
+              value={(table.getState().globalFilter as string) ?? ''}
+              onChange={(event) => table.setGlobalFilter(event.target.value)}
+              className="h-8 w-full max-w-sm text-sm"
+            />
+          )}
+          {filterColumnId && (
+            <Input
+              placeholder={filterPlaceholder || `Filter ${filterColumnId}...`}
+              value={(table.getColumn(filterColumnId)?.getFilterValue() as string) ?? ''}
+              onChange={(event) =>
+                table.getColumn(filterColumnId)?.setFilterValue(event.target.value)
+              }
+              className="h-8 w-full max-w-sm text-sm"
+            />
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="ml-auto h-8 text-sm">
+                Density
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Table density</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup
+                value={density}
+                onValueChange={(value) => setDensity(value as TableDensity)}
+              >
+                <DropdownMenuRadioItem value="comfortable">
+                  Comfortable
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="compact">
+                  Compact
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="ml-2 h-8 text-sm">
+                Columns
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {table
+                .getAllColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => {
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      className="capitalize"
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                    >
+                      {column.id}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+      <div className={cn('rounded-md border bg-background text-foreground', tableWrapperClassName)}>
         <div className="overflow-x-auto">
-          <Table>
+          <Table className={tableClassName}>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
+                <TableRow key={headerGroup.id} className={headerRowClassName}>
                   {headerGroup.headers.map((header) => {
                     const headerMeta = (header.column.columnDef.meta ?? {}) as {
                       headerClassName?: string;
@@ -213,7 +244,7 @@ export function DataTable<TData, TValue>({
                 </TableRow>
               ))}
             </TableHeader>
-            <TableBody>
+            <TableBody className="divide-y divide-slate-100 dark:divide-slate-800">
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row) => (
                   <TableRow
@@ -228,11 +259,12 @@ export function DataTable<TData, TValue>({
                         row.toggleSelected();
                       }
                     }}
-                    className={
+                    className={cn(
                       onRowClick || enableRowSelection
                         ? 'cursor-pointer hover:bg-muted/50'
-                        : ''
-                    }
+                        : '',
+                      rowClassName?.(row.original, row.index)
+                    )}
                   >
                     {row.getVisibleCells().map((cell) => {
                       const cellMeta = (cell.column.columnDef.meta ?? {}) as {
@@ -260,24 +292,39 @@ export function DataTable<TData, TValue>({
           </Table>
         </div>
       </div>
-      <div className="flex items-center justify-end space-x-2 py-4">
-        <div className="flex-1 text-sm text-muted-foreground">
-          {table.getFilteredSelectedRowModel().rows.length > 0
-            ? `${table.getFilteredSelectedRowModel().rows.length} of ${table.getFilteredRowModel().rows.length} row(s) selected.`
-            : ''}
+      <div
+        className={cn(
+          'flex flex-wrap items-center justify-between gap-3 py-4',
+          footerClassName
+        )}
+      >
+        <div className="flex-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+          {footerSummary}
         </div>
-        <div className="space-x-2">
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
+            className="h-8 rounded-lg border-slate-200 bg-slate-50 text-xs font-medium text-slate-600 shadow-none hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
             Previous
           </Button>
+          {pageCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 min-w-8 rounded-lg border-primary bg-primary px-3 text-xs font-semibold text-white shadow-none hover:bg-primary/90"
+              disabled
+            >
+              {pageIndex + 1}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
+            className="h-8 rounded-lg border-slate-200 bg-slate-50 text-xs font-medium text-slate-600 shadow-none hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >

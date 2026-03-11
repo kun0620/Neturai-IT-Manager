@@ -39,25 +39,25 @@ export function AssetHistoryItem({ log }: Props) {
     : formatDistanceToNow(createdAt, { addSuffix: true });
 
   return (
-    <div className="relative pl-8 pb-6">
-      <div className="absolute left-3 top-3 bottom-0 w-px bg-border" />
+    <div className="relative pl-8 pb-6 last:pb-0">
+      <div className="absolute left-2 top-3 bottom-0 w-px bg-slate-200 dark:bg-slate-800" />
 
       <div
-        className={`absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-background ${meta.color}`}
+        className={`absolute left-0 top-0 z-10 flex h-4 w-4 items-center justify-center rounded-full border-4 border-white bg-slate-300 dark:border-slate-900 dark:bg-slate-600 ${log.action === 'status_change' ? 'bg-primary text-white dark:bg-primary' : meta.color}`}
       >
-        <Icon size={14} />
+        <Icon size={10} />
       </div>
 
       <div className="space-y-1">
-        <div className="text-sm font-medium">{log.title}</div>
+        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">{log.title}</div>
 
         {log.description && (
-          <div className="text-xs text-muted-foreground">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
             {log.description}
           </div>
         )}
 
-        <div className="text-xs text-muted-foreground">
+        <div className="text-[10px] text-slate-500 dark:text-slate-400">
           {log.actor} · {timeLabel}
         </div>
       </div>

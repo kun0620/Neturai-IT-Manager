@@ -13,13 +13,13 @@ export function AssetDynamicSection({
   values,
 }: Props) {
   return (
-    <div className="space-y-4">
+    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
       {fields.map((f) => (
         <div key={f.id}>
-          <div className="text-xs text-muted-foreground mb-1">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
             {f.label}
           </div>
-          <div className="text-sm">
+          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
             {values[f.key] || '—'}
           </div>
         </div>

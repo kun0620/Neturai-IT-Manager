@@ -32,7 +32,18 @@ import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, Copy, Loader2 } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Laptop,
+  Loader2,
+  MapPin,
+  Package2,
+  Server,
+  Smartphone,
+  UserRound,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logSystemAction } from '@/features/logs/utils/logSystemAction';
@@ -74,6 +85,36 @@ type RelatedTicket = Pick<
   Database['public']['Tables']['tickets']['Row'],
   'id' | 'title' | 'status' | 'priority' | 'created_at'
 >;
+
+const STATUS_BADGE_STYLE: Record<string, string> = {
+  Available:
+    'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/30 dark:text-emerald-300',
+  Assigned:
+    'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/30 dark:text-blue-300',
+  'In Repair':
+    'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/30 dark:text-amber-300',
+  Retired:
+    'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  Lost:
+    'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-900/40 dark:bg-rose-900/30 dark:text-rose-300',
+  'In Use': 'border-primary/20 bg-primary/10 text-primary',
+};
+
+const categoryIcon = (value: string | null | undefined) => {
+  const normalized = (value ?? '').toLowerCase();
+  if (normalized.includes('laptop') || normalized.includes('notebook')) return Laptop;
+  if (normalized.includes('server')) return Server;
+  if (normalized.includes('mobile') || normalized.includes('phone')) return Smartphone;
+  return Package2;
+};
+
+const ownerInitials = (value: string) =>
+  value
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || 'NA';
 
 /* ================= COMPONENT ================= */
 
@@ -275,6 +316,8 @@ export function AssetDrawer({
   const lastUpdatedBy = latestHeaderLog?.performed_by
     ? latestActorNameMap[latestHeaderLog.performed_by] ?? 'Unknown user'
     : 'System';
+  const assetModelLabel = asset.asset_type?.name ?? asset.category?.name ?? 'Asset';
+  const AssetCategoryIcon = categoryIcon(assetModelLabel);
 
   const runQuickAction = async (
     actionKey: Exclude<QuickActionKey, null>,
@@ -364,50 +407,88 @@ export function AssetDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-[420px] p-0 flex flex-col">
+      <SheetContent side="right" className="flex w-[420px] flex-col border-l border-slate-200 bg-white p-0 text-slate-900 shadow-2xl dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
         {/* ===== Header ===== */}
-        <SheetHeader className="border-b px-6 py-4">
+        <SheetHeader className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <SheetTitle className="text-lg leading-tight">
-                {asset.name}
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-primary">
+                Asset Detail
+              </div>
+              <SheetTitle className="text-lg leading-tight text-slate-900 dark:text-slate-100">
+                {asset.name} - {asset.asset_code}
               </SheetTitle>
-              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${STATUS_BADGE_STYLE[currentStatus ?? ''] ?? 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
+                >
+                  <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+                  {currentStatus}
+                </Badge>
+                <span className="truncate font-mono text-[10px] text-slate-400">
+                  /assets?id={asset.id}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span className="truncate">{asset.asset_code}</span>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6"
+                  className="h-6 w-6 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                   onClick={() => copyText(asset.asset_code, 'Asset code')}
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <div className="mt-1 text-xs text-muted-foreground">
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 Last update:{' '}
                 {lastUpdatedAt ? format(new Date(lastUpdatedAt), 'PPP p') : '—'} by{' '}
                 {lastUpdatedBy}
               </div>
             </div>
             <div className="flex flex-col items-end gap-1">
-              <Badge variant={statusVariant}>{currentStatus}</Badge>
               {positionLabel && (
-                <span className="text-xs text-muted-foreground">{positionLabel}</span>
+                <span className="text-xs text-slate-400">{positionLabel}</span>
               )}
             </div>
           </div>
         </SheetHeader>
 
         {/* ===== Content ===== */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="mb-6 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/40">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-white text-primary dark:border-slate-800 dark:bg-slate-900">
+                <AssetCategoryIcon className="h-6 w-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Model</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  {assetModelLabel}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1.5">
+                    <UserRound className="h-3.5 w-3.5" />
+                    {assignedUser}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {asset.location ?? 'No location'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <Accordion
             type="multiple"
             value={expandedSections}
             onValueChange={setExpandedSections}
-            className="space-y-3"
+            className="space-y-4"
           >
-            <AccordionItem value="info" className="rounded-md border px-4">
-              <AccordionTrigger className="py-3 text-sm font-semibold">
+            <AccordionItem value="info" className="rounded-xl border border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+              <AccordionTrigger className="py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 Asset Information
               </AccordionTrigger>
               <AccordionContent>
@@ -541,11 +622,29 @@ export function AssetDrawer({
                   </InfoRow>
 
                   <InfoRow label="Status">
-                    <Badge variant={statusVariant}>{currentStatus}</Badge>
+                    <Badge
+                      variant="outline"
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] ${STATUS_BADGE_STYLE[currentStatus ?? ''] ?? 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
+                    >
+                      <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+                      {currentStatus}
+                    </Badge>
                   </InfoRow>
 
                   <InfoRow label="Assigned To">
-                    {assignedUser}
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/10 bg-gradient-to-br from-primary/15 to-primary/5 text-xs font-bold text-primary">
+                        {ownerInitials(assignedUser)}
+                      </span>
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {assignedUser}
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          Current owner
+                        </div>
+                      </div>
+                    </div>
                   </InfoRow>
 
                   <InfoRow label="Location">
@@ -584,9 +683,9 @@ export function AssetDrawer({
             </AccordionItem>
 
             {assetFields.length > 0 && (
-              <AccordionItem value="specs" className="rounded-md border px-4">
-                <AccordionTrigger className="py-3 text-sm font-semibold">
-                  Specifications
+              <AccordionItem value="specs" className="rounded-xl border border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+                <AccordionTrigger className="py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Technical Specs
                 </AccordionTrigger>
                 <AccordionContent>
                   <AssetDynamicSection
@@ -599,8 +698,8 @@ export function AssetDrawer({
             )}
 
             {canViewTickets && (
-              <AccordionItem value="related" className="rounded-md border px-4">
-                <AccordionTrigger className="py-3 text-sm font-semibold">
+              <AccordionItem value="related" className="rounded-xl border border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+                <AccordionTrigger className="py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                   Related Tickets
                 </AccordionTrigger>
                 <AccordionContent>
@@ -626,7 +725,10 @@ export function AssetDrawer({
                         >
                           <div className="flex items-center justify-between gap-3">
                             <p className="line-clamp-1 text-sm font-medium">{ticket.title}</p>
-                            <Badge variant="outline" className="shrink-0">
+                            <Badge
+                              variant="outline"
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${STATUS_BADGE_STYLE[ticket.status ?? ''] ?? 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
+                            >
                               {ticket.status}
                             </Badge>
                           </div>
@@ -659,13 +761,22 @@ export function AssetDrawer({
             )}
 
             {canViewHistory && (
-              <AccordionItem value="history" className="rounded-md border px-4">
-                <AccordionTrigger className="py-3 text-sm font-semibold">
-                  History
+              <AccordionItem value="history" className="rounded-xl border border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+                <AccordionTrigger className="py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Activity History
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="max-h-[260px] overflow-y-auto pr-2">
                     <AssetHistory assetId={asset.id} />
+                  </div>
+                  <div className="mt-3">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full justify-center rounded-lg text-xs font-bold text-primary hover:bg-primary/5 hover:text-primary"
+                    >
+                      View All Activity
+                    </Button>
                   </div>
                 </AccordionContent>
               </AccordionItem>
@@ -674,7 +785,7 @@ export function AssetDrawer({
         </div>
 
         {/* ===== Footer ===== */}
-        <div className="border-t px-6 py-4 flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2">
             <TooltipProvider>
               <Tooltip>
@@ -683,6 +794,7 @@ export function AssetDrawer({
                     <Button
                       size="sm"
                       variant="outline"
+                      className="rounded-lg border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600 shadow-none hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                       disabled={!hasPrev}
                       onClick={onPrev}
                     >
@@ -702,6 +814,7 @@ export function AssetDrawer({
                     <Button
                       size="sm"
                       variant="outline"
+                      className="rounded-lg border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600 shadow-none hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                       disabled={!hasNext}
                       onClick={onNext}
                     >
@@ -718,6 +831,7 @@ export function AssetDrawer({
             <Button
               size="sm"
               variant="default"
+              className="rounded-lg px-4 text-xs font-semibold shadow-lg shadow-primary/20"
               onClick={() => {
                 onClose();
                 onEdit(asset);
@@ -743,10 +857,10 @@ function InfoRow({
 }) {
   return (
     <div>
-      <div className="text-xs text-muted-foreground mb-1">
+      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
         {label}
       </div>
-      <div className="text-sm">{children}</div>
+      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{children}</div>
     </div>
   );
 }

@@ -1458,152 +1458,205 @@ export function AssetManagement() {
   /* ---------------- Render ---------------- */
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6">
-      <div className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-          Neturai IT Manager
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Asset Management
-        </h1>
-        <p className="text-muted-foreground">
-          Track asset health, ownership, and lifecycle in one place.
-        </p>
+    <div className="flex flex-col gap-6 bg-[#f6f6f8] p-4 text-slate-900 dark:bg-[#161220] dark:text-slate-100 md:p-8">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
+            Neturai IT Manager
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight">Assets</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Manage and track your enterprise hardware inventory.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-none hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+            onClick={handleExportAssetsPdf}
+            disabled={sortedAssets.length === 0}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button
+            className="h-10 bg-primary px-4 text-sm font-semibold text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
+            onClick={() => {
+              setSelectedAsset(null);
+              setIsFormOpen(true);
+            }}
+          >
+            Add Asset
+          </Button>
+        </div>
       </div>
 
-      <Button
-        className="md:hidden self-start"
-        onClick={() => {
-          setSelectedAsset(null);
-          setIsFormOpen(true);
-        }}
-      >
-        Add Asset
-      </Button>
-      <div className="mt-2 flex items-center justify-between rounded-md border bg-background/80 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 md:sticky md:top-[68px] md:z-20 md:mt-0 lg:top-[64px]">
-        <h2 className="text-lg font-semibold tracking-tight">
-          Filters & Actions
-        </h2>
+      <section className="space-y-4">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => applyPreset('default')}
+            className={`whitespace-nowrap rounded-full px-4 py-1.5 text-[11px] font-bold transition-colors ${
+              selectedPreset === 'default'
+                ? 'bg-primary text-white'
+                : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            All Assets
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset('my_assigned')}
+            className={`whitespace-nowrap rounded-full px-4 py-1.5 text-[11px] font-bold transition-colors ${
+              selectedPreset === 'my_assigned'
+                ? 'bg-primary text-white'
+                : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            My Assigned
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset('in_repair')}
+            className={`whitespace-nowrap rounded-full px-4 py-1.5 text-[11px] font-bold transition-colors ${
+              selectedPreset === 'in_repair'
+                ? 'bg-primary text-white'
+                : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            Needs Maintenance
+          </button>
+          <button
+            type="button"
+            onClick={() => applyPreset('unassigned')}
+            className={`whitespace-nowrap rounded-full px-4 py-1.5 text-[11px] font-bold transition-colors ${
+              selectedPreset === 'unassigned'
+                ? 'bg-primary text-white'
+                : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            Unassigned
+          </button>
+        </div>
 
-        <Button
-          className="hidden md:inline-flex"
-          onClick={() => {
-            setSelectedAsset(null);
-            setIsFormOpen(true);
-          }}
-        >
-          Add Asset
-        </Button>
-      </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[240px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                aria-label="Search assets"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search resources..."
+                className="h-10 rounded-lg border-slate-200 bg-slate-50 pl-10 text-sm font-medium text-slate-700 shadow-none placeholder:text-slate-400 focus-visible:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </div>
 
-      <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="hidden lg:block">
-          {renderFilterSidebarContent()}
-        </aside>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 lg:hidden"
+              onClick={() => setIsFilterDrawerOpen(true)}
+            >
+              <ListFilter className="mr-1.5 h-4 w-4" />
+              Filters
+            </Button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Status</SelectItem>
+                {statusOptions.map(({ status }) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Category</SelectItem>
+                {categoryOptions.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Type</SelectItem>
+                {typeOptions.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+              <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                <SelectValue placeholder="Owner" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={DEFAULT_OWNER_FILTER}>Owner</SelectItem>
+                <SelectItem value={OWNER_FILTER_ME}>Assigned to me</SelectItem>
+                <SelectItem value={OWNER_FILTER_UNASSIGNED}>Unassigned</SelectItem>
+                {assignmentUsers.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={sortBy} onValueChange={(value) => setSortBy(value as AssetSortField)}>
+              <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                <SelectValue placeholder="Sort field" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="updated_at">Updated date</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="asset_code">Asset code</SelectItem>
+                <SelectItem value="status">Status</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={sortDirection}
+              onValueChange={(value) => setSortDirection(value as AssetSortDirection)}
+            >
+              <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                <SelectValue placeholder="Sort direction" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="desc">Most Recent</SelectItem>
+                <SelectItem value="asc">Oldest First</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
         <section className="space-y-3">
-          <div className="rounded-lg border border-border/70 bg-card/60 p-2">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 lg:hidden"
-                onClick={() => setIsFilterDrawerOpen(true)}
-              >
-                <ListFilter className="mr-1.5 h-3.5 w-3.5" />
-                Filters
-              </Button>
-
-              <div className="relative min-w-[240px] flex-1">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  aria-label="Search assets"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search assets..."
-                  className="h-8 pl-8 text-sm"
-                />
-              </div>
-
-              <Select value={sortBy} onValueChange={(value) => setSortBy(value as AssetSortField)}>
-                <SelectTrigger aria-label="Sort field" className="h-8 min-w-[150px] text-sm">
-                  <ArrowUpDown className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                  <SelectValue placeholder="Sort" />
-                </SelectTrigger>
-                <SelectContent position="popper" sideOffset={6}>
-                  <SelectItem value="updated_at">Updated date</SelectItem>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="asset_code">Asset code</SelectItem>
-                  <SelectItem value="status">Status</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={sortDirection}
-                onValueChange={(value) => setSortDirection(value as AssetSortDirection)}
-              >
-                <SelectTrigger aria-label="Sort direction" className="h-8 min-w-[130px] text-sm">
-                  <ArrowDownUp className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                  <SelectValue placeholder="Direction" />
-                </SelectTrigger>
-                <SelectContent position="popper" sideOffset={6}>
-                  <SelectItem value="desc">Descending</SelectItem>
-                  <SelectItem value="asc">Ascending</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {selectionMode ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-8"
-                  onClick={exitSelectionMode}
-                >
-                  Done
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8"
-                  onClick={enterSelectionMode}
-                >
-                  Select
-                </Button>
-              )}
-
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8"
-                onClick={() => void handleExportAssetsExcel()}
-                disabled={sortedAssets.length === 0}
-              >
-                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
-                Excel
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8"
-                onClick={handleExportAssetsPdf}
-                disabled={sortedAssets.length === 0}
-              >
-                <FileText className="mr-1.5 h-3.5 w-3.5" />
-                PDF
-              </Button>
-
-              <Badge variant="secondary" className="ml-auto whitespace-nowrap">
-                Showing: {sortedAssets.length}
-              </Badge>
-            </div>
-          </div>
 
           {hasActiveFilters && (
             <div className="flex flex-wrap items-center gap-2">
               {searchTerm.trim().length > 0 && (
-                <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
+                <Badge variant="outline" className="gap-1 rounded-full border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                   Search: {searchTerm.trim()}
                   <button
                     type="button"
@@ -1616,7 +1669,7 @@ export function AssetManagement() {
                 </Badge>
               )}
               {statusFilter !== 'all' && (
-                <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
+                <Badge variant="outline" className="gap-1 rounded-full border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                   Status: {statusFilter}
                   <button
                     type="button"
@@ -1629,7 +1682,7 @@ export function AssetManagement() {
                 </Badge>
               )}
               {selectedCategoryLabel && (
-                <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
+                <Badge variant="outline" className="gap-1 rounded-full border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                   Category: {selectedCategoryLabel}
                   <button
                     type="button"
@@ -1642,7 +1695,7 @@ export function AssetManagement() {
                 </Badge>
               )}
               {selectedTypeLabel && (
-                <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
+                <Badge variant="outline" className="gap-1 rounded-full border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                   Type: {selectedTypeLabel}
                   <button
                     type="button"
@@ -1655,7 +1708,7 @@ export function AssetManagement() {
                 </Badge>
               )}
           {ownerFilter === OWNER_FILTER_ME && (
-            <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
+            <Badge variant="outline" className="gap-1 rounded-full border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
               Owner: assigned to me
               <button
                 type="button"
@@ -1668,7 +1721,7 @@ export function AssetManagement() {
                 </Badge>
               )}
           {ownerFilter === OWNER_FILTER_UNASSIGNED && (
-            <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
+            <Badge variant="outline" className="gap-1 rounded-full border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
               Owner: unassigned
               <button
                 type="button"
@@ -1683,7 +1736,7 @@ export function AssetManagement() {
           {ownerFilter !== DEFAULT_OWNER_FILTER &&
             ownerFilter !== OWNER_FILTER_ME &&
             ownerFilter !== OWNER_FILTER_UNASSIGNED && (
-              <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
+              <Badge variant="outline" className="gap-1 rounded-full border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                 Owner:{' '}
                 {assignmentUsers.find((user) => user.id === ownerFilter)?.name ||
                   ownerFilter}
@@ -1698,7 +1751,7 @@ export function AssetManagement() {
               </Badge>
             )}
               {(sortBy !== DEFAULT_SORT_FIELD || sortDirection !== DEFAULT_SORT_DIRECTION) && (
-                <Badge variant="outline" className="gap-1 px-2 py-1 text-xs">
+                <Badge variant="outline" className="gap-1 rounded-full border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                   Sort: {sortByLabel} ({sortDirLabel})
                   <button
                     type="button"
@@ -1713,15 +1766,16 @@ export function AssetManagement() {
                   </button>
                 </Badge>
               )}
-              <Button variant="ghost" size="sm" onClick={clearAll}>
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs font-medium text-primary hover:bg-primary/5 hover:text-primary" onClick={clearAll}>
                 Clear all
               </Button>
             </div>
           )}
 
           {selectionMode && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
-              <Badge variant="secondary" className="whitespace-nowrap">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="whitespace-nowrap bg-primary/10 text-primary shadow-none">
                 Selected: {selectedAssetIds.length}
               </Badge>
               {bulkUpdating && (
@@ -1835,15 +1889,6 @@ export function AssetManagement() {
                 Export Selected
               </Button>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearBulkSelection}
-                disabled={bulkUpdating}
-              >
-                Clear selection
-              </Button>
-
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1865,11 +1910,24 @@ export function AssetManagement() {
                   )}
                 </Tooltip>
               </TooltipProvider>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearBulkSelection}
+                  disabled={bulkUpdating}
+                  className="text-slate-500 hover:text-primary"
+                >
+                  Clear selection
+                </Button>
+              </div>
             </div>
           )}
 
           {lastBulkUndo && selectedAssetIds.length === 0 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/30 p-2">
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <Badge variant="secondary" className="whitespace-nowrap">
                 Last: {lastBulkUndo.label}
               </Badge>
@@ -1886,7 +1944,7 @@ export function AssetManagement() {
             </div>
           )}
 
-          <div className="rounded-md border">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             {sortedAssets.length === 0 ? (
               <EmptyState
                 title="No assets found"
@@ -1897,8 +1955,19 @@ export function AssetManagement() {
                 columns={assetTableColumns}
                 data={sortedAssets}
                 showGlobalFilter={false}
+                showToolbar={false}
                 getRowId={(row) => row.id}
                 globalFilterPlaceholder="Search assets by name, code, type, category, location, status..."
+                tableWrapperClassName="rounded-none border-0 bg-transparent shadow-none"
+                tableClassName="min-w-full"
+                headerRowClassName="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50"
+                rowClassName={(asset) =>
+                  selectedAssetForDrawer?.id === asset.id
+                    ? 'border-l-4 border-l-primary bg-primary/5 hover:bg-primary/10'
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                }
+                footerClassName="border-t border-slate-100 px-6 py-4 text-xs dark:border-slate-800"
+                rowLabel="assets"
                 onRowClick={
                   selectionMode
                     ? (asset) => {
@@ -1912,7 +1981,7 @@ export function AssetManagement() {
             )}
           </div>
         </section>
-      </div>
+      </section>
 
       <Drawer open={isFilterDrawerOpen} onOpenChange={setIsFilterDrawerOpen}>
         <DrawerContent className="max-h-[85vh]">

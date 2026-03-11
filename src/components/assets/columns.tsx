@@ -1,7 +1,14 @@
 /* eslint-disable react-refresh/only-export-components */
 
 import { ColumnDef } from '@tanstack/react-table';
-import { ArrowUpDown, MoreHorizontal } from 'lucide-react';
+import {
+  ArrowUpDown,
+  Laptop,
+  MoreHorizontal,
+  Package2,
+  Server,
+  Smartphone,
+} from 'lucide-react';
 import { AssetWithType } from '@/types/asset';
 
 import { Button } from '@/components/ui/button';
@@ -22,18 +29,34 @@ import {
 
 const STATUS_STYLE: Record<string, string> = {
   Available:
-    'bg-[hsl(var(--success)/0.14)] text-[hsl(var(--success))] border-[hsl(var(--success)/0.25)]',
+    'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/30 dark:text-emerald-300',
   Assigned:
-    'bg-[hsl(var(--info)/0.14)] text-[hsl(var(--info))] border-[hsl(var(--info)/0.25)]',
+    'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/30 dark:text-blue-300',
   'In Repair':
-    'bg-[hsl(var(--warning)/0.14)] text-[hsl(var(--warning))] border-[hsl(var(--warning)/0.25)]',
+    'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/30 dark:text-amber-300',
   Retired:
-    'bg-[hsl(var(--muted)/0.5)] text-muted-foreground border-[hsl(var(--border))]',
+    'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
   Lost:
-    'bg-[hsl(var(--destructive)/0.14)] text-[hsl(var(--destructive))] border-[hsl(var(--destructive)/0.25)]',
+    'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-900/40 dark:bg-rose-900/30 dark:text-rose-300',
   'In Use':
-    'bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.25)]',
+    'border-primary/20 bg-primary/10 text-primary',
 };
+
+const categoryIcon = (value: string | null | undefined) => {
+  const normalized = (value ?? '').toLowerCase();
+  if (normalized.includes('laptop') || normalized.includes('notebook')) return Laptop;
+  if (normalized.includes('server')) return Server;
+  if (normalized.includes('mobile') || normalized.includes('phone')) return Smartphone;
+  return Package2;
+};
+
+const initialFromName = (value: string) =>
+  value
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || 'NA';
 
 const TextWithTooltip = ({
   value,
@@ -67,9 +90,13 @@ function SortableHeader({
   onClick: () => void;
 }) {
   return (
-    <Button variant="ghost" onClick={onClick}>
+    <Button
+      variant="ghost"
+      onClick={onClick}
+      className="h-auto px-0 py-0 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:bg-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+    >
       {label}
-      <ArrowUpDown className="ml-2 h-4 w-4" />
+      <ArrowUpDown className="ml-1.5 h-3.5 w-3.5" />
     </Button>
   );
 }
@@ -79,33 +106,10 @@ export function getColumns(
 ): ColumnDef<AssetWithType>[] {
   return [
     {
-      accessorKey: 'name',
-      header: ({ column }) => (
-        <SortableHeader
-          label="Name"
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === 'asc')
-          }
-        />
-      ),
-      size: 190,
-      meta: {
-        headerClassName: 'sticky left-0 z-20 bg-background border-r',
-        cellClassName: 'sticky left-0 z-10 bg-background border-r',
-      },
-      cell: ({ row }) => (
-        <TextWithTooltip
-          value={String(row.getValue('name') ?? '')}
-          className="capitalize font-medium"
-          maxWidthClass="max-w-[190px] inline-block"
-        />
-      ),
-    },
-    {
       accessorKey: 'asset_code',
       header: ({ column }) => (
         <SortableHeader
-          label="Asset Code"
+          label="ID"
           onClick={() =>
             column.toggleSorting(column.getIsSorted() === 'asc')
           }
@@ -113,43 +117,39 @@ export function getColumns(
       ),
       size: 120,
       meta: {
-        headerClassName: 'hidden sm:table-cell',
-        cellClassName: 'hidden sm:table-cell',
+        headerClassName: 'w-[120px]',
+        cellClassName: 'text-xs font-mono font-medium text-slate-500 dark:text-slate-400',
       },
       cell: ({ row }) => (
         <TextWithTooltip
           value={String(row.getValue('asset_code') ?? '')}
-          className="text-muted-foreground"
+          className="font-mono text-xs font-medium text-slate-500 dark:text-slate-400"
           maxWidthClass="max-w-[120px] inline-block"
         />
       ),
     },
     {
-      id: 'asset_type',
-      accessorFn: (row) => row.asset_type?.name ?? '',
+      accessorKey: 'name',
       header: ({ column }) => (
         <SortableHeader
-          label="Type"
+          label="Asset Name"
           onClick={() =>
             column.toggleSorting(column.getIsSorted() === 'asc')
           }
         />
       ),
-      size: 140,
+      size: 240,
       meta: {
-        headerClassName: 'hidden md:table-cell',
-        cellClassName: 'hidden md:table-cell',
+        headerClassName: 'min-w-[240px]',
+        cellClassName: 'font-semibold text-slate-900 dark:text-slate-100',
       },
       cell: ({ row }) => (
         <TextWithTooltip
-          value={row.original.asset_type?.name ?? '—'}
-          maxWidthClass="max-w-[140px] inline-block"
+          value={String(row.getValue('name') ?? '')}
+          className="inline-block max-w-[240px] font-semibold"
+          maxWidthClass="max-w-[240px] inline-block"
         />
       ),
-      sortingFn: (a, b) =>
-        (a.original.asset_type?.name ?? '').localeCompare(
-          b.original.asset_type?.name ?? ''
-        ),
     },
     {
       id: 'category',
@@ -164,41 +164,25 @@ export function getColumns(
       ),
       size: 150,
       meta: {
-        headerClassName: 'hidden lg:table-cell',
-        cellClassName: 'hidden lg:table-cell',
+        headerClassName: 'min-w-[150px]',
+        cellClassName: 'min-w-[150px]',
       },
-      cell: ({ row }) => (
-        <TextWithTooltip
-          value={row.original.category?.name ?? '—'}
-          maxWidthClass="max-w-[150px] inline-block"
-        />
-      ),
+      cell: ({ row }) => {
+        const label = row.original.category?.name ?? row.original.asset_type?.name ?? '—';
+        const Icon = categoryIcon(label);
+        return (
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+            <TextWithTooltip value={label} maxWidthClass="max-w-[120px] inline-block" />
+          </div>
+        );
+      },
       sortingFn: (a, b) =>
         (a.original.category?.name ?? '').localeCompare(
           b.original.category?.name ?? ''
         ),
-    },
-    {
-      accessorKey: 'location',
-      header: ({ column }) => (
-        <SortableHeader
-          label="Location"
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === 'asc')
-          }
-        />
-      ),
-      size: 120,
-      meta: {
-        headerClassName: 'hidden xl:table-cell',
-        cellClassName: 'hidden xl:table-cell',
-      },
-      cell: ({ row }) => (
-        <TextWithTooltip
-          value={String(row.getValue('location') || '—')}
-          maxWidthClass="max-w-[120px] inline-block"
-        />
-      ),
     },
     {
       id: 'assigned_to_display',
@@ -207,28 +191,32 @@ export function getColumns(
         return assigneeNameById?.[row.assigned_to] ?? row.assigned_to;
       },
       header: ({ column }) => (
-        <div className="flex justify-center">
-          <SortableHeader
-            label="Assigned To"
-            onClick={() =>
-              column.toggleSorting(column.getIsSorted() === 'asc')
-            }
-          />
-        </div>
+        <SortableHeader
+          label="Owner"
+          onClick={() =>
+            column.toggleSorting(column.getIsSorted() === 'asc')
+          }
+        />
       ),
-      size: 130,
+      size: 160,
       cell: ({ row }) => {
         const displayName = row.original.assigned_to
           ? assigneeNameById?.[row.original.assigned_to] ?? row.original.assigned_to
           : 'Unassigned';
 
-        return (
-          <div className="w-full text-center text-muted-foreground">
+        return row.original.assigned_to ? (
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/10 bg-gradient-to-br from-primary/15 to-primary/5 text-[10px] font-bold text-primary">
+              {initialFromName(displayName)}
+            </span>
             <TextWithTooltip
               value={displayName}
-              maxWidthClass="max-w-[130px] inline-block"
+              className="text-xs font-medium text-slate-700 dark:text-slate-200"
+              maxWidthClass="max-w-[120px] inline-block"
             />
           </div>
+        ) : (
+          <span className="text-xs italic text-slate-400">Unassigned</span>
         );
       },
       sortingFn: (a, b) => {
@@ -242,44 +230,24 @@ export function getColumns(
       },
     },
     {
-      accessorKey: 'updated_at',
-      header: ({ column }) => (
-        <SortableHeader
-          label="Updated"
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === 'asc')
-          }
-        />
-      ),
-      size: 150,
-      meta: {
-        headerClassName: 'hidden 2xl:table-cell',
-        cellClassName: 'hidden 2xl:table-cell',
-      },
-      cell: ({ row }) => {
-        const value = row.getValue('updated_at');
-        if (!value) return <div className="text-muted-foreground">—</div>;
-        const date = new Date(String(value));
-        return (
-          <div className="text-muted-foreground">
-            {Number.isNaN(date.getTime()) ? '—' : date.toLocaleString()}
-          </div>
-        );
-      },
-    },
-    {
       accessorKey: 'status',
-      header: () => <div className="text-center">Status</div>,
-      size: 120,
-      cell: ({ row }) => (
-        <div className="flex justify-center">
-          <Badge
-            variant="secondary"
-            className={STATUS_STYLE[row.getValue('status') as string] ?? ''}
-          >
-            {row.getValue('status')}
-          </Badge>
+      header: () => (
+        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+          Status
         </div>
+      ),
+      size: 120,
+      meta: {
+        headerClassName: 'min-w-[120px]',
+      },
+      cell: ({ row }) => (
+        <Badge
+          variant="outline"
+          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] shadow-none ${STATUS_STYLE[row.getValue('status') as string] ?? ''}`}
+        >
+          <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
+          {row.getValue('status')}
+        </Badge>
       ),
     },
     {
@@ -287,18 +255,22 @@ export function getColumns(
       enableHiding: false,
       size: 60,
       meta: {
-        headerClassName: 'hidden md:table-cell',
-        cellClassName: 'hidden md:table-cell',
+        headerClassName: 'w-[72px] text-right',
+        cellClassName: 'w-[72px] text-right',
       },
-      header: () => <div className="text-center">Actions</div>,
+      header: () => (
+        <div className="text-right text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+          Actions
+        </div>
+      ),
       cell: ({ row }) => {
         const asset = row.original;
 
         return (
-          <div className="flex justify-center">
+          <div className="flex justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
+                <Button variant="ghost" className="h-8 w-8 rounded-md p-0 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
