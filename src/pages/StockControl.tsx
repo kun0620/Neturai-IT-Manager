@@ -1,14 +1,21 @@
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import {
+  AlertCircle,
   AlertTriangle,
+  Download,
+  BadgeDollarSign,
   Boxes,
   CheckCircle2,
   ClipboardList,
   PackageCheck,
+  PackageOpen,
   Plus,
+  QrCode,
   Search,
   SlidersHorizontal,
+  Warehouse,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -206,6 +213,33 @@ function SummaryRow({
   );
 }
 
+const LOCATION_OPTIONS = [
+  { value: 'main', label: 'Main Warehouse' },
+  { value: 'warehouse', label: 'Office A - Shelf 2' },
+  { value: 'spares', label: 'Spares Room' },
+] as const;
+
+const CATEGORY_OPTIONS = ['Hardware', 'Software', 'Peripherals'] as const;
+const SUPPLIER_OPTIONS = ['Apple Inc.', 'CDW Logistics'] as const;
+const TEAM_OPTIONS = [
+  'Product Engineering',
+  'Marketing & Communications',
+  'Human Resources',
+  'Executive Leadership',
+] as const;
+const ADJUSTMENT_METHOD_OPTIONS = [
+  'set_balance',
+  'increase',
+  'decrease',
+] as const;
+const ADJUSTMENT_REASON_OPTIONS = [
+  'Manual Correction',
+  'Damage / Broken',
+  'Loss / Theft',
+  'Inventory Count Audit',
+  'Returned to Vendor',
+] as const;
+
 export default function StockControlPage() {
   const { isAdmin, isIT } = useCurrentProfile();
   const canManage = isAdmin || isIT;
@@ -225,12 +259,18 @@ export default function StockControlPage() {
 
   const [newSku, setNewSku] = useState('');
   const [newName, setNewName] = useState('');
-  const [newCategory, setNewCategory] = useState('');
+  const [newCategory, setNewCategory] = useState('Hardware');
   const [newMode, setNewMode] = useState<StockTrackingMode>('bulk');
   const [newReorderPoint, setNewReorderPoint] = useState('0');
   const [newReorderQty, setNewReorderQty] = useState('0');
   const [newOpeningQty, setNewOpeningQty] = useState('0');
   const [newLocationKey, setNewLocationKey] = useState('main');
+  const [newBrand, setNewBrand] = useState('');
+  const [newSupplier, setNewSupplier] = useState(SUPPLIER_OPTIONS[0]);
+  const [newUnitCost, setNewUnitCost] = useState('');
+  const [newInternalNotes, setNewInternalNotes] = useState('');
+  const [isWarrantyTracking, setIsWarrantyTracking] = useState(true);
+  const [isStockItemActive, setIsStockItemActive] = useState(true);
 
   const [operationItemId, setOperationItemId] = useState('');
   const [locationKey, setLocationKey] = useState('main');
@@ -239,6 +279,15 @@ export default function StockControlPage() {
   const [selectedUnitId, setSelectedUnitId] = useState('');
   const [adjustDelta, setAdjustDelta] = useState('0');
   const [note, setNote] = useState('');
+  const [referenceId, setReferenceId] = useState('');
+  const [receiveSource, setReceiveSource] = useState('');
+  const [receivedDate, setReceivedDate] = useState('');
+  const [issueAssignee, setIssueAssignee] = useState('Sarah Jenkins');
+  const [issueDate, setIssueDate] = useState('');
+  const [destinationTeam, setDestinationTeam] = useState(TEAM_OPTIONS[0]);
+  const [adjustmentMethod, setAdjustmentMethod] = useState<(typeof ADJUSTMENT_METHOD_OPTIONS)[number]>('set_balance');
+  const [adjustmentReason, setAdjustmentReason] = useState(ADJUSTMENT_REASON_OPTIONS[0]);
+  const [authorizedBy, setAuthorizedBy] = useState('');
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -261,16 +310,45 @@ export default function StockControlPage() {
     () => stockItems.filter((item) => item.reorder_point > 0 && item.available <= item.reorder_point),
     [stockItems]
   );
+  const selectedCreateLocationLabel =
+    LOCATION_OPTIONS.find((option) => option.value === newLocationKey)?.label ?? 'Main Warehouse';
+  const selectedOperationLocationLabel =
+    LOCATION_OPTIONS.find((option) => option.value === locationKey)?.label ?? 'Main Warehouse';
+  const receiveQuantityValue =
+    selectedItem?.tracking_mode === 'serialized'
+      ? serialInput
+          .split('\n')
+          .map((line) => line.replace(/^S\/N:\s*/i, '').trim())
+          .filter(Boolean).length
+      : Number(quantity || 0);
+  const resultingBalance =
+    selectedItem == null
+      ? null
+      : operationType === 'receive'
+        ? selectedItem.total_on_hand + (Number.isFinite(receiveQuantityValue) ? receiveQuantityValue : 0)
+        : operationType === 'issue'
+          ? selectedItem.total_on_hand - (selectedItem.tracking_mode === 'serialized' ? (selectedUnitId ? 1 : 0) : Number(quantity || 0))
+          : adjustmentMethod === 'set_balance'
+            ? Number(adjustDelta || 0)
+            : adjustmentMethod === 'increase'
+              ? selectedItem.total_on_hand + Number(adjustDelta || 0)
+              : selectedItem.total_on_hand - Number(adjustDelta || 0);
 
   const resetCreateForm = () => {
     setNewSku('');
     setNewName('');
-    setNewCategory('');
+    setNewCategory('Hardware');
     setNewMode('bulk');
     setNewReorderPoint('0');
     setNewReorderQty('0');
     setNewOpeningQty('0');
     setNewLocationKey('main');
+    setNewBrand('');
+    setNewSupplier(SUPPLIER_OPTIONS[0]);
+    setNewUnitCost('');
+    setNewInternalNotes('');
+    setIsWarrantyTracking(true);
+    setIsStockItemActive(true);
   };
   const resetOperationForm = () => {
     setOperationItemId('');
@@ -280,6 +358,15 @@ export default function StockControlPage() {
     setSelectedUnitId('');
     setAdjustDelta('0');
     setNote('');
+    setReferenceId('');
+    setReceiveSource('');
+    setReceivedDate('');
+    setIssueAssignee('Sarah Jenkins');
+    setIssueDate('');
+    setDestinationTeam(TEAM_OPTIONS[0]);
+    setAdjustmentMethod('set_balance');
+    setAdjustmentReason(ADJUSTMENT_REASON_OPTIONS[0]);
+    setAuthorizedBy('');
   };
 
   const handleCreateItem = async () => {
@@ -375,16 +462,29 @@ export default function StockControlPage() {
           notifyError('Unsupported operation', 'Manual adjustment only supports bulk items');
           return;
         }
-        const delta = Number(adjustDelta);
-        if (!Number.isFinite(delta) || delta === 0) {
-          notifyError('Invalid delta', 'Adjustment must be a non-zero number');
+        const rawValue = Number(adjustDelta);
+        if (!Number.isFinite(rawValue) || rawValue < 0) {
+          notifyError('Invalid value', 'Adjustment value must be zero or greater');
+          return;
+        }
+        const delta =
+          adjustmentMethod === 'set_balance'
+            ? rawValue - selectedItem.total_on_hand
+            : adjustmentMethod === 'increase'
+              ? rawValue
+              : -rawValue;
+        if (delta === 0) {
+          notifyError('No adjustment required', 'The resulting balance is unchanged');
           return;
         }
         await adjustStockBalance.mutateAsync({
           stockItemId: selectedItem.id,
           delta,
           locationKey,
-          note: note.trim() || undefined,
+          note:
+            [adjustmentReason, authorizedBy ? `Authorized By: ${authorizedBy}` : null, note.trim() || null]
+              .filter(Boolean)
+              .join(' | ') || undefined,
         });
         notifySuccess('Inventory adjusted');
       }
@@ -648,162 +748,993 @@ export default function StockControlPage() {
         )}
       </section>
       <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm(); }}>
-        <DialogContent className="w-[95vw] max-w-[760px] overflow-hidden rounded-xl border border-slate-200 p-0 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-          <DialogHeader className="border-b border-slate-100 px-8 py-6 dark:border-slate-800">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Stock Control</span>
-            <DialogTitle className="text-2xl font-black tracking-tight">Create Stock Item</DialogTitle>
-            <DialogDescription>Add a new inventory SKU with tracking mode, thresholds, and opening quantity.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-8 p-8 lg:grid-cols-[1.35fr_0.95fr]">
-            <div className="space-y-6">
-              <FieldGroup title="Item Identity">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="SKU"><Input value={newSku} onChange={(e) => setNewSku(e.target.value)} /></Field>
-                  <Field label="Category"><Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} /></Field>
-                </div>
-                <Field label="Item Name"><Input value={newName} onChange={(e) => setNewName(e.target.value)} /></Field>
-              </FieldGroup>
-              <FieldGroup title="Control Rules">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Tracking Mode">
-                    <Select value={newMode} onValueChange={(value) => setNewMode(value as StockTrackingMode)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bulk">Bulk</SelectItem>
-                        <SelectItem value="serialized">Serialized</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label="Location">
-                    <Select value={newLocationKey} onValueChange={setNewLocationKey}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="main">Main Hub</SelectItem>
-                        <SelectItem value="warehouse">Warehouse</SelectItem>
-                        <SelectItem value="spares">Spares Room</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <Field label="Reorder Point"><Input value={newReorderPoint} onChange={(e) => setNewReorderPoint(e.target.value)} /></Field>
-                  <Field label="Reorder Qty"><Input value={newReorderQty} onChange={(e) => setNewReorderQty(e.target.value)} /></Field>
-                  <Field label="Opening Qty"><Input value={newOpeningQty} onChange={(e) => setNewOpeningQty(e.target.value)} /></Field>
-                </div>
-              </FieldGroup>
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[95vw] max-w-[860px] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-xl border border-slate-200 p-0 shadow-2xl [&>button]:hidden dark:border-slate-800 dark:bg-slate-900">
+          <DialogHeader className="relative border-b border-slate-100 px-8 pb-6 pt-8 dark:border-slate-800">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Stock Control</span>
+              <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                Create Stock Item
+              </DialogTitle>
+              <DialogDescription className="text-sm text-slate-500 dark:text-slate-400">
+                Add a new inventory SKU for bulk or serialized stock tracking.
+              </DialogDescription>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-800/40">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">Summary</h3>
-              <div className="mt-5 space-y-4">
-                <SummaryRow label="SKU" value={newSku || 'Not set'} />
-                <SummaryRow label="Name" value={newName || 'Not set'} />
-                <SummaryRow label="Mode" value={newMode} />
-                <SummaryRow label="Category" value={newCategory || 'Uncategorized'} />
-                <SummaryRow label="Opening Qty" value={newOpeningQty || '0'} />
+            <button
+              type="button"
+              onClick={() => setIsCreateOpen(false)}
+              className="absolute right-6 top-6 p-2 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </DialogHeader>
+          <div className="min-h-0 overflow-y-auto p-8">
+            <div className="grid grid-cols-12 items-start gap-8">
+              <div className="col-span-12 flex flex-col gap-10 lg:col-span-7">
+                <section className="flex flex-col gap-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <PackageOpen className="h-[18px] w-[18px] text-primary" />
+                    <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                      Item Basics
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Item Name
+                      </span>
+                      <input
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
+                        placeholder="e.g. MacBook Pro 14 M3"
+                        type="text"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        SKU
+                      </span>
+                      <input
+                        className={`w-full rounded-lg border px-4 py-2.5 text-slate-900 outline-none transition-all dark:text-slate-100 ${
+                          newSku.trim()
+                            ? 'border-slate-200 bg-slate-50 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50'
+                            : 'border-red-500 bg-red-50/50 focus:ring-2 focus:ring-red-200 dark:border-red-500/50 dark:bg-red-900/10'
+                        }`}
+                        placeholder="Enter SKU code"
+                        type="text"
+                        value={newSku}
+                        onChange={(e) => setNewSku(e.target.value)}
+                      />
+                      {!newSku.trim() ? (
+                        <span className="flex items-center gap-1 text-xs font-medium text-red-600">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          Missing required field
+                        </span>
+                      ) : null}
+                    </label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <label className="flex flex-col gap-1.5">
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          Category
+                        </span>
+                        <select
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
+                          value={newCategory}
+                          onChange={(e) => setNewCategory(e.target.value)}
+                        >
+                          {CATEGORY_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1.5">
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          Brand
+                        </span>
+                        <input
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
+                          placeholder="Apple"
+                          type="text"
+                          value={newBrand}
+                          onChange={(e) => setNewBrand(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Stock Type
+                      </span>
+                      <div className="flex w-full rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setNewMode('bulk')}
+                          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+                            newMode === 'bulk'
+                              ? 'bg-white text-primary shadow-sm dark:bg-slate-700'
+                              : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          Bulk
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewMode('serialized')}
+                          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+                            newMode === 'serialized'
+                              ? 'bg-white text-primary shadow-sm dark:bg-slate-700'
+                              : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          Serialized
+                        </button>
+                      </div>
+                      <p className="text-xs italic text-slate-500">
+                        Bulk items are tracked by quantity. Serialized items require unique identifiers.
+                      </p>
+                      {newMode === 'serialized' ? (
+                        <div className="rounded-lg border border-primary/10 bg-primary/5 p-4 dark:bg-primary/10">
+                          <div className="flex gap-3">
+                            <QrCode className="mt-0.5 h-4 w-4 text-primary" />
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                                  Serialized Intake
+                                </p>
+                                <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                                  This SKU will require unique serial numbers for each unit. Serial
+                                  numbers are captured during <span className="font-semibold">Receive Stock</span>,
+                                  not during stock item creation.
+                                </p>
+                              </div>
+                              <label className="flex flex-col gap-1.5">
+                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  Serial Number Capture
+                                </span>
+                                <input
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-500 outline-none dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-400"
+                                  value="Collected later in Receive Stock"
+                                  readOnly
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
+
+                <hr className="border-slate-100 dark:border-slate-800" />
+
+                <section className="flex flex-col gap-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Warehouse className="h-[18px] w-[18px] text-primary" />
+                    <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                      Inventory Rules
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Reorder Threshold
+                      </span>
+                      <input
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
+                        placeholder="5"
+                        type="number"
+                        value={newReorderPoint}
+                        onChange={(e) => setNewReorderPoint(e.target.value)}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Default Location
+                      </span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
+                        value={newLocationKey}
+                        onChange={(e) => setNewLocationKey(e.target.value)}
+                      >
+                        {LOCATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mt-2 flex flex-col gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setIsWarrantyTracking((value) => !value)}
+                      className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-left dark:border-slate-800 dark:bg-slate-800/30"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          Warranty Tracking
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          Track purchase dates and expiration
+                        </span>
+                      </div>
+                      <span className="relative h-5 w-10 rounded-full bg-primary/20">
+                        <span
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-primary transition-all ${
+                            isWarrantyTracking ? 'right-0.5' : 'left-0.5'
+                          }`}
+                        />
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsStockItemActive((value) => !value)}
+                      className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-left dark:border-slate-800 dark:bg-slate-800/30"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          Active Status
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          Enable this SKU for procurement
+                        </span>
+                      </div>
+                      <span className="relative h-5 w-10 rounded-full bg-primary/20">
+                        <span
+                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-primary transition-all ${
+                            isStockItemActive ? 'right-0.5' : 'left-0.5'
+                          }`}
+                        />
+                      </span>
+                    </button>
+                  </div>
+                </section>
+
+                <hr className="border-slate-100 dark:border-slate-800" />
+
+                <section className="flex flex-col gap-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <BadgeDollarSign className="h-[18px] w-[18px] text-primary" />
+                    <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                      Procurement
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Preferred Supplier
+                      </span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
+                        value={newSupplier}
+                        onChange={(e) => setNewSupplier(e.target.value)}
+                      >
+                        {SUPPLIER_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Unit Cost (USD)
+                      </span>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                          $
+                        </span>
+                        <input
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-7 pr-4 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
+                          placeholder="1200.00"
+                          type="number"
+                          value={newUnitCost}
+                          onChange={(e) => setNewUnitCost(e.target.value)}
+                        />
+                      </div>
+                    </label>
+                  </div>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      Internal Notes
+                    </span>
+                    <textarea
+                      className="min-h-[88px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
+                      placeholder="Add any specific details for the procurement team..."
+                      rows={3}
+                      value={newInternalNotes}
+                      onChange={(e) => setNewInternalNotes(e.target.value)}
+                    />
+                  </label>
+                </section>
+              </div>
+
+              <div className="col-span-12 sticky top-0 lg:col-span-5">
+                <div className="flex flex-col gap-6 rounded-xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-800/40">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                      <QrCode className="h-5 w-5 text-primary" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                      Stock Item Summary
+                    </h3>
+                  </div>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                      <span className="text-xs font-medium uppercase text-slate-500">Name</span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {newName || 'MacBook Pro 14 M3'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                      <span className="text-xs font-medium uppercase text-slate-500">SKU Code</span>
+                      <span className={`text-sm font-semibold ${newSku.trim() ? 'text-slate-900 dark:text-slate-100' : 'text-red-500'}`}>
+                        {newSku.trim() || 'MISSING'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                      <span className="text-xs font-medium uppercase text-slate-500">Category</span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {newCategory || 'Hardware'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                      <span className="text-xs font-medium uppercase text-slate-500">Type</span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {newMode === 'bulk' ? 'Bulk Stock' : 'Serialized'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                      <span className="text-xs font-medium uppercase text-slate-500">Threshold</span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {newReorderPoint || '0'} units
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-100 py-2 dark:border-slate-800">
+                      <span className="text-xs font-medium uppercase text-slate-500">Storage</span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {selectedCreateLocationLabel}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-primary/10 bg-primary/5 p-4 dark:bg-primary/10">
+                    <div className="flex gap-3">
+                      <AlertCircle className="mt-0.5 h-5 w-5 text-primary" />
+                      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                        Serialized items are tracked per unit with unique serial numbers. Change type to
+                        &nbsp;"Serialized" if unique tracking is required.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-8 py-5 dark:border-slate-800 dark:bg-slate-800/50">
-            <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
-            <Button className="bg-primary text-white shadow-lg shadow-primary/20 hover:bg-primary/90" onClick={() => void handleCreateItem()} disabled={createStockItem.isPending}>
-              {createStockItem.isPending ? 'Creating...' : 'Create Stock Item'}
-            </Button>
-          </div>
+          <footer className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-8 py-6 dark:border-slate-800 dark:bg-slate-800/30">
+            <button
+              type="button"
+              onClick={() => setIsCreateOpen(false)}
+              className="px-5 py-2.5 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300"
+            >
+              Cancel
+            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+                onClick={() => notifySuccess('Draft saved', 'Create Stock Item draft is UI-only for now')}
+              >
+                Save Draft
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={() => void handleCreateItem()}
+                disabled={createStockItem.isPending}
+              >
+                {createStockItem.isPending ? 'Creating...' : 'Create Stock Item'}
+              </button>
+            </div>
+          </footer>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isOperationOpen} onOpenChange={(open) => { setIsOperationOpen(open); if (!open) resetOperationForm(); }}>
-        <DialogContent className="w-[95vw] max-w-[860px] overflow-hidden rounded-xl border border-slate-200 p-0 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-          <DialogHeader className="border-b border-slate-100 px-8 py-6 dark:border-slate-800">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Stock Control</span>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tight">{operationType}</DialogTitle>
-            <DialogDescription>Run a {operationType} operation against current inventory.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-8 p-8 lg:grid-cols-[1.35fr_0.95fr]">
-            <div className="space-y-6">
-              <FieldGroup title="Operation Setup">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Operation Type">
-                    <Select value={operationType} onValueChange={(value) => setOperationType(value as OperationType)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="receive">Receive Inventory</SelectItem>
-                        <SelectItem value="issue">Issue to User</SelectItem>
-                        <SelectItem value="adjust">Inventory Adjustment</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label="Location">
-                    <Select value={locationKey} onValueChange={setLocationKey}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="main">Main Hub</SelectItem>
-                        <SelectItem value="warehouse">Warehouse</SelectItem>
-                        <SelectItem value="spares">Spares Room</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
+        <DialogContent className="custom-scrollbar max-h-[90vh] w-[95vw] max-w-5xl grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-xl border border-slate-200 p-0 shadow-2xl [&>button]:hidden dark:border-slate-800 dark:bg-slate-900">
+          <DialogHeader className="border-b border-slate-200 bg-white px-8 py-6 dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                Stock Control
+              </span>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    Stock Operation
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    {operationType === 'receive' && 'Receive stock with clear audit-friendly inputs.'}
+                    {operationType === 'issue' && 'Issue stock with clear audit-friendly inputs.'}
+                    {operationType === 'adjust' && 'Adjust stock with clear audit-friendly inputs.'}
+                  </DialogDescription>
                 </div>
-                <Field label="Search SKU / Item">
-                  <Select value={operationItemId || '__none__'} onValueChange={(value) => setOperationItemId(value === '__none__' ? '' : value)}>
-                    <SelectTrigger><SelectValue placeholder="Select stock item" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Select item</SelectItem>
-                      {stockItems.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>{item.sku} - {item.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </FieldGroup>
-              <FieldGroup title="Movement Data">
-                {selectedItem?.tracking_mode === 'serialized' && operationType === 'receive' ? (
-                  <Field label="Serial Numbers (Scan)">
-                    <textarea className="min-h-[96px] w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2.5 font-mono text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800" placeholder={`S/N: 123456789\nS/N: 987654321`} value={serialInput} onChange={(e) => setSerialInput(e.target.value)} />
-                  </Field>
-                ) : selectedItem?.tracking_mode === 'serialized' && operationType === 'issue' ? (
-                  <Field label="Serialized Unit">
-                    <Select value={selectedUnitId || '__none__'} onValueChange={(value) => setSelectedUnitId(value === '__none__' ? '' : value)}>
-                      <SelectTrigger><SelectValue placeholder="Choose stock unit" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Select unit</SelectItem>
-                        {inStockUnits.map((unit) => (
-                          <SelectItem key={unit.id} value={unit.id}>{unit.serial_no} ({unit.status})</SelectItem>
+                <button
+                  type="button"
+                  onClick={() => setIsOperationOpen(false)}
+                  className="text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="border-b border-slate-200 bg-slate-50 px-8 py-4 dark:border-slate-800 dark:bg-slate-800/50">
+            <div className="flex w-fit rounded-lg bg-slate-200/50 p-1 dark:bg-slate-800">
+              {([
+                ['receive', 'Receive'],
+                ['issue', 'Issue'],
+                ['adjust', 'Adjust'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setOperationType(value)}
+                  className={`rounded-md px-6 py-2 text-sm transition-colors ${
+                    operationType === value
+                      ? 'bg-white font-semibold text-primary shadow-sm dark:bg-primary dark:text-white'
+                      : 'font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-8">
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+              <div className="space-y-6 lg:col-span-2">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Stock Item
+                    </label>
+                    <div className="relative">
+                      <select
+                        className={`h-12 w-full appearance-none rounded-lg border px-4 pr-10 text-sm transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 ${
+                          stockItems.length === 0
+                            ? 'cursor-not-allowed border-slate-200 bg-slate-50 italic text-slate-400 dark:bg-slate-800'
+                            : 'border-slate-200 bg-white text-slate-900 dark:bg-slate-800'
+                        }`}
+                        value={operationItemId}
+                        onChange={(e) => setOperationItemId(e.target.value)}
+                        disabled={stockItems.length === 0}
+                      >
+                        <option value="">
+                          {stockItems.length === 0 ? 'Loading stock items...' : 'Select stock item'}
+                        </option>
+                        {stockItems.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.sku} - {item.name}
+                          </option>
                         ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
+                      </select>
+                      <div className="absolute right-3 top-3 text-primary">
+                        {stockItems.length === 0 ? (
+                          <Boxes className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Search className="h-4 w-4 opacity-70" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {operationType !== 'adjust' ? (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Storage Location
+                      </label>
+                      <select
+                        className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        value={locationKey}
+                        onChange={(e) => setLocationKey(e.target.value)}
+                      >
+                        {LOCATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Adjustment Method
+                      </label>
+                      <select
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        value={adjustmentMethod}
+                        onChange={(e) => setAdjustmentMethod(e.target.value as (typeof ADJUSTMENT_METHOD_OPTIONS)[number])}
+                      >
+                        <option value="set_balance">Set new balance</option>
+                        <option value="increase">Increase quantity</option>
+                        <option value="decrease">Decrease quantity</option>
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      {operationType === 'adjust' ? (adjustmentMethod === 'set_balance' ? 'New Quantity' : 'Delta Quantity') : 'Quantity'}
+                    </label>
+                    {operationType === 'adjust' ? (
+                      <input
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        placeholder="0"
+                        type="number"
+                        value={adjustDelta}
+                        onChange={(e) => setAdjustDelta(e.target.value)}
+                      />
+                    ) : selectedItem?.tracking_mode === 'serialized' && operationType === 'receive' ? (
+                      <div className="flex h-12">
+                        <input
+                          className="h-12 flex-1 rounded-l-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder="0"
+                          type="number"
+                          value={receiveQuantityValue || ''}
+                          readOnly
+                        />
+                        <div className="flex items-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-100 px-4 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                          SERIALIZED
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex h-12">
+                        <input
+                          className="h-12 flex-1 rounded-l-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder="0"
+                          type="number"
+                          value={quantity}
+                          onChange={(e) => setQuantity(e.target.value)}
+                        />
+                        <div className="flex items-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-100 px-4 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                          {selectedItem?.tracking_mode === 'serialized' ? 'UNIT' : 'BULK'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {operationType === 'receive' ? (
+                    <>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Supplier / Source
+                        </label>
+                        <input
+                          className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder="e.g. Dell Global"
+                          type="text"
+                          value={receiveSource}
+                          onChange={(e) => setReceiveSource(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Received Date
+                        </label>
+                        <input
+                          className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          type="date"
+                          value={receivedDate}
+                          onChange={(e) => setReceivedDate(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  ) : operationType === 'issue' ? (
+                    <>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Requester / Assignee
+                        </label>
+                        <div className="relative">
+                          <input
+                            className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            type="text"
+                            value={issueAssignee}
+                            onChange={(e) => setIssueAssignee(e.target.value)}
+                          />
+                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                            <Search className="h-4 w-4" />
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Issue Date
+                        </label>
+                        <input
+                          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          type="date"
+                          value={issueDate}
+                          onChange={(e) => setIssueDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Destination Team
+                        </label>
+                        <select
+                          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          value={destinationTeam}
+                          onChange={(e) => setDestinationTeam(e.target.value)}
+                        >
+                          {TEAM_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  ) : operationType === 'adjust' ? (
+                    <>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          Current Balance
+                        </label>
+                        <input
+                          className="h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-4 text-sm font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-800/50"
+                          readOnly
+                          type="text"
+                          value={`${selectedItem?.total_on_hand ?? 0} units`}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          Adjustment Reason
+                        </label>
+                        <select
+                          className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          value={adjustmentReason}
+                          onChange={(e) => setAdjustmentReason(e.target.value)}
+                        >
+                          {ADJUSTMENT_REASON_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-2 md:col-span-2">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          Authorized By
+                        </label>
+                        <input
+                          className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          placeholder="Manager Name or ID"
+                          type="text"
+                          value={authorizedBy}
+                          onChange={(e) => setAuthorizedBy(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  ) : null}
+
+                  {operationType !== 'adjust' ? (
+                    <div className="flex flex-col gap-1.5 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        {operationType === 'receive' ? 'Reference ID / PO Number' : 'Reference ID'}
+                      </label>
+                      <input
+                        className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder={operationType === 'receive' ? 'REF-2023-0045' : 'ISS-2024-0012'}
+                        type="text"
+                        value={referenceId}
+                        onChange={(e) => setReferenceId(e.target.value)}
+                      />
+                    </div>
+                  ) : null}
+
+                  {selectedItem?.tracking_mode === 'serialized' && operationType === 'receive' ? (
+                    <div className="flex flex-col gap-1.5 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Serial Numbers
+                      </label>
+                      <textarea
+                        className="min-h-[120px] w-full resize-none rounded-lg border border-slate-200 bg-white p-4 font-mono text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder={`S/N: 123456789\nS/N: 987654321`}
+                        value={serialInput}
+                        onChange={(e) => setSerialInput(e.target.value)}
+                      />
+                    </div>
+                  ) : selectedItem?.tracking_mode === 'serialized' && operationType === 'issue' ? (
+                    <div className="flex flex-col gap-1.5 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Serialized Unit
+                      </label>
+                      <Select
+                        value={selectedUnitId || '__none__'}
+                        onValueChange={(value) => setSelectedUnitId(value === '__none__' ? '' : value)}
+                      >
+                        <SelectTrigger className="h-12 rounded-lg border-slate-200 bg-white text-sm dark:border-slate-700 dark:bg-slate-800">
+                          <SelectValue placeholder="Choose stock unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Select unit</SelectItem>
+                          {inStockUnits.map((unit) => (
+                            <SelectItem key={unit.id} value={unit.id}>
+                              {unit.serial_no} ({unit.status})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      {operationType === 'adjust' ? 'Comments (Optional)' : 'Notes'}
+                    </label>
+                    <textarea
+                      className="w-full resize-none rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder={
+                        operationType === 'adjust'
+                          ? 'Enter additional details about this adjustment...'
+                          : 
+                        operationType === 'issue'
+                          ? 'Add any specific details regarding this issuance...'
+                          : 'Additional details about the delivery condition...'
+                      }
+                      rows={3}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                  <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-slate-700 dark:bg-slate-700/50">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                      Operation Summary
+                    </h3>
+                  </div>
+                  <div className="space-y-4 p-5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500 dark:text-slate-400">Type</span>
+                      <span className={`flex items-center gap-1 font-semibold ${
+                        operationType === 'receive'
+                          ? 'text-green-600 dark:text-green-400'
+                          : operationType === 'issue'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-amber-600 dark:text-amber-400'
+                      }`}>
+                        <Download className="h-4 w-4" />
+                        {operationType === 'receive' ? 'Receive' : operationType === 'issue' ? 'Stock Issue' : 'Adjust'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500 dark:text-slate-400">Item</span>
+                      <span className="max-w-[180px] text-right font-medium text-slate-900 dark:text-slate-100">
+                        {selectedItem ? selectedItem.name : '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {operationType === 'issue' ? 'Tracking' : operationType === 'adjust' ? 'Operation Type' : 'Stock Mode'}
+                      </span>
+                      <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                        operationType === 'issue'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                          : operationType === 'adjust'
+                            ? 'bg-primary/10 text-primary'
+                          : 'bg-primary/10 text-primary'
+                      }`}>
+                        {operationType === 'adjust'
+                          ? 'ADJUST'
+                          : selectedItem?.tracking_mode === 'serialized'
+                            ? 'SERIALIZED'
+                            : 'BULK'}
+                      </span>
+                    </div>
+                    {operationType === 'issue' ? (
+                      <>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-500 dark:text-slate-400">Selected ID</span>
+                          <span className="font-mono text-sm font-bold text-primary">
+                            {selectedItem?.tracking_mode === 'serialized'
+                              ? selectedUnitId
+                                ? inStockUnits.find((unit) => unit.id === selectedUnitId)?.serial_no?.split('-').at(-1) ?? '—'
+                                : '—'
+                              : 'BULK'}
+                          </span>
+                        </div>
+                        <div className="border-t border-slate-50 pt-4 dark:border-slate-800">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-bold">Inventory Balance</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-400 line-through">
+                                {selectedItem?.total_on_hand ?? '—'}
+                              </span>
+                              <span className="text-slate-400">→</span>
+                              <span className="text-lg font-black text-slate-900 dark:text-slate-100">
+                                {resultingBalance ?? '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : operationType === 'adjust' ? (
+                      <>
+                        <hr className="border-slate-100 dark:border-slate-800" />
+                        <div className="space-y-3">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                            Balance Preview
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 border-r border-slate-100 text-center dark:border-slate-800">
+                              <p className="text-xs text-slate-500">Current</p>
+                              <p className="text-lg font-bold text-slate-900 dark:text-white">
+                                {selectedItem?.total_on_hand ?? 0}
+                              </p>
+                            </div>
+                            <div className="flex items-center justify-center px-3 text-slate-300">
+                              <span>→</span>
+                            </div>
+                            <div className="flex-1 text-center">
+                              <p className="text-xs text-slate-500">New</p>
+                              <p className="text-lg font-bold text-primary">
+                                {resultingBalance == null || Number.isNaN(resultingBalance) ? '--' : resultingBalance}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-500 dark:text-slate-400">Quantity</span>
+                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                            {operationType === 'adjust'
+                              ? `${Number(adjustDelta || 0) >= 0 ? '+' : ''} ${adjustDelta || '0'} units`
+                              : `+ ${
+                                  selectedItem?.tracking_mode === 'serialized'
+                                    ? receiveQuantityValue || 0
+                                    : quantity || '0'
+                                } units`}
+                          </span>
+                        </div>
+                        <hr className="border-slate-100 dark:border-slate-700" />
+                        <div className="rounded-lg bg-primary/5 p-3 dark:bg-primary/10">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-medium text-primary/70 dark:text-primary/90">
+                              Resulting Balance
+                            </span>
+                            <span className="text-base font-bold text-primary">
+                              {resultingBalance == null ? '—' : `${resultingBalance} Units`}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {operationType === 'issue' ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/50 dark:bg-amber-900/20">
+                    <div className="flex gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      <div className="flex flex-col gap-1">
+                        <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                          Stock Level Notice
+                        </h4>
+                        <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                          Low stock warning if quantity reaches threshold. Current threshold is set to{' '}
+                          {selectedItem?.reorder_point ?? 0} units.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 ) : operationType === 'adjust' ? (
-                  <Field label="Adjustment Delta"><Input value={adjustDelta} onChange={(e) => setAdjustDelta(e.target.value)} /></Field>
+                  <div className="flex gap-4 rounded-xl border border-amber-100 bg-amber-50 p-5 dark:border-amber-900/30 dark:bg-amber-900/20">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <h5 className="text-sm font-bold text-amber-900 dark:text-amber-300">
+                        Audit Notification
+                      </h5>
+                      <p className="mt-1 text-sm leading-relaxed text-amber-800/80 dark:text-amber-400/80">
+                        This action changes the inventory audit trail. This adjustment will be
+                        permanently logged with your user credentials.
+                      </p>
+                    </div>
+                  </div>
                 ) : (
-                  <Field label="Quantity"><Input value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Field>
+                  <div className="flex gap-4 rounded-xl border border-blue-100 bg-blue-50 p-5 dark:border-blue-800 dark:bg-blue-900/20">
+                    <div className="text-blue-500 dark:text-blue-400">
+                      <AlertCircle className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                        Serialized Units
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-blue-600 dark:text-blue-400">
+                        If selected, serialized units will be created individually in the system for tracking.
+                      </p>
+                    </div>
+                  </div>
                 )}
-                <Field label="Notes">
-                  <textarea className="min-h-[96px] w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800" placeholder="Optional note or reference" value={note} onChange={(e) => setNote(e.target.value)} />
-                </Field>
-              </FieldGroup>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-800/40">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">Operation Summary</h3>
-              <div className="mt-5 space-y-4">
-                <SummaryRow label="Type" value={operationType} />
-                <SummaryRow label="Item" value={selectedItem ? `${selectedItem.name} (${selectedItem.sku})` : 'No item selected'} />
-                <SummaryRow label="Tracking" value={selectedItem?.tracking_mode ?? '—'} />
-                <SummaryRow label={operationType === 'adjust' ? 'Delta' : 'Quantity'} value={operationType === 'adjust' ? adjustDelta || '0' : quantity || '1'} />
-              </div>
-              <div className="mt-5 rounded-lg border border-primary/10 bg-primary/5 p-3 text-[11px] leading-tight text-primary/80">
-                {operationType === 'receive' && 'Receive operations increase available inventory and create movement logs.'}
-                {operationType === 'issue' && 'Issue operations remove stock from available inventory and support serialized issuance.'}
-                {operationType === 'adjust' && 'Adjust operations are intended for audit corrections and manual inventory balancing.'}
+
+                {operationType === 'issue' ? (
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                      Recent Action
+                    </h4>
+                    <div className="flex items-start gap-3">
+                      <div className="mt-1.5 h-2 w-2 rounded-full bg-slate-300" />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">3 items received today</span>
+                        <span className="text-[10px] text-slate-400">
+                          2 hours ago • {selectedOperationLocationLabel}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : operationType === 'adjust' ? (
+                  <div className="rounded-xl border border-primary/10 bg-primary/5 p-5 dark:border-primary/20 dark:bg-primary/10">
+                    <h5 className="mb-2 flex items-center gap-2 text-sm font-bold text-primary">
+                      <AlertCircle className="h-4 w-4" />
+                      Quick Tips
+                    </h5>
+                    <ul className="space-y-2 text-xs leading-normal text-slate-600 dark:text-slate-400">
+                      <li className="flex gap-2">
+                        <span className="text-primary">•</span>
+                        Use "Damage" reason to automatically flag items for tech inspection.
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-primary">•</span>
+                        Delta values must be positive; use the method dropdown to control direction.
+                      </li>
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-xl">
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary to-indigo-900 opacity-90" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_58%)]" />
+                    <div className="relative z-10 p-4 text-center text-white">
+                      <Boxes className="mx-auto mb-2 h-8 w-8 opacity-60" />
+                      <p className="text-xs font-medium uppercase tracking-widest opacity-80">
+                        Inventory Management
+                      </p>
+                      <p className="mt-2 text-[11px] text-white/70">
+                        {selectedOperationLocationLabel}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-8 py-5 dark:border-slate-800 dark:bg-slate-800/50">
-            <Button variant="ghost" onClick={() => setIsOperationOpen(false)}>Cancel</Button>
-            <Button className="bg-primary text-white shadow-lg shadow-primary/20 hover:bg-primary/90" onClick={() => void handleSubmitOperation()} disabled={receiveStock.isPending || receiveSerializedStock.isPending || issueStockBulk.isPending || issueStockUnit.isPending || adjustStockBalance.isPending}>
-              Submit Operation
-            </Button>
-          </div>
+
+          <footer className="flex items-center justify-end gap-4 border-t border-slate-200 bg-white px-8 py-5 dark:border-slate-800 dark:bg-slate-900">
+            <button
+              type="button"
+              onClick={() => setIsOperationOpen(false)}
+              className="rounded-lg px-6 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {operationType === 'adjust' ? 'Discard' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-2 rounded-lg bg-primary px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/30 transition-all hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
+              onClick={() => void handleSubmitOperation()}
+              disabled={receiveStock.isPending || receiveSerializedStock.isPending || issueStockBulk.isPending || issueStockUnit.isPending || adjustStockBalance.isPending}
+            >
+              <Plus className="h-4 w-4" />
+              {operationType === 'receive' ? 'Receive Stock' : operationType === 'issue' ? 'Issue Stock' : 'Apply Adjustment'}
+            </button>
+          </footer>
         </DialogContent>
       </Dialog>
     </div>
