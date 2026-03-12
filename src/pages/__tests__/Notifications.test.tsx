@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -315,12 +315,14 @@ describe('Notifications page', () => {
   });
 
   it('filters notifications by type', async () => {
-    const user = userEvent.setup();
     renderNotifications();
 
+    await waitFor(() => {
+      expect(screen.getByText(/Total:\s*3/i)).toBeInTheDocument();
+    });
+
     const combos = await screen.findAllByRole('combobox');
-    await user.click(combos[2]);
-    await user.click(await screen.findByRole('option', { name: 'info' }));
+    fireEvent.change(combos[2], { target: { value: 'info' } });
 
     await waitFor(() => {
       expect(screen.getByText(/Total:\s*1/i)).toBeInTheDocument();
@@ -333,7 +335,7 @@ describe('Notifications page', () => {
   it('supports pagination next and previous', async () => {
     const user = userEvent.setup();
     const now = Date.now();
-    mockNotifications = Array.from({ length: 22 }, (_, index) => ({
+    mockNotifications = Array.from({ length: 12 }, (_, index) => ({
       id: `n-${index + 1}`,
       user_id: 'u-1',
       ticket_id: null,
@@ -346,23 +348,24 @@ describe('Notifications page', () => {
 
     renderNotifications();
 
-    expect(await screen.findByText(/Page 1 \/ 2/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Page 1 \/ 3/i)).toBeInTheDocument();
     expect(screen.getByText('Paged notification 1')).toBeInTheDocument();
-    expect(screen.queryByText('Paged notification 21')).not.toBeInTheDocument();
+    expect(screen.getByText('Paged notification 5')).toBeInTheDocument();
+    expect(screen.queryByText('Paged notification 6')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Page 2 \/ 2/i)).toBeInTheDocument();
+      expect(screen.getByText(/Page 2 \/ 3/i)).toBeInTheDocument();
     });
-    expect(screen.getByText('Paged notification 21')).toBeInTheDocument();
-    expect(screen.getByText('Paged notification 22')).toBeInTheDocument();
+    expect(screen.getByText('Paged notification 6')).toBeInTheDocument();
+    expect(screen.getByText('Paged notification 10')).toBeInTheDocument();
     expect(screen.queryByText('Paged notification 1')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Previous' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Page 1 \/ 2/i)).toBeInTheDocument();
+      expect(screen.getByText(/Page 1 \/ 3/i)).toBeInTheDocument();
     });
     expect(screen.getByText('Paged notification 1')).toBeInTheDocument();
   });
