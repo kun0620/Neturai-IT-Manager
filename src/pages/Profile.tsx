@@ -22,9 +22,7 @@ const formatAssignedAssetLabel = (asset: AssetWithType) =>
 const resolveAssetDetails = (asset: AssetWithType): string | null => {
   const pieces: string[] = [];
   if (asset.asset_type?.name) pieces.push(asset.asset_type.name);
-  if (asset.serial_number) {
-    pieces.push(`SN ${asset.serial_number}`);
-  } else if (asset.asset_code) {
+  if (asset.asset_code) {
     pieces.push(asset.asset_code);
   }
   return pieces.length ? pieces.join(' - ') : null;

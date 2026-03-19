@@ -1,7 +1,6 @@
 export const EDITABLE_ASSET_FIELDS = [
   'name',
   'asset_code',
-  'serial_number',
   'location',
   'category_id',
   'asset_type_id',

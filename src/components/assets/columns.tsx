@@ -8,6 +8,7 @@ import {
   Package2,
   Server,
   Smartphone,
+  Trash2,
 } from 'lucide-react';
 import { AssetWithType } from '@/types/asset';
 
@@ -101,8 +102,14 @@ function SortableHeader({
   );
 }
 
+type AssetColumnActions = {
+  canDeleteAsset?: boolean;
+  onDeleteAsset?: (asset: AssetWithType) => void;
+};
+
 export function getColumns(
-  assigneeNameById?: Record<string, string>
+  assigneeNameById?: Record<string, string>,
+  actions?: AssetColumnActions
 ): ColumnDef<AssetWithType>[] {
   return [
     {
@@ -283,6 +290,15 @@ export function getColumns(
                 >
                   Copy Asset ID
                 </DropdownMenuItem>
+                {actions?.canDeleteAsset && actions.onDeleteAsset && (
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => actions.onDeleteAsset?.(asset)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Asset
+                  </DropdownMenuItem>
+                )}
                 {/*<DropdownMenuSeparator />
                  เผื่ออนาคต: Archive / Delete */}
               </DropdownMenuContent>

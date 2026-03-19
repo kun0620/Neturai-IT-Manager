@@ -49,6 +49,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logSystemAction } from '@/features/logs/utils/logSystemAction';
 import { useNavigate } from 'react-router-dom';
 import type { Database } from '@/types/supabase';
+import { assignAsset } from '@/features/assets/api/assignAsset';
+import { changeAssetStatus } from '@/features/assets/api/changeStatus';
 
 /* ================= TYPES ================= */
 
@@ -337,24 +339,39 @@ export function AssetDrawer({
       setDisplayAssignedTo(updates.assigned_to ?? null);
     }
 
-    const { error } = await supabase
-      .from('assets')
-      .update(updates)
-      .eq('id', asset.id);
+    const userId = session?.user?.id ?? null;
 
-    if (error) {
+    try {
+      if (Object.prototype.hasOwnProperty.call(updates, 'assigned_to')) {
+        await assignAsset(
+          asset.id,
+          previousAssignedTo,
+          updates.assigned_to ?? null,
+          userId
+        );
+      } else if (updates.status === 'Available' && previousAssignedTo) {
+        await assignAsset(asset.id, previousAssignedTo, null, userId);
+      } else if (updates.status && updates.status !== previousStatus) {
+        await changeAssetStatus(
+          asset.id,
+          previousStatus,
+          updates.status,
+          userId
+        );
+      }
+    } catch (error) {
       setDisplayStatus(previousStatus);
       setDisplayAssignedTo(previousAssignedTo);
+      const message = error instanceof Error ? error.message : 'Unknown error';
       setQuickActionError({
-        message: error.message,
+        message: message,
         pending: { actionKey, updates, successMessage },
       });
-      notifyError('Action failed', error.message);
+      notifyError('Action failed', message);
       setQuickActionLoading(null);
       return;
     }
 
-    const userId = session?.user?.id ?? null;
     if (updates.status && updates.status !== previousStatus) {
       await logSystemAction({
         action: 'asset.status_changed',
@@ -504,7 +521,10 @@ export function AssetDrawer({
                             onClick={() =>
                               runQuickAction(
                                 'assign_me',
-                                { assigned_to: session?.user?.id ?? null },
+                                {
+                                  assigned_to: session?.user?.id ?? null,
+                                  status: 'Assigned',
+                                },
                                 'Assigned to you'
                               )
                             }
@@ -652,19 +672,11 @@ export function AssetDrawer({
                   </InfoRow>
 
                   <InfoRow label="Serial Number">
-                    <div className="flex items-center gap-1">
-                      <span className="truncate">{asset.serial_number ?? '—'}</span>
-                      {asset.serial_number && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => copyText(asset.serial_number ?? '', 'Serial number')}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
+                    {(customValues.serial_number?.trim() || asset.serial_number?.trim())
+                      ? (customValues.serial_number?.trim()
+                          ? customValues.serial_number
+                          : asset.serial_number)
+                      : '—'}
                   </InfoRow>
 
                   <InfoRow label="Last Service">

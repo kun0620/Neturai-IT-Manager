@@ -162,6 +162,15 @@ type CreateStockItemPayload = {
   openingQty?: number;
 };
 
+type UpdateStockItemPayload = {
+  stockItemId: string;
+  sku: string;
+  name: string;
+  category?: string | null;
+  reorderPoint?: number;
+  reorderQty?: number;
+};
+
 export function useCreateStockItem() {
   const queryClient = useQueryClient();
   return useMutation<StockItemRow, Error, CreateStockItemPayload>({
@@ -181,6 +190,55 @@ export function useCreateStockItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+    },
+  });
+}
+
+export function useUpdateStockItem() {
+  const queryClient = useQueryClient();
+  return useMutation<StockItemRow, Error, UpdateStockItemPayload>({
+    mutationFn: async ({
+      stockItemId,
+      sku,
+      name,
+      category,
+      reorderPoint,
+      reorderQty,
+    }) => {
+      const { data, error } = await supabase
+        .from('stock_items')
+        .update({
+          sku,
+          name,
+          category: category ?? null,
+          reorder_point: reorderPoint ?? 0,
+          reorder_qty: reorderQty ?? 0,
+        })
+        .eq('id', stockItemId)
+        .select('*')
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data as StockItemRow;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+    },
+  });
+}
+
+export function useDeleteStockItem() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { stockItemId: string }>({
+    mutationFn: async ({ stockItemId }) => {
+      const { error } = await supabase.from('stock_items').delete().eq('id', stockItemId);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-units'] });
       queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
     },
   });

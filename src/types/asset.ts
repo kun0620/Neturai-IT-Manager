@@ -19,11 +19,11 @@ export type AssetWithType = {
   id: string;
   name: string;
   asset_code: string;
+  serial_number?: string | null;
 
   category: AssetCategory | null; // ✅ แก้ตรงนี้
 
   status: AssetStatus;
-  serial_number: string | null;
   location: string | null;
   assigned_to: string | null;
   last_service_date: string | null;

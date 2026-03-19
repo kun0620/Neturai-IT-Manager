@@ -8,7 +8,6 @@ export type AdminUser = Profile & {
     id: string;
     name: string;
     asset_code: string;
-    serial_number: string | null;
     asset_type: {
       key: string;
       name: string;
@@ -36,7 +35,6 @@ async function getAllProfiles(): Promise<AdminUser[]> {
         id,
         name,
         asset_code,
-        serial_number,
         asset_type:asset_types(key, name)
       )
     `

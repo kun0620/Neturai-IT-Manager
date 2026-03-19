@@ -67,7 +67,7 @@ const assetFormSchema = z.object({
   category_id: z.string().uuid().nullable().optional(),
   status: z.nativeEnum(AssetStatusEnum),
   assigned_to: z.string().uuid().nullable().optional(),
-  serial_number: z.string().nullable().optional(),
+  serial_number: z.string().optional(),
   location: z.string().nullable().optional(),
   last_service_date: z.date().nullable().optional(),
   custom: z.record(z.string(), z.string()).optional(),
@@ -185,7 +185,11 @@ export function AssetFormDialog({
     Object.entries(customValues).forEach(([key, value]) => {
       form.setValue(`custom.${key}`, value ?? '');
     });
-  }, [customValues, form]);
+    form.setValue(
+      'serial_number',
+      customValues.serial_number ?? asset?.serial_number ?? ''
+    );
+  }, [customValues, asset?.serial_number, form]);
 
   /* ================= MUTATION ================= */
 
@@ -196,14 +200,20 @@ export function AssetFormDialog({
 
   const saveAssetMutation = useMutation<string, Error, AssetFormValues>({
     mutationFn: async (values) => {
+  const serialNumberValue = values.serial_number?.trim() ?? '';
+  const nextCustomValues = {
+    ...(values.custom ?? {}),
+    serial_number: serialNumberValue,
+  };
+
   const payload: AssetInsert = {
     name: values.name,
     asset_code: values.asset_code,
+    serial_number: serialNumberValue || null,
     asset_type_id: values.asset_type_id,
     category_id: values.category_id ?? null,
     status: values.status,
     assigned_to: values.assigned_to ?? null,
-    serial_number: values.serial_number ?? null,
     location: values.location ?? null,
     last_service_date: values.last_service_date
       ? format(values.last_service_date, 'yyyy-MM-dd')
@@ -211,11 +221,10 @@ export function AssetFormDialog({
   };
 
   const oldAsset = asset
-    ? {
+      ? {
         status: asset.status,
         assigned_to: asset.assigned_to,
         location: asset.location,
-        serial_number: asset.serial_number,
       }
     : null;
 
@@ -258,7 +267,8 @@ export function AssetFormDialog({
     // ✅ return id ให้ TS รู้แน่
     await saveAssetFieldValues({
       assetId: asset.id,
-      values: values.custom ?? {},
+      assetTypeId: values.asset_type_id,
+      values: nextCustomValues,
       fields: assetFields,
     });
 
@@ -281,7 +291,8 @@ export function AssetFormDialog({
 
   await saveAssetFieldValues({
     assetId: newId,
-    values: values.custom ?? {},
+    assetTypeId: values.asset_type_id,
+    values: nextCustomValues,
     fields: assetFields,
   });
 
@@ -290,6 +301,8 @@ export function AssetFormDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       queryClient.invalidateQueries({ queryKey: ['asset-logs', asset?.id] });
+      queryClient.invalidateQueries({ queryKey: ['asset-field-values', asset?.id] });
+      queryClient.invalidateQueries({ queryKey: ['asset-fields', assetTypeId] });
       queryClient.invalidateQueries({ queryKey: ['logs'] });
 
       notifySuccess(
@@ -429,7 +442,10 @@ export function AssetFormDialog({
               </FormRow>
 
               <FormRow label="Serial Number">
-                <Input {...form.register('serial_number')} />
+                <Input
+                  {...form.register('serial_number')}
+                  placeholder="SN-XXXX"
+                />
               </FormRow>
 
               {assetTypeId && (

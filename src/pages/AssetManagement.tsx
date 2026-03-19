@@ -66,6 +66,8 @@ import { supabase } from '@/lib/supabase';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ColumnDef } from '@tanstack/react-table';
 import { exportRowsToExcel, exportRowsToPdf } from '@/lib/export';
+import { assignAsset } from '@/features/assets/api/assignAsset';
+import { changeAssetStatus } from '@/features/assets/api/changeStatus';
 
 
 type AssetSortField = 'updated_at' | 'name' | 'asset_code' | 'status';
@@ -182,6 +184,8 @@ export function AssetManagement() {
   const [confirmBulkStatusOpen, setConfirmBulkStatusOpen] = useState(false);
   const [confirmBulkDeleteOpen, setConfirmBulkDeleteOpen] = useState(false);
   const [confirmBulkDeleteFinalOpen, setConfirmBulkDeleteFinalOpen] = useState(false);
+  const [confirmDeleteAssetOpen, setConfirmDeleteAssetOpen] = useState(false);
+  const [assetPendingDelete, setAssetPendingDelete] = useState<AssetWithType | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [selectedAssets, setSelectedAssets] = useState<AssetWithType[]>([]);
@@ -194,6 +198,7 @@ export function AssetManagement() {
   const prefetchTicketsRoute = React.useCallback(() => {
     void import('@/pages/Tickets');
   }, []);
+  const performedBy = session?.user?.id ?? null;
 
 
   const applyPreset = React.useCallback(
@@ -352,7 +357,6 @@ export function AssetManagement() {
         a.asset_type?.name?.toLowerCase().includes(keyword) ||
         a.category?.name?.toLowerCase().includes(keyword) ||
         a.location?.toLowerCase().includes(keyword) ||
-        a.serial_number?.toLowerCase().includes(keyword) ||
         a.status?.toLowerCase().includes(keyword) ||
         (a.assigned_to
           ? (assigneeNameById[a.assigned_to] ?? '').toLowerCase().includes(keyword)
@@ -477,6 +481,18 @@ export function AssetManagement() {
     setSelectedAssets(sortedAssets);
   }, [allVisibleSelected, sortedAssets]);
 
+  const requestDeleteAsset = React.useCallback(
+    (asset: AssetWithType) => {
+      if (!canDeleteAssets) {
+        notifyError('You do not have permission to delete assets');
+        return;
+      }
+      setAssetPendingDelete(asset);
+      setConfirmDeleteAssetOpen(true);
+    },
+    [canDeleteAssets]
+  );
+
   const assetTableColumns = useMemo<ColumnDef<AssetWithType>[]>(
     () =>
       selectionMode
@@ -513,10 +529,27 @@ export function AssetManagement() {
                 </div>
               ),
             },
-            ...getColumns(assigneeNameById),
+            ...getColumns(assigneeNameById, {
+              canDeleteAsset: canDeleteAssets,
+              onDeleteAsset: requestDeleteAsset,
+            }),
           ]
-        : [...getColumns(assigneeNameById)],
-    [allVisibleSelected, assigneeNameById, selectedAssetIds, selectionMode, toggleAssetSelection, toggleSelectAllVisible]
+        : [
+            ...getColumns(assigneeNameById, {
+              canDeleteAsset: canDeleteAssets,
+              onDeleteAsset: requestDeleteAsset,
+            }),
+          ],
+    [
+      allVisibleSelected,
+      assigneeNameById,
+      canDeleteAssets,
+      requestDeleteAsset,
+      selectedAssetIds,
+      selectionMode,
+      toggleAssetSelection,
+      toggleSelectAllVisible,
+    ]
   );
 
   React.useEffect(() => {
@@ -751,15 +784,29 @@ export function AssetManagement() {
 
     setBulkUpdating(true);
     setBulkOperation('owner');
-    const { error: updateError } = await supabase
-      .from('assets')
-      .update({ assigned_to: assignedTo })
-      .in('id', selectedAssetIds);
+    const appliedItems: Array<{ id: string; previousAssignedTo: string | null }> = [];
 
-    if (updateError) {
-      notifyError('Failed to assign owner', updateError.message);
+    try {
+      for (const asset of selectedAssets) {
+        await assignAsset(
+          asset.id,
+          asset.assigned_to,
+          assignedTo,
+          performedBy
+        );
+        appliedItems.push({
+          id: asset.id,
+          previousAssignedTo: asset.assigned_to,
+        });
+      }
+    } catch (error) {
+      await queryClient.invalidateQueries({ queryKey: ['assets'] });
       setBulkUpdating(false);
       setBulkOperation(null);
+      notifyError(
+        'Failed to assign owner',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
       return false;
     }
 
@@ -767,10 +814,10 @@ export function AssetManagement() {
     setLastBulkUndo({
       kind: 'owner',
       label: `Owner -> ${nextOwnerLabel}`,
-      items: previousItems,
+      items: appliedItems.length > 0 ? appliedItems : previousItems,
     });
     clearBulkSelection();
-    queryClient.invalidateQueries({ queryKey: ['assets'] });
+    await queryClient.invalidateQueries({ queryKey: ['assets'] });
     setBulkUpdating(false);
     setBulkOperation(null);
     return true;
@@ -787,6 +834,14 @@ export function AssetManagement() {
       return false;
     }
 
+    if (
+      bulkStatusValue === 'Assigned' &&
+      selectedAssets.some((asset) => !asset.assigned_to)
+    ) {
+      notifyError('Assign an owner before setting status to Assigned');
+      return false;
+    }
+
     const previousItems = selectedAssets.map((asset) => ({
       id: asset.id,
       previousStatus: asset.status,
@@ -794,15 +849,33 @@ export function AssetManagement() {
 
     setBulkUpdating(true);
     setBulkOperation('status');
-    const { error: updateError } = await supabase
-      .from('assets')
-      .update({ status: bulkStatusValue as AssetWithType['status'] })
-      .in('id', selectedAssetIds);
+    const appliedItems: Array<{ id: string; previousStatus: AssetWithType['status'] }> = [];
 
-    if (updateError) {
-      notifyError('Failed to update status', updateError.message);
+    try {
+      for (const asset of selectedAssets) {
+        if (bulkStatusValue === 'Available' && asset.assigned_to) {
+          await assignAsset(asset.id, asset.assigned_to, null, performedBy);
+        } else {
+          await changeAssetStatus(
+            asset.id,
+            asset.status,
+            bulkStatusValue as AssetWithType['status'],
+            performedBy
+          );
+        }
+        appliedItems.push({
+          id: asset.id,
+          previousStatus: asset.status,
+        });
+      }
+    } catch (error) {
+      await queryClient.invalidateQueries({ queryKey: ['assets'] });
       setBulkUpdating(false);
       setBulkOperation(null);
+      notifyError(
+        'Failed to update status',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
       return false;
     }
 
@@ -810,10 +883,10 @@ export function AssetManagement() {
     setLastBulkUndo({
       kind: 'status',
       label: `Status -> ${bulkStatusValue}`,
-      items: previousItems,
+      items: appliedItems.length > 0 ? appliedItems : previousItems,
     });
     clearBulkSelection();
-    queryClient.invalidateQueries({ queryKey: ['assets'] });
+    await queryClient.invalidateQueries({ queryKey: ['assets'] });
     setBulkUpdating(false);
     setBulkOperation(null);
     return true;
@@ -913,39 +986,89 @@ export function AssetManagement() {
     return true;
   };
 
+  const handleDeleteSingleAsset = async () => {
+    if (!assetPendingDelete) return false;
+    if (!canDeleteAssets) {
+      notifyError('You do not have permission to delete assets');
+      return false;
+    }
+
+    setBulkUpdating(true);
+    setBulkOperation('delete');
+
+    const { error: deleteError } = await supabase
+      .from('assets')
+      .delete()
+      .eq('id', assetPendingDelete.id);
+
+    if (deleteError) {
+      notifyError('Failed to delete asset', deleteError.message);
+      setBulkUpdating(false);
+      setBulkOperation(null);
+      return false;
+    }
+
+    notifySuccess('Asset deleted', assetPendingDelete.asset_code);
+    if (selectedAssetForDrawer?.id === assetPendingDelete.id) {
+      handleCloseDrawer();
+    }
+    queryClient.invalidateQueries({ queryKey: ['assets'] });
+    setAssetPendingDelete(null);
+    setBulkUpdating(false);
+    setBulkOperation(null);
+    return true;
+  };
+
   const handleUndoLastBulkChange = async () => {
     if (!lastBulkUndo) return;
     setBulkUpdating(true);
     setBulkOperation('undo');
 
     if (lastBulkUndo.kind === 'owner') {
-      const results = await Promise.all(
-        lastBulkUndo.items.map((item) =>
-          supabase
-            .from('assets')
-            .update({ assigned_to: item.previousAssignedTo })
-            .eq('id', item.id)
-        )
-      );
-      const failed = results.find((result) => result.error);
-      if (failed?.error) {
-        notifyError('Undo failed', failed.error.message);
+      try {
+        for (const item of lastBulkUndo.items) {
+          const currentAsset = assets.find((asset) => asset.id === item.id);
+          await assignAsset(
+            item.id,
+            currentAsset?.assigned_to ?? null,
+            item.previousAssignedTo,
+            performedBy
+          );
+        }
+      } catch (error) {
+        notifyError(
+          'Undo failed',
+          error instanceof Error ? error.message : 'Unknown error'
+        );
         setBulkUpdating(false);
         setBulkOperation(null);
         return;
       }
     } else {
-      const results = await Promise.all(
-        lastBulkUndo.items.map((item) =>
-          supabase
-            .from('assets')
-            .update({ status: item.previousStatus })
-            .eq('id', item.id)
-        )
-      );
-      const failed = results.find((result) => result.error);
-      if (failed?.error) {
-        notifyError('Undo failed', failed.error.message);
+      try {
+        for (const item of lastBulkUndo.items) {
+          const currentAsset = assets.find((asset) => asset.id === item.id);
+          if (item.previousStatus === 'Available' && currentAsset?.assigned_to) {
+            await assignAsset(
+              item.id,
+              currentAsset.assigned_to,
+              null,
+              performedBy
+            );
+          } else {
+            await changeAssetStatus(
+              item.id,
+              currentAsset?.status ?? null,
+              item.previousStatus,
+              performedBy
+            );
+          }
+        }
+      } catch (error) {
+        notifyError(
+          'Undo failed',
+          error instanceof Error ? error.message : 'Unknown error'
+        );
         setBulkUpdating(false);
         setBulkOperation(null);
         return;
@@ -954,7 +1077,7 @@ export function AssetManagement() {
 
     notifySuccess('Undo complete', lastBulkUndo.label);
     setLastBulkUndo(null);
-    queryClient.invalidateQueries({ queryKey: ['assets'] });
+    await queryClient.invalidateQueries({ queryKey: ['assets'] });
     setBulkUpdating(false);
     setBulkOperation(null);
   };
@@ -1994,6 +2117,39 @@ export function AssetManagement() {
           </div>
         </DrawerContent>
       </Drawer>
+
+      <AlertDialog open={confirmDeleteAssetOpen} onOpenChange={setConfirmDeleteAssetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete asset?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {assetPendingDelete
+                ? `This will permanently delete ${assetPendingDelete.name} (${assetPendingDelete.asset_code}).`
+                : 'This action cannot be undone.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={bulkUpdating}
+              onClick={() => setAssetPendingDelete(null)}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={bulkUpdating}
+              onClick={async () => {
+                const ok = await handleDeleteSingleAsset();
+                if (ok) {
+                  setConfirmDeleteAssetOpen(false);
+                }
+              }}
+            >
+              {bulkUpdating && bulkOperation === 'delete' ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteSavedViewOpen} onOpenChange={setDeleteSavedViewOpen}>
         <AlertDialogContent>

@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   AlertTriangle,
   Download,
-  BadgeDollarSign,
   Boxes,
   CheckCircle2,
   ClipboardList,
@@ -23,27 +23,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
+import { useUsersForAssignment } from '@/hooks/useUsers';
 import {
   type StockItemView,
   type StockMovementRow,
   type StockTrackingMode,
   useAdjustStockBalance,
   useCreateStockItem,
+  useDeleteStockItem,
   useInStockUnits,
   useIssueStockBulk,
   useIssueStockUnit,
@@ -51,9 +56,10 @@ import {
   useReceiveStock,
   useRecentStockMovements,
   useStockItems,
+  useUpdateStockItem,
 } from '@/hooks/useStockControl';
 
-type OperationType = 'receive' | 'issue' | 'adjust';
+type OperationType = 'receive' | 'issue' | 'borrow' | 'adjust';
 
 const MOVEMENT_STYLE_MAP: Record<
   StockMovementRow['movement_type'],
@@ -73,6 +79,30 @@ const MOVEMENT_STYLE_MAP: Record<
 const formatMovementDate = (value: string) => format(new Date(value), 'MMM d, h:mm a');
 
 const getStatus = (item: StockItemView) => {
+  if (!item.is_active) {
+    return {
+      label: 'INACTIVE',
+      className: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+      rowClass: 'bg-slate-50/40 dark:bg-slate-900/10',
+    };
+  }
+
+  if (item.total_on_hand <= 0) {
+    return {
+      label: 'OUT OF STOCK',
+      className: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+      rowClass: 'bg-rose-50/30 dark:bg-rose-900/5',
+    };
+  }
+
+  if (item.available <= 0 && item.total_reserved > 0) {
+    return {
+      label: 'RESERVED',
+      className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+      rowClass: 'bg-amber-50/30 dark:bg-amber-900/5',
+    };
+  }
+
   if (item.reorder_point > 0 && item.available <= item.reorder_point) {
     return {
       label: 'LOW STOCK',
@@ -220,7 +250,6 @@ const LOCATION_OPTIONS = [
 ] as const;
 
 const CATEGORY_OPTIONS = ['Hardware', 'Software', 'Peripherals'] as const;
-const SUPPLIER_OPTIONS = ['Apple Inc.', 'CDW Logistics'] as const;
 const TEAM_OPTIONS = [
   'Product Engineering',
   'Marketing & Communications',
@@ -241,11 +270,15 @@ const ADJUSTMENT_REASON_OPTIONS = [
 ] as const;
 
 export default function StockControlPage() {
+  const navigate = useNavigate();
   const { isAdmin, isIT } = useCurrentProfile();
   const canManage = isAdmin || isIT;
   const { data: stockItems = [], isLoading: itemsLoading, isError: itemsError } = useStockItems();
   const { data: movements = [], isLoading: movementLoading } = useRecentStockMovements();
+  const { data: users = [] } = useUsersForAssignment();
   const createStockItem = useCreateStockItem();
+  const updateStockItem = useUpdateStockItem();
+  const deleteStockItem = useDeleteStockItem();
   const receiveStock = useReceiveStock();
   const receiveSerializedStock = useReceiveSerializedStock();
   const issueStockBulk = useIssueStockBulk();
@@ -255,7 +288,9 @@ export default function StockControlPage() {
   const [search, setSearch] = useState('');
   const [operationType, setOperationType] = useState<OperationType>('receive');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [isOperationOpen, setIsOperationOpen] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<StockItemView | null>(null);
 
   const [newSku, setNewSku] = useState('');
   const [newName, setNewName] = useState('');
@@ -266,24 +301,21 @@ export default function StockControlPage() {
   const [newOpeningQty, setNewOpeningQty] = useState('0');
   const [newLocationKey, setNewLocationKey] = useState('main');
   const [newBrand, setNewBrand] = useState('');
-  const [newSupplier, setNewSupplier] = useState(SUPPLIER_OPTIONS[0]);
-  const [newUnitCost, setNewUnitCost] = useState('');
-  const [newInternalNotes, setNewInternalNotes] = useState('');
   const [isWarrantyTracking, setIsWarrantyTracking] = useState(true);
-  const [isStockItemActive, setIsStockItemActive] = useState(true);
 
   const [operationItemId, setOperationItemId] = useState('');
   const [locationKey, setLocationKey] = useState('main');
   const [quantity, setQuantity] = useState('1');
   const [serialInput, setSerialInput] = useState('');
-  const [selectedUnitId, setSelectedUnitId] = useState('');
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   const [adjustDelta, setAdjustDelta] = useState('0');
   const [note, setNote] = useState('');
   const [referenceId, setReferenceId] = useState('');
   const [receiveSource, setReceiveSource] = useState('');
   const [receivedDate, setReceivedDate] = useState('');
-  const [issueAssignee, setIssueAssignee] = useState('Sarah Jenkins');
+  const [issueAssigneeId, setIssueAssigneeId] = useState('');
   const [issueDate, setIssueDate] = useState('');
+  const [borrowDueDate, setBorrowDueDate] = useState('');
   const [destinationTeam, setDestinationTeam] = useState(TEAM_OPTIONS[0]);
   const [adjustmentMethod, setAdjustmentMethod] = useState<(typeof ADJUSTMENT_METHOD_OPTIONS)[number]>('set_balance');
   const [adjustmentReason, setAdjustmentReason] = useState(ADJUSTMENT_REASON_OPTIONS[0]);
@@ -303,6 +335,11 @@ export default function StockControlPage() {
   const { data: inStockUnits = [] } = useInStockUnits(
     selectedItem?.tracking_mode === 'serialized' ? selectedItem.id : undefined
   );
+  const selectedSerializedUnits = useMemo(
+    () => inStockUnits.filter((unit) => selectedUnitIds.includes(unit.id)),
+    [inStockUnits, selectedUnitIds]
+  );
+  const selectedSerializedCount = selectedUnitIds.length;
   const totalOnHand = useMemo(() => stockItems.reduce((acc, item) => acc + item.total_on_hand, 0), [stockItems]);
   const totalReserved = useMemo(() => stockItems.reduce((acc, item) => acc + item.total_reserved, 0), [stockItems]);
   const totalAvailable = useMemo(() => stockItems.reduce((acc, item) => acc + item.available, 0), [stockItems]);
@@ -314,6 +351,10 @@ export default function StockControlPage() {
     LOCATION_OPTIONS.find((option) => option.value === newLocationKey)?.label ?? 'Main Warehouse';
   const selectedOperationLocationLabel =
     LOCATION_OPTIONS.find((option) => option.value === locationKey)?.label ?? 'Main Warehouse';
+  const selectedAssignee = useMemo(
+    () => users.find((user) => user.id === issueAssigneeId) ?? null,
+    [users, issueAssigneeId]
+  );
   const receiveQuantityValue =
     selectedItem?.tracking_mode === 'serialized'
       ? serialInput
@@ -326,8 +367,10 @@ export default function StockControlPage() {
       ? null
       : operationType === 'receive'
         ? selectedItem.total_on_hand + (Number.isFinite(receiveQuantityValue) ? receiveQuantityValue : 0)
-        : operationType === 'issue'
-          ? selectedItem.total_on_hand - (selectedItem.tracking_mode === 'serialized' ? (selectedUnitId ? 1 : 0) : Number(quantity || 0))
+        : operationType === 'issue' || operationType === 'borrow'
+          ? selectedItem.total_on_hand - (selectedItem.tracking_mode === 'serialized' ? selectedSerializedCount : Number(quantity || 0))
+          : selectedItem.tracking_mode === 'serialized'
+            ? selectedItem.total_on_hand - selectedSerializedCount
           : adjustmentMethod === 'set_balance'
             ? Number(adjustDelta || 0)
             : adjustmentMethod === 'increase'
@@ -335,6 +378,7 @@ export default function StockControlPage() {
               : selectedItem.total_on_hand - Number(adjustDelta || 0);
 
   const resetCreateForm = () => {
+    setEditingItemId(null);
     setNewSku('');
     setNewName('');
     setNewCategory('Hardware');
@@ -344,29 +388,58 @@ export default function StockControlPage() {
     setNewOpeningQty('0');
     setNewLocationKey('main');
     setNewBrand('');
-    setNewSupplier(SUPPLIER_OPTIONS[0]);
-    setNewUnitCost('');
-    setNewInternalNotes('');
     setIsWarrantyTracking(true);
-    setIsStockItemActive(true);
   };
   const resetOperationForm = () => {
     setOperationItemId('');
     setLocationKey('main');
     setQuantity('1');
     setSerialInput('');
-    setSelectedUnitId('');
+    setSelectedUnitIds([]);
     setAdjustDelta('0');
     setNote('');
     setReferenceId('');
     setReceiveSource('');
     setReceivedDate('');
-    setIssueAssignee('Sarah Jenkins');
+    setIssueAssigneeId('');
     setIssueDate('');
+    setBorrowDueDate('');
     setDestinationTeam(TEAM_OPTIONS[0]);
     setAdjustmentMethod('set_balance');
     setAdjustmentReason(ADJUSTMENT_REASON_OPTIONS[0]);
     setAuthorizedBy('');
+  };
+  useEffect(() => {
+    if (
+      operationType === 'adjust' &&
+      selectedItem?.tracking_mode === 'serialized' &&
+      adjustmentMethod !== 'decrease'
+    ) {
+      setAdjustmentMethod('decrease');
+    }
+  }, [operationType, selectedItem?.tracking_mode, adjustmentMethod]);
+
+  const toggleSerializedUnitSelection = (stockUnitId: string) => {
+    setSelectedUnitIds((current) =>
+      current.includes(stockUnitId)
+        ? current.filter((id) => id !== stockUnitId)
+        : [...current, stockUnitId]
+    );
+  };
+
+  const openEditItemDialog = (item: StockItemView) => {
+    setEditingItemId(item.id);
+    setNewSku(item.sku);
+    setNewName(item.name);
+    setNewCategory(item.category?.trim() || 'Hardware');
+    setNewMode(item.tracking_mode);
+    setNewReorderPoint(String(item.reorder_point ?? 0));
+    setNewReorderQty(String(item.reorder_qty ?? 0));
+    setNewOpeningQty('0');
+    setNewLocationKey(item.balances[0]?.location_key ?? 'main');
+    setNewBrand('');
+    setIsWarrantyTracking(true);
+    setIsCreateOpen(true);
   };
 
   const handleCreateItem = async () => {
@@ -383,22 +456,67 @@ export default function StockControlPage() {
       return;
     }
     try {
-      await createStockItem.mutateAsync({
-        sku: newSku.trim(),
-        name: newName.trim(),
-        trackingMode: newMode,
-        category: newCategory.trim() || null,
-        reorderPoint,
-        reorderQty,
-        locationKey: newLocationKey,
-        openingQty,
-      });
-      notifySuccess('Stock item created');
+      if (editingItemId) {
+        await updateStockItem.mutateAsync({
+          stockItemId: editingItemId,
+          sku: newSku.trim(),
+          name: newName.trim(),
+          category: newCategory.trim() || null,
+          reorderPoint,
+          reorderQty,
+        });
+        notifySuccess('Stock item updated');
+      } else {
+        await createStockItem.mutateAsync({
+          sku: newSku.trim(),
+          name: newName.trim(),
+          trackingMode: newMode,
+          category: newCategory.trim() || null,
+          reorderPoint,
+          reorderQty,
+          locationKey: newLocationKey,
+          openingQty,
+        });
+        notifySuccess('Stock item created');
+      }
       setIsCreateOpen(false);
       resetCreateForm();
     } catch (err) {
-      notifyError('Create failed', err instanceof Error ? err.message : 'Unknown error');
+      notifyError(
+        editingItemId ? 'Update failed' : 'Create failed',
+        err instanceof Error ? err.message : 'Unknown error'
+      );
     }
+  };
+
+  const handleDeleteItem = async () => {
+    if (!canManage || !deleteItem) return;
+    try {
+      await deleteStockItem.mutateAsync({ stockItemId: deleteItem.id });
+      notifySuccess('Stock item deleted');
+      if (operationItemId === deleteItem.id) {
+        setIsOperationOpen(false);
+        resetOperationForm();
+      }
+      setDeleteItem(null);
+    } catch (err) {
+      notifyError('Delete failed', err instanceof Error ? err.message : 'Unknown error');
+    }
+  };
+
+  const goToAssetRequests = () => {
+    navigate('/assets?section=requests');
+  };
+
+  const buildIssueLikeNote = (mode: 'issue' | 'borrow') => {
+    const parts = [
+      mode === 'borrow' ? 'Borrow Transaction' : 'Issue Transaction',
+      issueDate ? `Date: ${issueDate}` : null,
+      mode === 'borrow' && borrowDueDate ? `Due: ${borrowDueDate}` : null,
+      destinationTeam ? `Team: ${destinationTeam}` : null,
+      note.trim() || null,
+    ];
+    return parts.filter(Boolean).join(' | ') || undefined;
   };
 
   const handleSubmitOperation = async () => {
@@ -430,7 +548,21 @@ export default function StockControlPage() {
         }
         notifySuccess('Inventory received');
       }
-      if (operationType === 'issue') {
+      if (operationType === 'issue' || operationType === 'borrow') {
+        const issueLikeNote = buildIssueLikeNote(operationType);
+        if (!issueAssigneeId) {
+          notifyError(
+            operationType === 'borrow' ? 'Borrower required' : 'Assignee required',
+            operationType === 'borrow'
+              ? 'Please select who is borrowing this item'
+              : 'Please select who will receive this item'
+          );
+          return;
+        }
+        if (operationType === 'borrow' && !borrowDueDate) {
+          notifyError('Due date required', 'Please choose a due date for this borrow transaction');
+          return;
+        }
         if (selectedItem.tracking_mode === 'bulk') {
           const qty = Number(quantity);
           if (!Number.isFinite(qty) || qty < 1) {
@@ -441,27 +573,68 @@ export default function StockControlPage() {
             stockItemId: selectedItem.id,
             quantity: qty,
             locationKey,
-            note: note.trim() || undefined,
-            referenceType: 'manual_issue',
+            note: issueLikeNote,
+            referenceType: operationType === 'borrow' ? 'manual_borrow' : 'manual_issue',
+            referenceId: referenceId.trim() || null,
+            issuedTo: issueAssigneeId,
           });
         } else {
-          if (!selectedUnitId) {
-            notifyError('Select stock unit', 'Choose a serialized unit to issue');
+          if (selectedUnitIds.length === 0) {
+            notifyError('Select stock units', 'Choose at least one serialized unit to issue');
             return;
           }
-          await issueStockUnit.mutateAsync({
-            stockUnitId: selectedUnitId,
-            note: note.trim() || undefined,
-            referenceType: 'manual_issue',
-          });
+          for (const stockUnitId of selectedUnitIds) {
+            await issueStockUnit.mutateAsync({
+              stockUnitId,
+              note: issueLikeNote,
+              referenceType: operationType === 'borrow' ? 'manual_borrow' : 'manual_issue',
+              referenceId: referenceId.trim() || null,
+              issuedTo: issueAssigneeId,
+            });
+          }
         }
-        notifySuccess('Inventory issued');
+        notifySuccess(operationType === 'borrow' ? 'Borrow recorded' : 'Inventory issued');
       }
       if (operationType === 'adjust') {
-        if (selectedItem.tracking_mode !== 'bulk') {
-          notifyError('Unsupported operation', 'Manual adjustment only supports bulk items');
+        if (selectedItem.tracking_mode === 'serialized') {
+          if (adjustmentMethod !== 'decrease') {
+            notifyError(
+              'Unsupported adjustment method',
+              'Serialized adjustment supports decrease only'
+            );
+            return;
+          }
+          if (selectedUnitIds.length === 0) {
+            notifyError(
+              'Select stock units',
+              'Choose at least one serialized unit to adjust'
+            );
+            return;
+          }
+          const composedNote =
+            [
+              'Serialized Adjustment',
+              adjustmentReason,
+              authorizedBy ? `Authorized By: ${authorizedBy}` : null,
+              note.trim() || null,
+            ]
+              .filter(Boolean)
+              .join(' | ') || undefined;
+
+          for (const stockUnitId of selectedUnitIds) {
+            await issueStockUnit.mutateAsync({
+              stockUnitId,
+              note: composedNote,
+              referenceType: 'manual_adjust',
+              referenceId: referenceId.trim() || null,
+            });
+          }
+          notifySuccess('Inventory adjusted');
+          setIsOperationOpen(false);
+          resetOperationForm();
           return;
         }
+
         const rawValue = Number(adjustDelta);
         if (!Number.isFinite(rawValue) || rawValue < 0) {
           notifyError('Invalid value', 'Adjustment value must be zero or greater');
@@ -509,7 +682,7 @@ export default function StockControlPage() {
         </div>
         <div className="flex items-center gap-3">
           <div className="flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-            {(['receive', 'issue', 'adjust'] as const).map((type) => (
+            {(['receive', 'adjust'] as const).map((type) => (
               <button
                 key={type}
                 type="button"
@@ -527,6 +700,13 @@ export default function StockControlPage() {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className="rounded-lg border border-primary/15 bg-white px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/5 dark:border-primary/20 dark:bg-slate-900"
+            onClick={goToAssetRequests}
+          >
+            Go To Asset Requests
+          </button>
           <button
             type="button"
             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary/90"
@@ -588,13 +768,40 @@ export default function StockControlPage() {
                           <td className="px-6 py-4 font-semibold">{item.name}</td>
                           <td className="px-6 py-4 text-xs capitalize">{item.tracking_mode}</td>
                           <td className="px-6 py-4 text-center font-bold">{item.total_on_hand}</td>
-                          <td className={`px-6 py-4 text-center font-bold ${status.label === 'LOW STOCK' ? 'text-orange-600' : ''}`}>{item.available}</td>
+                          <td
+                            className={`px-6 py-4 text-center font-bold ${
+                              status.label === 'LOW STOCK'
+                                ? 'text-orange-600'
+                                : status.label === 'OUT OF STOCK'
+                                  ? 'text-rose-600'
+                                  : status.label === 'RESERVED'
+                                    ? 'text-amber-600'
+                                    : ''
+                            }`}
+                          >
+                            {item.available}
+                          </td>
                           <td className="px-6 py-4 text-center text-slate-400">{item.reorder_point}</td>
                           <td className="px-6 py-4"><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${status.className}`}>{status.label}</span></td>
                           <td className="px-6 py-4 text-right">
-                            <button type="button" className="text-xs font-bold uppercase text-primary transition-colors hover:text-primary/70" onClick={() => { setOperationItemId(item.id); setIsOperationOpen(true); }}>
-                              Edit
-                            </button>
+                            <div className="flex items-center justify-end gap-3">
+                              <button
+                                type="button"
+                                className="text-xs font-bold uppercase text-primary transition-colors hover:text-primary/70"
+                                onClick={() => openEditItemDialog(item)}
+                                disabled={!canManage}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="text-xs font-bold uppercase text-red-600 transition-colors hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() => setDeleteItem(item)}
+                                disabled={!canManage}
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -622,9 +829,8 @@ export default function StockControlPage() {
             <div className="space-y-4">
               <div>
                 <Label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Operation Type</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <MiniOpButton active={operationType === 'receive'} label="Receive" onClick={() => { setOperationType('receive'); setIsOperationOpen(true); }} />
-                  <MiniOpButton active={operationType === 'issue'} label="Issue" onClick={() => { setOperationType('issue'); setIsOperationOpen(true); }} />
                   <MiniOpButton active={operationType === 'adjust'} label="Adjust" onClick={() => { setOperationType('adjust'); setIsOperationOpen(true); }} />
                 </div>
               </div>
@@ -632,8 +838,21 @@ export default function StockControlPage() {
                 <Label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Search SKU / Item</Label>
                 <Input className="h-11 border-none bg-slate-100 text-sm shadow-none dark:bg-slate-800" placeholder="Start typing name..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
+              <div className="rounded-lg border border-primary/10 bg-primary/5 p-3 dark:border-primary/20 dark:bg-primary/10">
+                <p className="text-xs font-bold uppercase tracking-wider text-primary">Request Workflow</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                  Borrow and Issue have moved to Asset Requests so approvals, due dates, and returns stay in one place.
+                </p>
+              </div>
               <button type="button" className="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary/90" onClick={() => setIsOperationOpen(true)}>
                 SUBMIT OPERATION
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-lg border border-slate-200 bg-white py-3 text-sm font-bold text-primary transition-colors hover:bg-primary/5 dark:border-slate-700 dark:bg-slate-900"
+                onClick={goToAssetRequests}
+              >
+                OPEN ASSET REQUESTS
               </button>
             </div>
           </section>
@@ -753,10 +972,12 @@ export default function StockControlPage() {
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Stock Control</span>
               <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                Create Stock Item
+                {editingItemId ? 'Edit Stock Item' : 'Create Stock Item'}
               </DialogTitle>
               <DialogDescription className="text-sm text-slate-500 dark:text-slate-400">
-                Add a new inventory SKU for bulk or serialized stock tracking.
+                {editingItemId
+                  ? 'Update stock item details, thresholds, and catalog information.'
+                  : 'Add a new inventory SKU for bulk or serialized stock tracking.'}
               </DialogDescription>
             </div>
             <button
@@ -794,17 +1015,18 @@ export default function StockControlPage() {
                       <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                         SKU
                       </span>
-                      <input
-                        className={`w-full rounded-lg border px-4 py-2.5 text-slate-900 outline-none transition-all dark:text-slate-100 ${
-                          newSku.trim()
+                        <input
+                          className={`w-full rounded-lg border px-4 py-2.5 text-slate-900 outline-none transition-all dark:text-slate-100 ${
+                            newSku.trim()
                             ? 'border-slate-200 bg-slate-50 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50'
                             : 'border-red-500 bg-red-50/50 focus:ring-2 focus:ring-red-200 dark:border-red-500/50 dark:bg-red-900/10'
                         }`}
-                        placeholder="Enter SKU code"
-                        type="text"
-                        value={newSku}
-                        onChange={(e) => setNewSku(e.target.value)}
-                      />
+                          placeholder="Enter SKU code"
+                          type="text"
+                          value={newSku}
+                          onChange={(e) => setNewSku(e.target.value)}
+                          disabled={updateStockItem.isPending}
+                        />
                       {!newSku.trim() ? (
                         <span className="flex items-center gap-1 text-xs font-medium text-red-600">
                           <AlertCircle className="h-3.5 w-3.5" />
@@ -839,6 +1061,7 @@ export default function StockControlPage() {
                           type="text"
                           value={newBrand}
                           onChange={(e) => setNewBrand(e.target.value)}
+                          disabled={Boolean(editingItemId)}
                         />
                       </label>
                     </div>
@@ -855,6 +1078,7 @@ export default function StockControlPage() {
                               ? 'bg-white text-primary shadow-sm dark:bg-slate-700'
                               : 'text-slate-500 dark:text-slate-400'
                           }`}
+                          disabled={Boolean(editingItemId)}
                         >
                           Bulk
                         </button>
@@ -866,12 +1090,15 @@ export default function StockControlPage() {
                               ? 'bg-white text-primary shadow-sm dark:bg-slate-700'
                               : 'text-slate-500 dark:text-slate-400'
                           }`}
+                          disabled={Boolean(editingItemId)}
                         >
                           Serialized
                         </button>
                       </div>
                       <p className="text-xs italic text-slate-500">
-                        Bulk items are tracked by quantity. Serialized items require unique identifiers.
+                        {editingItemId
+                          ? 'Tracking mode is locked after creation to preserve inventory history.'
+                          : 'Bulk items are tracked by quantity. Serialized items require unique identifiers.'}
                       </p>
                       {newMode === 'serialized' ? (
                         <div className="rounded-lg border border-primary/10 bg-primary/5 p-4 dark:bg-primary/10">
@@ -936,6 +1163,7 @@ export default function StockControlPage() {
                         className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
                         value={newLocationKey}
                         onChange={(e) => setNewLocationKey(e.target.value)}
+                        disabled={Boolean(editingItemId)}
                       >
                         {LOCATION_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -950,6 +1178,7 @@ export default function StockControlPage() {
                       type="button"
                       onClick={() => setIsWarrantyTracking((value) => !value)}
                       className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-left dark:border-slate-800 dark:bg-slate-800/30"
+                      disabled={Boolean(editingItemId)}
                     >
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -967,86 +1196,7 @@ export default function StockControlPage() {
                         />
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsStockItemActive((value) => !value)}
-                      className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-left dark:border-slate-800 dark:bg-slate-800/30"
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                          Active Status
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          Enable this SKU for procurement
-                        </span>
-                      </div>
-                      <span className="relative h-5 w-10 rounded-full bg-primary/20">
-                        <span
-                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-primary transition-all ${
-                            isStockItemActive ? 'right-0.5' : 'left-0.5'
-                          }`}
-                        />
-                      </span>
-                    </button>
                   </div>
-                </section>
-
-                <hr className="border-slate-100 dark:border-slate-800" />
-
-                <section className="flex flex-col gap-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <BadgeDollarSign className="h-[18px] w-[18px] text-primary" />
-                    <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-                      Procurement
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Preferred Supplier
-                      </span>
-                      <select
-                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
-                        value={newSupplier}
-                        onChange={(e) => setNewSupplier(e.target.value)}
-                      >
-                        {SUPPLIER_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Unit Cost (USD)
-                      </span>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                          $
-                        </span>
-                        <input
-                          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-7 pr-4 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
-                          placeholder="1200.00"
-                          type="number"
-                          value={newUnitCost}
-                          onChange={(e) => setNewUnitCost(e.target.value)}
-                        />
-                      </div>
-                    </label>
-                  </div>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Internal Notes
-                    </span>
-                    <textarea
-                      className="min-h-[88px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100"
-                      placeholder="Add any specific details for the procurement team..."
-                      rows={3}
-                      value={newInternalNotes}
-                      onChange={(e) => setNewInternalNotes(e.target.value)}
-                    />
-                  </label>
                 </section>
               </div>
 
@@ -1123,17 +1273,30 @@ export default function StockControlPage() {
               <button
                 type="button"
                 className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
-                onClick={() => notifySuccess('Draft saved', 'Create Stock Item draft is UI-only for now')}
+                onClick={() =>
+                  notifySuccess(
+                    editingItemId ? 'Changes staged' : 'Draft saved',
+                    editingItemId
+                      ? 'Review the item details, then save to apply updates.'
+                      : 'Create Stock Item draft is UI-only for now'
+                  )
+                }
               >
-                Save Draft
+                {editingItemId ? 'Review Changes' : 'Save Draft'}
               </button>
               <button
                 type="button"
                 className="rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
                 onClick={() => void handleCreateItem()}
-                disabled={createStockItem.isPending}
+                disabled={createStockItem.isPending || updateStockItem.isPending}
               >
-                {createStockItem.isPending ? 'Creating...' : 'Create Stock Item'}
+                {editingItemId
+                  ? updateStockItem.isPending
+                    ? 'Saving...'
+                    : 'Save Changes'
+                  : createStockItem.isPending
+                    ? 'Creating...'
+                    : 'Create Stock Item'}
               </button>
             </div>
           </footer>
@@ -1154,7 +1317,6 @@ export default function StockControlPage() {
                   </DialogTitle>
                   <DialogDescription className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {operationType === 'receive' && 'Receive stock with clear audit-friendly inputs.'}
-                    {operationType === 'issue' && 'Issue stock with clear audit-friendly inputs.'}
                     {operationType === 'adjust' && 'Adjust stock with clear audit-friendly inputs.'}
                   </DialogDescription>
                 </div>
@@ -1173,7 +1335,6 @@ export default function StockControlPage() {
             <div className="flex w-fit rounded-lg bg-slate-200/50 p-1 dark:bg-slate-800">
               {([
                 ['receive', 'Receive'],
-                ['issue', 'Issue'],
                 ['adjust', 'Adjust'],
               ] as const).map(([value, label]) => (
                 <button
@@ -1208,7 +1369,10 @@ export default function StockControlPage() {
                             : 'border-slate-200 bg-white text-slate-900 dark:bg-slate-800'
                         }`}
                         value={operationItemId}
-                        onChange={(e) => setOperationItemId(e.target.value)}
+                        onChange={(e) => {
+                          setOperationItemId(e.target.value);
+                          setSelectedUnitIds([]);
+                        }}
                         disabled={stockItems.length === 0}
                       >
                         <option value="">
@@ -1256,11 +1420,17 @@ export default function StockControlPage() {
                         className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         value={adjustmentMethod}
                         onChange={(e) => setAdjustmentMethod(e.target.value as (typeof ADJUSTMENT_METHOD_OPTIONS)[number])}
+                        disabled={selectedItem?.tracking_mode === 'serialized'}
                       >
                         <option value="set_balance">Set new balance</option>
                         <option value="increase">Increase quantity</option>
                         <option value="decrease">Decrease quantity</option>
                       </select>
+                      {selectedItem?.tracking_mode === 'serialized' && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Serialized adjustment supports decrease by selected units.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -1268,7 +1438,20 @@ export default function StockControlPage() {
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       {operationType === 'adjust' ? (adjustmentMethod === 'set_balance' ? 'New Quantity' : 'Delta Quantity') : 'Quantity'}
                     </label>
-                    {operationType === 'adjust' ? (
+                    {operationType === 'adjust' && selectedItem?.tracking_mode === 'serialized' ? (
+                      <div className="flex h-12">
+                        <input
+                          className="h-12 flex-1 rounded-l-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder="0"
+                          type="number"
+                          value={selectedSerializedCount || ''}
+                          readOnly
+                        />
+                        <div className="flex items-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-100 px-4 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                          SELECTED
+                        </div>
+                      </div>
+                    ) : operationType === 'adjust' ? (
                       <input
                         className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         placeholder="0"
@@ -1331,27 +1514,30 @@ export default function StockControlPage() {
                         />
                       </div>
                     </>
-                  ) : operationType === 'issue' ? (
+                  ) : operationType === 'issue' || operationType === 'borrow' ? (
                     <>
                       <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Requester / Assignee
+                          {operationType === 'borrow' ? 'Borrower' : 'Requester / Assignee'}
                         </label>
-                        <div className="relative">
-                          <input
-                            className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                            type="text"
-                            value={issueAssignee}
-                            onChange={(e) => setIssueAssignee(e.target.value)}
-                          />
-                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                            <Search className="h-4 w-4" />
-                          </span>
-                        </div>
+                        <select
+                          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          value={issueAssigneeId}
+                          onChange={(e) => setIssueAssigneeId(e.target.value)}
+                        >
+                          <option value="">
+                            {operationType === 'borrow' ? 'Select borrower' : 'Select assignee'}
+                          </option>
+                          {users.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.name || user.email || user.id}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Issue Date
+                          {operationType === 'borrow' ? 'Borrow Date' : 'Issue Date'}
                         </label>
                         <input
                           className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
@@ -1360,6 +1546,19 @@ export default function StockControlPage() {
                           onChange={(e) => setIssueDate(e.target.value)}
                         />
                       </div>
+                      {operationType === 'borrow' ? (
+                        <div className="flex flex-col gap-1.5 md:col-span-2">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Due Date
+                          </label>
+                          <input
+                            className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            type="date"
+                            value={borrowDueDate}
+                            onChange={(e) => setBorrowDueDate(e.target.value)}
+                          />
+                        </div>
+                      ) : null}
                       <div className="flex flex-col gap-1.5 md:col-span-2">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           Destination Team
@@ -1424,11 +1623,21 @@ export default function StockControlPage() {
                   {operationType !== 'adjust' ? (
                     <div className="flex flex-col gap-1.5 md:col-span-2">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        {operationType === 'receive' ? 'Reference ID / PO Number' : 'Reference ID'}
+                        {operationType === 'receive'
+                          ? 'Reference ID / PO Number'
+                          : operationType === 'borrow'
+                            ? 'Borrow Reference'
+                            : 'Reference ID'}
                       </label>
                       <input
                         className="h-12 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 transition-all focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                        placeholder={operationType === 'receive' ? 'REF-2023-0045' : 'ISS-2024-0012'}
+                        placeholder={
+                          operationType === 'receive'
+                            ? 'REF-2023-0045'
+                            : operationType === 'borrow'
+                              ? 'BORROW-2026-001'
+                              : 'ISS-2024-0012'
+                        }
                         type="text"
                         value={referenceId}
                         onChange={(e) => setReferenceId(e.target.value)}
@@ -1448,27 +1657,52 @@ export default function StockControlPage() {
                         onChange={(e) => setSerialInput(e.target.value)}
                       />
                     </div>
-                  ) : selectedItem?.tracking_mode === 'serialized' && operationType === 'issue' ? (
+                  ) : selectedItem?.tracking_mode === 'serialized' && (operationType === 'issue' || operationType === 'borrow' || operationType === 'adjust') ? (
                     <div className="flex flex-col gap-1.5 md:col-span-2">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Serialized Unit
+                        Serialized Units
                       </label>
-                      <Select
-                        value={selectedUnitId || '__none__'}
-                        onValueChange={(value) => setSelectedUnitId(value === '__none__' ? '' : value)}
-                      >
-                        <SelectTrigger className="h-12 rounded-lg border-slate-200 bg-white text-sm dark:border-slate-700 dark:bg-slate-800">
-                          <SelectValue placeholder="Choose stock unit" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Select unit</SelectItem>
-                          {inStockUnits.map((unit) => (
-                            <SelectItem key={unit.id} value={unit.id}>
-                              {unit.serial_no} ({unit.status})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300"
+                            onClick={() => setSelectedUnitIds(inStockUnits.map((unit) => unit.id))}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300"
+                            onClick={() => setSelectedUnitIds([])}
+                          >
+                            Clear
+                          </button>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            {selectedSerializedCount} selected
+                          </span>
+                        </div>
+                        <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                          {inStockUnits.map((unit) => {
+                            const isSelected = selectedUnitIds.includes(unit.id);
+                            return (
+                              <button
+                                key={unit.id}
+                                type="button"
+                                className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
+                                  isSelected
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-slate-200 text-slate-700 hover:border-primary/40 dark:border-slate-700 dark:text-slate-200'
+                                }`}
+                                onClick={() => toggleSerializedUnitSelection(unit.id)}
+                              >
+                                <span>{unit.serial_no}</span>
+                                <span className="text-xs uppercase">{unit.status}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   ) : null}
 
@@ -1481,10 +1715,11 @@ export default function StockControlPage() {
                       placeholder={
                         operationType === 'adjust'
                           ? 'Enter additional details about this adjustment...'
-                          : 
-                        operationType === 'issue'
-                          ? 'Add any specific details regarding this issuance...'
-                          : 'Additional details about the delivery condition...'
+                          : operationType === 'issue'
+                            ? 'Add any specific details regarding this issuance...'
+                            : operationType === 'borrow'
+                              ? 'Add borrower notes, return expectations, or hand-off details...'
+                              : 'Additional details about the delivery condition...'
                       }
                       rows={3}
                       value={note}
@@ -1509,10 +1744,12 @@ export default function StockControlPage() {
                           ? 'text-green-600 dark:text-green-400'
                           : operationType === 'issue'
                             ? 'text-blue-600 dark:text-blue-400'
+                            : operationType === 'borrow'
+                              ? 'text-violet-600 dark:text-violet-400'
                             : 'text-amber-600 dark:text-amber-400'
                       }`}>
                         <Download className="h-4 w-4" />
-                        {operationType === 'receive' ? 'Receive' : operationType === 'issue' ? 'Stock Issue' : 'Adjust'}
+                        {operationType === 'receive' ? 'Receive' : operationType === 'issue' ? 'Stock Issue' : operationType === 'borrow' ? 'Borrow' : 'Adjust'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
@@ -1523,11 +1760,13 @@ export default function StockControlPage() {
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-500 dark:text-slate-400">
-                        {operationType === 'issue' ? 'Tracking' : operationType === 'adjust' ? 'Operation Type' : 'Stock Mode'}
+                        {operationType === 'issue' || operationType === 'borrow' ? 'Tracking' : operationType === 'adjust' ? 'Operation Type' : 'Stock Mode'}
                       </span>
                       <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${
                         operationType === 'issue'
                           ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                          : operationType === 'borrow'
+                            ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
                           : operationType === 'adjust'
                             ? 'bg-primary/10 text-primary'
                           : 'bg-primary/10 text-primary'
@@ -1539,14 +1778,14 @@ export default function StockControlPage() {
                             : 'BULK'}
                       </span>
                     </div>
-                    {operationType === 'issue' ? (
+                    {operationType === 'issue' || operationType === 'borrow' ? (
                       <>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-slate-500 dark:text-slate-400">Selected ID</span>
                           <span className="font-mono text-sm font-bold text-primary">
                             {selectedItem?.tracking_mode === 'serialized'
-                              ? selectedUnitId
-                                ? inStockUnits.find((unit) => unit.id === selectedUnitId)?.serial_no?.split('-').at(-1) ?? '—'
+                              ? selectedSerializedCount > 0
+                                ? `${selectedSerializedCount} units`
                                 : '—'
                               : 'BULK'}
                           </span>
@@ -1599,9 +1838,11 @@ export default function StockControlPage() {
                           <span className="font-bold text-slate-900 dark:text-slate-100">
                             {operationType === 'adjust'
                               ? `${Number(adjustDelta || 0) >= 0 ? '+' : ''} ${adjustDelta || '0'} units`
-                              : `+ ${
+                              : `${operationType === 'receive' ? '+' : '-'} ${
                                   selectedItem?.tracking_mode === 'serialized'
-                                    ? receiveQuantityValue || 0
+                                    ? operationType === 'receive'
+                                      ? receiveQuantityValue || 0
+                                      : selectedSerializedCount
                                     : quantity || '0'
                                 } units`}
                           </span>
@@ -1622,17 +1863,20 @@ export default function StockControlPage() {
                   </div>
                 </div>
 
-                {operationType === 'issue' ? (
+                {operationType === 'issue' || operationType === 'borrow' ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/50 dark:bg-amber-900/20">
                     <div className="flex gap-3">
                       <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                       <div className="flex flex-col gap-1">
                         <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300">
-                          Stock Level Notice
+                          {operationType === 'borrow' ? 'Borrow Notice' : 'Stock Level Notice'}
                         </h4>
                         <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400">
-                          Low stock warning if quantity reaches threshold. Current threshold is set to{' '}
-                          {selectedItem?.reorder_point ?? 0} units.
+                          {operationType === 'borrow'
+                            ? 'Borrowing deducts inventory from available stock now. When the item comes back, use Receive Stock to bring it into inventory again.'
+                            : `Low stock warning if quantity reaches threshold. Current threshold is set to ${
+                                selectedItem?.reorder_point ?? 0
+                              } units.`}
                         </p>
                       </div>
                     </div>
@@ -1666,17 +1910,25 @@ export default function StockControlPage() {
                   </div>
                 )}
 
-                {operationType === 'issue' ? (
+                {operationType === 'issue' || operationType === 'borrow' ? (
                   <div className="space-y-3">
                     <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                      Recent Action
+                      {operationType === 'borrow' ? 'Borrow Reminder' : 'Recent Action'}
                     </h4>
                     <div className="flex items-start gap-3">
                       <div className="mt-1.5 h-2 w-2 rounded-full bg-slate-300" />
                       <div className="flex flex-col">
-                        <span className="text-xs font-medium">3 items received today</span>
+                        <span className="text-xs font-medium">
+                          {operationType === 'borrow'
+                            ? borrowDueDate
+                              ? `Due back on ${borrowDueDate}`
+                              : 'Set a due date to track this borrow'
+                            : '3 items received today'}
+                        </span>
                         <span className="text-[10px] text-slate-400">
-                          2 hours ago • {selectedOperationLocationLabel}
+                          {operationType === 'borrow'
+                            ? `${selectedAssignee?.name || selectedAssignee?.email || 'Borrower not selected'} • ${selectedOperationLocationLabel}`
+                            : `2 hours ago • ${selectedOperationLocationLabel}`}
                         </span>
                       </div>
                     </div>
@@ -1732,11 +1984,40 @@ export default function StockControlPage() {
               disabled={receiveStock.isPending || receiveSerializedStock.isPending || issueStockBulk.isPending || issueStockUnit.isPending || adjustStockBalance.isPending}
             >
               <Plus className="h-4 w-4" />
-              {operationType === 'receive' ? 'Receive Stock' : operationType === 'issue' ? 'Issue Stock' : 'Apply Adjustment'}
+              {operationType === 'receive' ? 'Receive Stock' : operationType === 'issue' ? 'Issue Stock' : operationType === 'borrow' ? 'Confirm Borrow' : 'Apply Adjustment'}
             </button>
           </footer>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={deleteItem != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteItem(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete stock item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove{' '}
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                {deleteItem?.name ?? 'this item'}
+              </span>{' '}
+              and its related balances, serialized units, and movement history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteStockItem.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus-visible:ring-red-500 dark:bg-red-600 dark:hover:bg-red-700"
+              onClick={() => void handleDeleteItem()}
+            >
+              {deleteStockItem.isPending ? 'Deleting...' : 'Delete Item'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

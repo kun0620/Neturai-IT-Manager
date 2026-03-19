@@ -68,7 +68,6 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
       id: string;
       name: string;
       asset_code: string;
-      serial_number: string | null;
       assigned_to: string | null;
       asset_type: { key: string; name: string } | null;
     }>
@@ -87,7 +86,6 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
         id,
         name,
         asset_code,
-        serial_number,
         assigned_to,
         asset_type:asset_types(key, name)
       `
@@ -270,7 +268,7 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
         const asset = row.original.assigned_asset;
         if (!asset) return '-';
         const typeLabel = asset.asset_type?.name ?? 'Device';
-        const detail = asset.serial_number ?? asset.asset_code ?? '';
+        const detail = asset.asset_code ?? '';
         return detail
           ? `${asset.name} (${typeLabel}: ${detail})`
           : `${asset.name} (${typeLabel})`;
@@ -497,7 +495,7 @@ export function UserManagementPanel({ embedded = false }: UserManagementPanelPro
                   <SelectItem value="">None</SelectItem>
                   {editAssets.map((asset) => {
                     const typeLabel = asset.asset_type?.name ?? 'Device';
-                    const detail = asset.serial_number ?? asset.asset_code ?? '';
+                    const detail = asset.asset_code ?? '';
                     const label = detail
                       ? `${asset.name} (${typeLabel}: ${detail})`
                       : `${asset.name} (${typeLabel})`;

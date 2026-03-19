@@ -175,7 +175,7 @@ export function AssetRequestsPage() {
   const [requestType, setRequestType] = useState<'borrow' | 'issue'>('borrow');
   const [assetId, setAssetId] = useState('');
   const [stockItemId, setStockItemId] = useState('');
-  const [stockUnitId, setStockUnitId] = useState('');
+  const [stockUnitIds, setStockUnitIds] = useState<string[]>([]);
   const [quantity, setQuantity] = useState('1');
   const [dateValue, setDateValue] = useState('');
   const [reason, setReason] = useState('');
@@ -210,6 +210,10 @@ export function AssetRequestsPage() {
   );
 
   const tableRequests = activeTab === 'pending' ? pendingRequests : visibleRequests;
+  const serializedSelectedCount =
+    requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized'
+      ? stockUnitIds.length
+      : 0;
   const parsedQuantity = Number(quantity) || 1;
   const summaryDateLabel = dateValue ? format(new Date(dateValue), 'MMM d, yyyy') : '-- / -- / --';
   const summaryTypeLabel = requestType === 'borrow' ? 'Borrow Request' : 'Issue Request';
@@ -218,17 +222,27 @@ export function AssetRequestsPage() {
       ? `${selectedAsset.name} (${selectedAsset.asset_code})`
       : 'No item selected'
     : selectedStockItem
-      ? `${selectedStockItem.name}${stockUnitId ? ` / ${issueUnits.find((unit) => unit.id === stockUnitId)?.serial_no ?? stockUnitId}` : ''}`
+      ? `${selectedStockItem.name}${
+          serializedSelectedCount > 0 ? ` / ${serializedSelectedCount} serialized units` : ''
+        }`
       : 'No item selected';
 
   const resetCreateForm = () => {
     setRequestType('borrow');
     setAssetId('');
     setStockItemId('');
-    setStockUnitId('');
+    setStockUnitIds([]);
     setQuantity('1');
     setDateValue('');
     setReason('');
+  };
+
+  const toggleStockUnitSelection = (stockUnitId: string) => {
+    setStockUnitIds((current) =>
+      current.includes(stockUnitId)
+        ? current.filter((id) => id !== stockUnitId)
+        : [...current, stockUnitId]
+    );
   };
 
   const handleApprove = async (requestId: string) => {
@@ -291,20 +305,31 @@ export function AssetRequestsPage() {
       return;
     }
 
-    if (requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized' && parsedQuantity !== 1) {
-      notifyError('Invalid quantity', 'Serialized issue request quantity must be 1');
-      return;
-    }
-
     try {
       if (requestType === 'issue') {
-        await createIssueWithStock.mutateAsync({
-          stockItemId,
-          stockUnitId: stockUnitId || null,
-          quantity: selectedStockItem?.tracking_mode === 'serialized' ? 1 : parsedQuantity,
-          neededAt: dateValue || null,
-          reason: reason.trim() || undefined,
-        });
+        if (selectedStockItem?.tracking_mode === 'serialized') {
+          if (stockUnitIds.length === 0) {
+            notifyError('Serialized unit required', 'Please select at least one serialized unit');
+            return;
+          }
+          for (const stockUnitId of stockUnitIds) {
+            await createIssueWithStock.mutateAsync({
+              stockItemId,
+              stockUnitId,
+              quantity: 1,
+              neededAt: dateValue || null,
+              reason: reason.trim() || undefined,
+            });
+          }
+        } else {
+          await createIssueWithStock.mutateAsync({
+            stockItemId,
+            stockUnitId: null,
+            quantity: parsedQuantity,
+            neededAt: dateValue || null,
+            reason: reason.trim() || undefined,
+          });
+        }
       } else {
         await createRequest.mutateAsync({
           assetId,
@@ -677,7 +702,7 @@ export function AssetRequestsPage() {
                     onClick={() => {
                       setRequestType('borrow');
                       setStockItemId('');
-                      setStockUnitId('');
+                      setStockUnitIds([]);
                     }}
                     className={`h-full grow rounded-lg px-2 text-sm font-semibold transition-all ${
                       requestType === 'borrow'
@@ -692,6 +717,7 @@ export function AssetRequestsPage() {
                     onClick={() => {
                       setRequestType('issue');
                       setAssetId('');
+                      setStockUnitIds([]);
                     }}
                     className={`h-full grow rounded-lg px-2 text-sm font-semibold transition-all ${
                       requestType === 'issue'
@@ -742,7 +768,10 @@ export function AssetRequestsPage() {
                           <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                             Stock Item
                           </Label>
-                          <Select value={stockItemId || '__none__'} onValueChange={(value) => setStockItemId(value === '__none__' ? '' : value)}>
+                          <Select value={stockItemId || '__none__'} onValueChange={(value) => {
+                            setStockItemId(value === '__none__' ? '' : value);
+                            setStockUnitIds([]);
+                          }}>
                             <SelectTrigger className="h-11 border-slate-200 bg-slate-50 text-sm shadow-none dark:border-slate-700 dark:bg-slate-800/50">
                               <div className="flex items-center gap-2">
                                 <Search className="h-4 w-4 text-slate-400" />
@@ -763,21 +792,49 @@ export function AssetRequestsPage() {
                         {selectedStockItem?.tracking_mode === 'serialized' && (
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Stock Unit / Serial
+                              Stock Units / Serial
                             </Label>
-                            <Select value={stockUnitId || '__none__'} onValueChange={(value) => setStockUnitId(value === '__none__' ? '' : value)}>
-                              <SelectTrigger className="h-11 border-slate-200 bg-slate-50 text-sm shadow-none dark:border-slate-700 dark:bg-slate-800/50">
-                                <SelectValue placeholder="Choose serial or auto-pick" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">Auto-pick first available</SelectItem>
-                                {issueUnits.map((unit) => (
-                                  <SelectItem key={unit.id} value={unit.id}>
-                                    {unit.serial_no} ({unit.status})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                  onClick={() => setStockUnitIds(issueUnits.map((unit) => unit.id))}
+                                >
+                                  Select all
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                  onClick={() => setStockUnitIds([])}
+                                >
+                                  Clear
+                                </button>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  {serializedSelectedCount} selected
+                                </span>
+                              </div>
+                              <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                                {issueUnits.map((unit) => {
+                                  const isSelected = stockUnitIds.includes(unit.id);
+                                  return (
+                                    <button
+                                      key={unit.id}
+                                      type="button"
+                                      className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
+                                        isSelected
+                                          ? 'border-primary bg-primary/10 text-primary'
+                                          : 'border-slate-200 bg-white text-slate-700 hover:border-primary/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                                      }`}
+                                      onClick={() => toggleStockUnitSelection(unit.id)}
+                                    >
+                                      <span>{unit.serial_no}</span>
+                                      <span className="text-xs uppercase">{unit.status}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           </div>
                         )}
                       </>
@@ -874,7 +931,14 @@ export function AssetRequestsPage() {
                             Quantity
                           </span>
                           <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {parsedQuantity} unit{parsedQuantity > 1 ? 's' : ''}
+                            {(requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized'
+                              ? serializedSelectedCount
+                              : parsedQuantity)} unit
+                            {(requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized'
+                              ? serializedSelectedCount
+                              : parsedQuantity) > 1
+                              ? 's'
+                              : ''}
                           </span>
                         </div>
                         <div className="flex flex-col gap-1">
