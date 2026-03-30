@@ -1,0 +1,1 @@
+import{t as c,i as s}from"./index-CZdu7E9o.js";function a(t,e){const o=c(t),n=c(e),r=o.getTime()-n.getTime();return r<0?-1:r>0?1:r}function i(t){return s(t,Date.now())}function f(t){return e=>{const n=(t?Math[t]:Math.trunc)(e);return n===0?0:n}}export{a,i as c,f as g};

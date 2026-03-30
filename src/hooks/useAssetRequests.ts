@@ -17,6 +17,8 @@ export type AssetRequestRow = {
   due_at: string | null;
   approved_at: string | null;
   fulfilled_at: string | null;
+  returned_at: string | null;
+  returned_by: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -161,6 +163,14 @@ type CreateAssetIssueWithStockPayload = {
   stockUnitId?: string | null;
 };
 
+type CreateAssetBorrowWithStockPayload = {
+  stockItemId: string;
+  quantity: number;
+  reason?: string;
+  dueAt?: string | null;
+  stockUnitId?: string | null;
+};
+
 export function useCreateAssetIssueRequestWithStock() {
   const queryClient = useQueryClient();
   return useMutation<AssetRequestRow, Error, CreateAssetIssueWithStockPayload>({
@@ -170,6 +180,29 @@ export function useCreateAssetIssueRequestWithStock() {
         p_quantity: payload.quantity,
         p_reason: payload.reason ?? null,
         p_needed_at: payload.neededAt ?? null,
+        p_stock_unit_id: payload.stockUnitId ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return data as AssetRequestRow;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['asset-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-units'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+    },
+  });
+}
+
+export function useCreateAssetBorrowRequestWithStock() {
+  const queryClient = useQueryClient();
+  return useMutation<AssetRequestRow, Error, CreateAssetBorrowWithStockPayload>({
+    mutationFn: async (payload) => {
+      const { data, error } = await supabase.rpc('create_asset_borrow_request_with_stock', {
+        p_stock_item_id: payload.stockItemId,
+        p_quantity: payload.quantity,
+        p_reason: payload.reason ?? null,
+        p_due_at: payload.dueAt ?? null,
         p_stock_unit_id: payload.stockUnitId ?? null,
       });
       if (error) throw new Error(error.message);
@@ -199,6 +232,9 @@ export function useApproveAssetRequest() {
       queryClient.invalidateQueries({ queryKey: ['asset-requests'] });
       queryClient.invalidateQueries({ queryKey: ['asset-loans'] });
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-units'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
     },
   });
 }
@@ -257,6 +293,27 @@ export function useReturnAssetLoan() {
       queryClient.invalidateQueries({ queryKey: ['asset-requests'] });
       queryClient.invalidateQueries({ queryKey: ['asset-loans'] });
       queryClient.invalidateQueries({ queryKey: ['assets'] });
+    },
+  });
+}
+
+export function useReturnStockBorrowRequest() {
+  const queryClient = useQueryClient();
+  return useMutation<AssetRequestRow, Error, { requestId: string; notes?: string }>({
+    mutationFn: async ({ requestId, notes }) => {
+      const { data, error } = await supabase.rpc('return_stock_borrow_request', {
+        p_request_id: requestId,
+        p_notes: notes ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return data as AssetRequestRow;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['asset-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['asset-loans'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-units'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
     },
   });
 }

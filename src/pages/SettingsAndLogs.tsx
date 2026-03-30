@@ -31,11 +31,14 @@ import {
 import { useSettings, useUpdateSetting } from '@/hooks/useSettings';
 import {
   useCategories,
-  useCategoryStats,
-  useAddCategory,
-  useUpdateCategory,
-  useDeleteCategory,
 } from '@/hooks/useCategories';
+import {
+  useAddAssetCategory,
+  useAssetCategories,
+  useAssetCategoryStats,
+  useDeleteAssetCategory,
+  useUpdateAssetCategory,
+} from '@/hooks/useAssetCategories';
 import { useSLAPolicies, useUpdateSLAPolicy } from '@/hooks/useSLAPolicies';
 import { useLogs } from '@/hooks/useLogs';
 import { useAdminUsers } from '@/hooks/useAdminUsers';
@@ -61,15 +64,26 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Activity,
   AlertTriangle,
+  AlertOctagon,
+  BellPlus,
   Bot,
   CheckCircle2,
+  ChevronRight,
+  Copy,
+  Download,
+  Eye,
+  Gauge,
   Globe2,
   Info,
+  MoreVertical,
   Plus,
   Search,
   Send,
+  Share2,
   ShieldCheck,
+  UserX,
   Trash2,
   UserCog,
   Users2,
@@ -77,7 +91,7 @@ import {
   XCircle,
   X,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { mapLogToText } from '@/features/logs/mapLogToText';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { motion } from 'motion/react';
@@ -88,7 +102,60 @@ import { supabase } from '@/lib/supabase';
 
 /* ================= PAGE ================= */
 
+const getLogDetailsRecord = (value: unknown): Record<string, unknown> => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+};
+
+const getLogSeverity = (
+  action: string,
+  details: Record<string, unknown>
+): 'critical' | 'warning' | 'info' => {
+  const sourceText = `${action} ${JSON.stringify(details)}`.toLowerCase();
+  if (
+    sourceText.includes('critical') ||
+    sourceText.includes('unauthorized') ||
+    sourceText.includes('breach') ||
+    sourceText.includes('blocked')
+  ) {
+    return 'critical';
+  }
+  if (
+    sourceText.includes('warning') ||
+    sourceText.includes('slow') ||
+    sourceText.includes('failed')
+  ) {
+    return 'warning';
+  }
+  return 'info';
+};
+
+const getLogSource = (action: string, details: Record<string, unknown>): string => {
+  const source = typeof details.source === 'string' ? details.source : '';
+  const sourceText = `${source} ${action}`.toLowerCase();
+  if (sourceText.includes('auth')) return 'Auth';
+  if (sourceText.includes('db') || sourceText.includes('database')) return 'DB';
+  if (sourceText.includes('api')) return 'API';
+  if (sourceText.includes('schedule')) return 'Scheduler';
+  if (sourceText.includes('ui')) return 'UI';
+  return 'System';
+};
+
+const getLogIp = (details: Record<string, unknown>): string => {
+  const candidates = ['ip', 'source_ip', 'client_ip', 'remote_ip'] as const;
+  for (const key of candidates) {
+    const value = details[key];
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return '—';
+};
+
 export const SettingsAndLogs: React.FC = () => {
+  type PermissionLevel = 'full' | 'conditional' | 'none';
+  type PermissionCategoryKey = 'tickets' | 'assets' | 'settings';
+
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromQuery = searchParams.get('tab');
@@ -103,12 +170,16 @@ export const SettingsAndLogs: React.FC = () => {
   const updateSetting = useUpdateSetting();
   const { data: categories, isLoading: isLoadingCategories } = useCategories();
   const {
-    data: categoryStats,
-    isLoading: isLoadingCategoryStats,
-  } = useCategoryStats();
-  const addCategory = useAddCategory();
-  const updateCategory = useUpdateCategory();
-  const deleteCategory = useDeleteCategory();
+    data: assetCategories,
+    isLoading: isLoadingAssetCategories,
+  } = useAssetCategories();
+  const {
+    data: assetCategoryStats,
+    isLoading: isLoadingAssetCategoryStats,
+  } = useAssetCategoryStats();
+  const addAssetCategory = useAddAssetCategory();
+  const updateAssetCategory = useUpdateAssetCategory();
+  const deleteAssetCategory = useDeleteAssetCategory();
   const { data: slaPolicies, isLoading: isLoadingSLAPolicies } = useSLAPolicies();
   const updateSLAPolicy = useUpdateSLAPolicy();
   const { data: adminUsers, isLoading: isLoadingAdminUsers } = useAdminUsers();
@@ -130,6 +201,11 @@ export const SettingsAndLogs: React.FC = () => {
     id: string;
     name: string;
   } | null>(null);
+  const [assetCategoryFilter, setAssetCategoryFilter] = useState('');
+  const [assetCategoryTypeFilter, setAssetCategoryTypeFilter] = useState<
+    'all' | 'hardware' | 'software' | 'virtual'
+  >('all');
+  const [assetCategoryPage, setAssetCategoryPage] = useState(1);
   const [resetSlaOpen, setResetSlaOpen] = useState(false);
   const [purgeLogsOpen, setPurgeLogsOpen] = useState(false);
   const [isPurgingLogs, setIsPurgingLogs] = useState(false);
@@ -165,11 +241,40 @@ export const SettingsAndLogs: React.FC = () => {
   const [autoAssignmentEnabled, setAutoAssignmentEnabled] = useState(true);
   const [publicPortalEnabled, setPublicPortalEnabled] = useState(true);
   const [manageRoleOpen, setManageRoleOpen] = useState(false);
+  const [createCustomRoleOpen, setCreateCustomRoleOpen] = useState(false);
+  const [editPermissionsOpen, setEditPermissionsOpen] = useState(false);
   const [managedRoleKey, setManagedRoleKey] = useState<'admin' | 'it' | 'user'>('it');
   const [managedRoleDescription, setManagedRoleDescription] = useState(
     'Standard administrative role for regional IT leads. Grants comprehensive operational access while restricting financial configurations.'
   );
   const [managedRoleActive, setManagedRoleActive] = useState(true);
+  const [managedRoleUserSearch, setManagedRoleUserSearch] = useState('');
+  const [customRoleName, setCustomRoleName] = useState('');
+  const [customRoleDescription, setCustomRoleDescription] = useState('');
+  const [customRoleCategory, setCustomRoleCategory] = useState('Operations');
+  const [customRoleScope, setCustomRoleScope] = useState('Global Tenant');
+  const [customRoleImmediateActivation, setCustomRoleImmediateActivation] = useState(true);
+  const [customRolePreset, setCustomRolePreset] = useState<'operational' | 'support' | 'auditor'>('operational');
+  const [customRoleUserSearch, setCustomRoleUserSearch] = useState('');
+  const [customRoleGovernance, setCustomRoleGovernance] = useState({
+    peerApprovalRequired: false,
+    ticketAssociation: true,
+    assetInventoryAccess: false,
+    billingManagement: false,
+    securityPolicyOverride: false,
+  });
+  const [permissionSearch, setPermissionSearch] = useState('');
+  const [rolePermissionLevels, setRolePermissionLevels] = useState<
+    Record<string, PermissionLevel>
+  >({
+    view_all_tickets: 'full',
+    create_edit_tickets: 'conditional',
+    delete_tickets: 'none',
+    inventory_monitoring: 'full',
+    add_remove_assets: 'conditional',
+    manage_users: 'none',
+    security_config: 'none',
+  });
   const [managedRoleRules, setManagedRoleRules] = useState({
     approvalRequired: true,
     ticketManagement: true,
@@ -180,9 +285,16 @@ export const SettingsAndLogs: React.FC = () => {
 
   const [logSearchTerm, setLogSearchTerm] = useState('');
   const [logSearchInput, setLogSearchInput] = useState('');
+  const [logTimeFilter, setLogTimeFilter] = useState('24h');
+  const [logSeverityFilter, setLogSeverityFilter] = useState('all');
+  const [logSourceFilter, setLogSourceFilter] = useState('all');
+  const [logEnvFilter, setLogEnvFilter] = useState('production');
   const [logPage, setLogPage] = useState(1);
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [selectedLogRows, setSelectedLogRows] = useState<string[]>([]);
   const logsPerPage = 10;
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
+  const logSearchInputRef = useRef<HTMLInputElement | null>(null);
   const logSearchRestoreRef = useRef<number | null>(null);
 
   const {
@@ -377,6 +489,22 @@ export const SettingsAndLogs: React.FC = () => {
     setLogSearchTerm(logSearchInput.trim());
   };
 
+  const handleClearLogFilters = () => {
+    setLogSearchInput('');
+    setLogSearchTerm('');
+    setLogTimeFilter('24h');
+    setLogSeverityFilter('all');
+    setLogSourceFilter('all');
+    setLogEnvFilter('production');
+    setLogPage(1);
+  };
+
+  const toggleLogRowSelection = (id: string) => {
+    setSelectedLogRows(current =>
+      current.includes(id) ? current.filter(rowId => rowId !== id) : [...current, id]
+    );
+  };
+
   useEffect(() => {
     if (!isLogsTab || isLoadingLogs) return;
     if (logSearchRestoreRef.current === null) return;
@@ -384,6 +512,14 @@ export const SettingsAndLogs: React.FC = () => {
     logsContainerRef.current.scrollTop = logSearchRestoreRef.current;
     logSearchRestoreRef.current = null;
   }, [isLogsTab, isLoadingLogs, logs?.data]);
+
+  useEffect(() => {
+    if (!selectedLogId || !logs?.data) return;
+    const exists = logs.data.some(log => log.id === selectedLogId);
+    if (!exists) {
+      setSelectedLogId(null);
+    }
+  }, [logs?.data, selectedLogId]);
 
   const canManageCategories = isAdmin || isIT;
   const canManageSla = isAdmin || isIT;
@@ -401,7 +537,7 @@ export const SettingsAndLogs: React.FC = () => {
       return;
     }
 
-    const exists = categories?.some(
+    const exists = assetCategories?.some(
       c => c.name.trim().toLowerCase() === trimmed.toLowerCase()
     );
     if (exists) {
@@ -410,7 +546,7 @@ export const SettingsAndLogs: React.FC = () => {
     }
 
     try {
-      await addCategory.mutateAsync({ name: trimmed });
+      await addAssetCategory.mutateAsync({ name: trimmed });
       notifySuccess('Category added');
       setNewCategoryName('');
     } catch (err: unknown) {
@@ -436,7 +572,7 @@ export const SettingsAndLogs: React.FC = () => {
 
     if (trimmed === currentName) return;
 
-    const exists = categories?.some(
+    const exists = assetCategories?.some(
       c =>
         c.id !== id &&
         c.name.trim().toLowerCase() === trimmed.toLowerCase()
@@ -447,7 +583,7 @@ export const SettingsAndLogs: React.FC = () => {
     }
 
     try {
-      await updateCategory.mutateAsync({ id, name: trimmed });
+      await updateAssetCategory.mutateAsync({ id, name: trimmed });
       notifySuccess('Category updated');
     } catch (err: unknown) {
       notifyError('Failed to update category', getErrorMessage(err));
@@ -457,7 +593,7 @@ export const SettingsAndLogs: React.FC = () => {
   const handleDeleteCategory = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteCategory.mutateAsync(deleteTarget.id);
+      await deleteAssetCategory.mutateAsync(deleteTarget.id);
       notifySuccess('Category deleted');
     } catch (err: unknown) {
       notifyError('Failed to delete category', getErrorMessage(err));
@@ -465,6 +601,97 @@ export const SettingsAndLogs: React.FC = () => {
       setDeleteTarget(null);
     }
   };
+
+  const inferAssetCategoryType = (name: string): 'hardware' | 'software' | 'virtual' => {
+    const normalized = name.trim().toLowerCase();
+
+    if (
+      /license|subscription|saas|software|cloud|app|suite|workspace|portal/.test(
+        normalized
+      )
+    ) {
+      return 'software';
+    }
+
+    if (
+      /virtual|vm|server|instance|container|cluster|host|dns|network/.test(
+        normalized
+      )
+    ) {
+      return 'virtual';
+    }
+
+    return 'hardware';
+  };
+
+  const assetCategoryTypeMeta: Record<
+    'hardware' | 'software' | 'virtual',
+    {
+      badgeClassName: string;
+      iconClassName: string;
+      icon: React.ComponentType<{ className?: string }>;
+      label: string;
+    }
+  > = {
+    hardware: {
+      label: 'Hardware',
+      icon: Wrench,
+      iconClassName: 'text-primary',
+      badgeClassName:
+        'bg-blue-50 text-blue-700 ring-blue-700/10 dark:bg-blue-900/20 dark:text-blue-300',
+    },
+    software: {
+      label: 'Software',
+      icon: Bot,
+      iconClassName: 'text-primary',
+      badgeClassName:
+        'bg-violet-50 text-violet-700 ring-violet-700/10 dark:bg-violet-900/20 dark:text-violet-300',
+    },
+    virtual: {
+      label: 'Virtual',
+      icon: Globe2,
+      iconClassName: 'text-primary',
+      badgeClassName:
+        'bg-emerald-50 text-emerald-700 ring-emerald-700/10 dark:bg-emerald-900/20 dark:text-emerald-300',
+    },
+  };
+
+  const filteredAssetCategories = (assetCategories ?? []).filter((category) => {
+    const matchesSearch = category.name
+      .toLowerCase()
+      .includes(assetCategoryFilter.trim().toLowerCase());
+    const inferredType = inferAssetCategoryType(category.name);
+    const matchesType =
+      assetCategoryTypeFilter === 'all' || inferredType === assetCategoryTypeFilter;
+
+    return matchesSearch && matchesType;
+  });
+
+  const assetCategoriesPerPage = 5;
+  const assetCategoryTotalPages = Math.max(
+    1,
+    Math.ceil(filteredAssetCategories.length / assetCategoriesPerPage)
+  );
+  const currentAssetCategoryPage = Math.min(assetCategoryPage, assetCategoryTotalPages);
+  const paginatedAssetCategories = filteredAssetCategories.slice(
+    (currentAssetCategoryPage - 1) * assetCategoriesPerPage,
+    currentAssetCategoryPage * assetCategoriesPerPage
+  );
+  const assetCategoryStatsMap = new Map(
+    (assetCategoryStats ?? []).map((stat) => [stat.categoryId, stat.count])
+  );
+  const visibleAssetCategoryStart =
+    filteredAssetCategories.length === 0
+      ? 0
+      : (currentAssetCategoryPage - 1) * assetCategoriesPerPage + 1;
+  const visibleAssetCategoryEnd =
+    filteredAssetCategories.length === 0
+      ? 0
+      : visibleAssetCategoryStart + paginatedAssetCategories.length - 1;
+
+  useEffect(() => {
+    setAssetCategoryPage(1);
+  }, [assetCategoryFilter, assetCategoryTypeFilter]);
 
   const handleUpdateSla = async (
     id: string,
@@ -636,11 +863,13 @@ export const SettingsAndLogs: React.FC = () => {
   const totalLogPages = logs
     ? Math.ceil(logs.count / logsPerPage)
     : 0;
+  const selectedLog = logs?.data.find(log => log.id === selectedLogId) ?? null;
+  const isAllRowsSelected =
+    !!logs?.data.length && logs.data.every(log => selectedLogRows.includes(log.id));
 
   if (
     isLoadingSettings ||
     isLoadingCategories ||
-    isLoadingCategoryStats ||
     isLoadingSLAPolicies ||
     isLoadingUsers
   ) {
@@ -756,6 +985,101 @@ export const SettingsAndLogs: React.FC = () => {
     },
   ] as const;
 
+  const customRolePresetCards = [
+    {
+      key: 'operational' as const,
+      title: 'Operational Admin',
+      description:
+        'Full control over users, groups, and standard system configurations.',
+    },
+    {
+      key: 'support' as const,
+      title: 'IT Support Lead',
+      description:
+        'Optimized for helpdesk managers with elevated ticket resolution tools.',
+    },
+    {
+      key: 'auditor' as const,
+      title: 'Auditor',
+      description:
+        'Read-only access to governance logs and compliance reporting.',
+    },
+  ];
+
+  const presetPermissionLevels: Record<
+    typeof customRolePreset,
+    Record<string, PermissionLevel>
+  > = {
+    operational: {
+      view_all_tickets: 'full',
+      create_edit_tickets: 'conditional',
+      delete_tickets: 'none',
+      inventory_monitoring: 'full',
+      add_remove_assets: 'conditional',
+      manage_users: 'none',
+      security_config: 'none',
+    },
+    support: {
+      view_all_tickets: 'full',
+      create_edit_tickets: 'full',
+      delete_tickets: 'none',
+      inventory_monitoring: 'conditional',
+      add_remove_assets: 'conditional',
+      manage_users: 'none',
+      security_config: 'none',
+    },
+    auditor: {
+      view_all_tickets: 'conditional',
+      create_edit_tickets: 'none',
+      delete_tickets: 'none',
+      inventory_monitoring: 'conditional',
+      add_remove_assets: 'none',
+      manage_users: 'none',
+      security_config: 'none',
+    },
+  };
+
+  const editPermissionSections: Array<{
+    key: PermissionCategoryKey;
+    title: string;
+    icon: typeof Bot;
+    rows: Array<{
+      id: string;
+      label: string;
+      helper?: string;
+      highRisk?: boolean;
+    }>;
+  }> = [
+    {
+      key: 'tickets',
+      title: 'Ticket Management',
+      icon: Bot,
+      rows: [
+        { id: 'view_all_tickets', label: 'View All Tickets', helper: 'See all tickets across operational queues.' },
+        { id: 'create_edit_tickets', label: 'Create & Edit Tickets', helper: 'Create incidents and update ticket progress.' },
+        { id: 'delete_tickets', label: 'Delete Tickets', helper: 'Remove ticket records and related audit context.', highRisk: true },
+      ],
+    },
+    {
+      key: 'assets',
+      title: 'Asset Control',
+      icon: Wrench,
+      rows: [
+        { id: 'inventory_monitoring', label: 'Inventory Monitoring', helper: 'Inspect stock posture and asset health.' },
+        { id: 'add_remove_assets', label: 'Add/Remove Assets', helper: 'Provision and retire tracked hardware assets.' },
+      ],
+    },
+    {
+      key: 'settings',
+      title: 'System Settings',
+      icon: UserCog,
+      rows: [
+        { id: 'manage_users', label: 'Manage Users', helper: 'Invite users and maintain team access.' },
+        { id: 'security_config', label: 'Security Config', helper: 'Adjust high-trust security governance settings.' },
+      ],
+    },
+  ];
+
   const permissionSections = [
     {
       title: 'Ticket Management',
@@ -794,9 +1118,122 @@ export const SettingsAndLogs: React.FC = () => {
   const managedRoleMeta = roleCardConfigs.find((role) => role.key === managedRoleKey);
   const ManagedRoleIcon = managedRoleMeta?.icon ?? UserCog;
   const managedRoleUsers = (adminUsers ?? []).filter((user) => user.role === managedRoleKey);
+  const filteredManagedRoleUsers = managedRoleUsers.filter((user) => {
+    const query = managedRoleUserSearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${user.full_name ?? ''} ${user.name ?? ''} ${user.email ?? ''} ${user.department ?? ''}`
+      .toLowerCase()
+      .includes(query);
+  });
   const managedRoleAccessibleModules = Object.values(managedRoleRules).filter(Boolean).length;
+  const customRolePreviewUsers = (usersForAssignment ?? []).filter((user) => {
+    const query = customRoleUserSearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${user.full_name ?? ''} ${user.name ?? ''} ${user.email ?? ''} ${user.department ?? ''}`
+      .toLowerCase()
+      .includes(query);
+  });
+  const customRoleRiskLevel = customRoleGovernance.securityPolicyOverride
+    ? 'High'
+    : customRoleGovernance.billingManagement || customRoleGovernance.peerApprovalRequired
+      ? 'Medium'
+      : 'Low';
+  const customRoleEnabledModules = [
+    customRoleGovernance.ticketAssociation,
+    customRoleGovernance.assetInventoryAccess,
+    customRoleGovernance.billingManagement,
+    customRoleGovernance.securityPolicyOverride,
+    customRoleGovernance.peerApprovalRequired,
+  ].filter(Boolean).length;
+  const filteredEditPermissionSections = editPermissionSections
+    .map((section) => ({
+      ...section,
+      rows: section.rows.filter((row) => {
+        const query = permissionSearch.trim().toLowerCase();
+        if (!query) return true;
+        return `${row.label} ${row.helper ?? ''}`.toLowerCase().includes(query);
+      }),
+    }))
+    .filter((section) => section.rows.length > 0);
+  const permissionCounts = Object.values(rolePermissionLevels).reduce(
+    (totals, value) => {
+      totals[value] += 1;
+      return totals;
+    },
+    { full: 0, conditional: 0, none: 0 } as Record<PermissionLevel, number>
+  );
+  const resetCustomRoleModal = () => {
+    setCustomRoleName('');
+    setCustomRoleDescription('');
+    setCustomRoleCategory('Operations');
+    setCustomRoleScope('Global Tenant');
+    setCustomRoleImmediateActivation(true);
+    setCustomRolePreset('operational');
+    setCustomRoleUserSearch('');
+    setCustomRoleGovernance({
+      peerApprovalRequired: false,
+      ticketAssociation: true,
+      assetInventoryAccess: false,
+      billingManagement: false,
+      securityPolicyOverride: false,
+    });
+    setPermissionSearch('');
+    setRolePermissionLevels(presetPermissionLevels.operational);
+  };
+  const handleSelectCustomRolePreset = (
+    preset: 'operational' | 'support' | 'auditor'
+  ) => {
+    setCustomRolePreset(preset);
+    setRolePermissionLevels(presetPermissionLevels[preset]);
+  };
+  const handleOpenCreateCustomRole = () => {
+    resetCustomRoleModal();
+    setEditPermissionsOpen(false);
+    setCreateCustomRoleOpen(true);
+  };
+  const handleSaveCustomRoleDraft = () => {
+    notifySuccess('Custom role draft saved');
+    setCreateCustomRoleOpen(false);
+  };
+  const handleSaveCustomRoleAndContinue = () => {
+    notifySuccess('Role draft saved', 'Continue to granular permission setup');
+    setEditPermissionsOpen(true);
+    setCreateCustomRoleOpen(false);
+  };
+  const handleOpenEditPermissions = () => {
+    if (!customRoleName.trim()) {
+      setCustomRoleName('Custom Role');
+    }
+    if (!customRoleDescription.trim()) {
+      setCustomRoleDescription(
+        'Custom operational role with granular module-level access controls.'
+      );
+    }
+    setManageRoleOpen(false);
+    setCreateCustomRoleOpen(false);
+    setEditPermissionsOpen(true);
+  };
+  const handleBackToCreateCustomRole = () => {
+    setEditPermissionsOpen(false);
+    setCreateCustomRoleOpen(true);
+  };
+  const handleCloseEditPermissions = () => {
+    setEditPermissionsOpen(false);
+    resetCustomRoleModal();
+  };
+  const handleApplyPermissionChanges = () => {
+    notifySuccess('Role permissions updated');
+    handleCloseEditPermissions();
+  };
+  const handlePermissionLevelChange = (permissionId: string, level: PermissionLevel) => {
+    setRolePermissionLevels((current) => ({
+      ...current,
+      [permissionId]: level,
+    }));
+  };
   const handleOpenManageRole = (roleKey: 'admin' | 'it' | 'user') => {
     setManagedRoleKey(roleKey);
+    setManagedRoleUserSearch('');
 
     if (roleKey === 'admin') {
       setManagedRoleDescription(
@@ -1598,6 +2035,7 @@ export const SettingsAndLogs: React.FC = () => {
                   return (
                     <div
                       key={role.key}
+                      onClick={() => handleOpenCreateCustomRole()}
                       className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center transition-all hover:border-primary/40 hover:bg-white dark:border-slate-700 dark:bg-slate-800/50 dark:hover:bg-slate-800"
                     >
                       <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition-colors dark:bg-slate-700 dark:text-slate-300">
@@ -1652,7 +2090,11 @@ export const SettingsAndLogs: React.FC = () => {
                     Detailed overview of capability distribution across roles.
                   </p>
                 </div>
-                <Button className="h-10 gap-2 bg-primary px-4 text-xs font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90">
+                <Button
+                  type="button"
+                  onClick={handleOpenEditPermissions}
+                  className="h-10 gap-2 bg-primary px-4 text-xs font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
+                >
                   <UserCog className="h-4 w-4" />
                   Edit Permissions
                 </Button>
@@ -1726,95 +2168,273 @@ export const SettingsAndLogs: React.FC = () => {
 
         {/* ===== CATEGORIES ===== */}
         <TabsContent value="categories" className="mt-6">
-          <SettingsSection
-            title="Issue Categories"
-            description="Ticket classification"
-          >
-            <div className="space-y-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="font-medium">Manage categories</div>
-                  <div className="text-sm text-muted-foreground">
-                    Add, rename, or remove ticket categories
-                  </div>
-                </div>
-                {canManageCategories && (
-                  <div className="flex w-full gap-2 sm:w-auto">
-                    <Input
-                      placeholder="New category name"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      className="h-9"
-                    />
-                    <Button
-                      onClick={handleAddCategory}
-                      disabled={addCategory.isPending}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                )}
+          <div className="space-y-6">
+            <nav className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Settings</span>
+              <ChevronRight className="h-4 w-4" />
+              <span className="font-medium text-slate-900 dark:text-white">
+                Asset Categories
+              </span>
+            </nav>
+
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                  Asset Categories
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Manage organizational taxonomy and asset classification.
+                </p>
               </div>
 
-              {categories?.length ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead className="w-[140px] text-right">
-                        Tickets
-                      </TableHead>
-                      {canManageCategories && (
-                        <TableHead className="w-[120px] text-right">
-                          Actions
-                        </TableHead>
-                      )}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {categories.map(c => (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-medium">
+              {canManageCategories ? (
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <Input
+                    placeholder="New category name"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    className="h-10 min-w-[240px] border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
+                  />
+                  <Button
+                    onClick={handleAddCategory}
+                    disabled={addAssetCategory.isPending}
+                    className="h-10 bg-primary px-4 text-sm font-semibold text-white shadow-sm shadow-primary/20 hover:bg-primary/90"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Category
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
+              <div className="relative w-full md:max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={assetCategoryFilter}
+                  onChange={(e) => setAssetCategoryFilter(e.target.value)}
+                  placeholder="Filter categories..."
+                  className="h-10 border-slate-200 bg-transparent pl-9 dark:border-slate-700"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {([
+                  ['all', 'All Types'],
+                  ['hardware', 'Hardware'],
+                  ['software', 'Software'],
+                  ['virtual', 'Virtual'],
+                ] as const).map(([value, label]) => {
+                  const active = assetCategoryTypeFilter === value;
+
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setAssetCategoryTypeFilter(value)}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        active
+                          ? 'border-primary/20 bg-primary/10 text-primary'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              {isLoadingAssetCategories || isLoadingAssetCategoryStats ? (
+                <div className="p-6">
+                  <LoadingSkeleton />
+                </div>
+              ) : filteredAssetCategories.length ? (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-800/50">
+                          <th className="px-6 py-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                            Category Name
+                          </th>
+                          <th className="px-6 py-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                            Type
+                          </th>
+                          <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                            Asset Count
+                          </th>
+                          <th className="px-6 py-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                            Last Modified
+                          </th>
                           {canManageCategories ? (
-                            <InlineEditableText
-                              value={c.name}
-                              onSave={(next) =>
-                                handleRenameCategory(c.id, c.name, next)
+                            <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                              Actions
+                            </th>
+                          ) : null}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {paginatedAssetCategories.map((category) => {
+                          const categoryType = inferAssetCategoryType(category.name);
+                          const typeMeta = assetCategoryTypeMeta[categoryType];
+                          const CategoryIcon = typeMeta.icon;
+                          const assetCount =
+                            assetCategoryStatsMap.get(category.id) ?? 0;
+                          const lastModified = category.created_at
+                            ? formatDistanceToNow(new Date(category.created_at), {
+                                addSuffix: true,
+                              })
+                            : 'No timestamp';
+
+                          return (
+                            <tr
+                              key={category.id}
+                              className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                            >
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                                    <CategoryIcon className={`h-4.5 w-4.5 ${typeMeta.iconClassName}`} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                                      {canManageCategories ? (
+                                        <InlineEditableText
+                                          value={category.name}
+                                          onSave={(next) =>
+                                            handleRenameCategory(
+                                              category.id,
+                                              category.name,
+                                              next
+                                            )
+                                          }
+                                        />
+                                      ) : (
+                                        category.name
+                                      )}
+                                    </div>
+                                    {category.description ? (
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        {category.description}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${typeMeta.badgeClassName}`}
+                                >
+                                  {typeMeta.label}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-center text-sm font-medium tabular-nums text-slate-700 dark:text-slate-300">
+                                {assetCount.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                                {lastModified}
+                              </td>
+                              {canManageCategories ? (
+                                <td className="px-6 py-4 text-right">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      setDeleteTarget({
+                                        id: category.id,
+                                        name: category.name,
+                                      })
+                                    }
+                                    className="text-slate-400 hover:text-red-500"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              ) : null}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex flex-col gap-4 border-t border-slate-200 px-6 py-4 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400 md:flex-row md:items-center md:justify-between">
+                    <p>
+                      Showing {visibleAssetCategoryStart} to {visibleAssetCategoryEnd} of{' '}
+                      {filteredAssetCategories.length} categories
+                    </p>
+
+                    {assetCategoryTotalPages > 1 ? (
+                      <Pagination className="mx-0 w-auto justify-start md:justify-end">
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setAssetCategoryPage((page) => Math.max(1, page - 1));
+                              }}
+                              className={
+                                currentAssetCategoryPage === 1
+                                  ? 'pointer-events-none opacity-50'
+                                  : ''
                               }
                             />
-                          ) : (
-                            c.name
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {categoryStats?.find(stat => stat.category === c.name)
-                            ?.count ?? 0}
-                        </TableCell>
-                        {canManageCategories && (
-                          <TableCell className="text-right">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() =>
-                                setDeleteTarget({ id: c.id, name: c.name })
+                          </PaginationItem>
+                          {Array.from(
+                            { length: assetCategoryTotalPages },
+                            (_, index) => index + 1
+                          ).map((pageNumber) => (
+                            <PaginationItem key={pageNumber}>
+                              <PaginationLink
+                                href="#"
+                                isActive={pageNumber === currentAssetCategoryPage}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setAssetCategoryPage(pageNumber);
+                                }}
+                              >
+                                {pageNumber}
+                              </PaginationLink>
+                            </PaginationItem>
+                          ))}
+                          <PaginationItem>
+                            <PaginationNext
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setAssetCategoryPage((page) =>
+                                  Math.min(assetCategoryTotalPages, page + 1)
+                                );
+                              }}
+                              className={
+                                currentAssetCategoryPage === assetCategoryTotalPages
+                                  ? 'pointer-events-none opacity-50'
+                                  : ''
                               }
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                            />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    ) : null}
+                  </div>
+                </>
               ) : (
-                <EmptyState
-                  title="No Categories"
-                  message="No issue categories defined"
-                />
+                <div className="p-6">
+                  <EmptyState
+                    title="No Asset Categories"
+                    message={
+                      assetCategoryFilter || assetCategoryTypeFilter !== 'all'
+                        ? 'No categories matched your current filters.'
+                        : 'No asset categories have been created yet.'
+                    }
+                  />
+                </div>
               )}
             </div>
-          </SettingsSection>
+          </div>
         </TabsContent>
 
         {/* ===== SLA ===== */}
@@ -2006,10 +2626,10 @@ export const SettingsAndLogs: React.FC = () => {
         <TabsContent value="logs" className="mt-6 space-y-4">
           <SettingsSection
             title="System Logs"
-            description="Audit trail of system activity"
+            description="Real-time infrastructure event monitoring"
           >
             {canManageLogs && (
-              <div className="mb-4 rounded-md border border-border/70 bg-muted/20 p-3">
+              <div className="mb-4 rounded-xl border border-border/70 bg-muted/20 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <div className="font-medium">Log retention policy</div>
@@ -2058,141 +2678,513 @@ export const SettingsAndLogs: React.FC = () => {
               </div>
             )}
 
+            <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="rounded-xl border border-primary/20 bg-background p-4 shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-primary">
+                  Total Events
+                </p>
+                <p className="mt-2 text-2xl font-black text-foreground">1.2M</p>
+                <p className="mt-2 text-xs font-semibold text-emerald-600">+12% today</p>
+              </div>
+              <div className="rounded-xl border border-red-200 bg-background p-4 shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-red-600">
+                  Critical Errors
+                </p>
+                <p className="mt-2 text-2xl font-black text-foreground">0</p>
+                <p className="mt-2 text-xs font-semibold text-slate-500">All clear</p>
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-background p-4 shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-amber-700">
+                  Warning Alerts
+                </p>
+                <p className="mt-2 text-2xl font-black text-foreground">14</p>
+                <p className="mt-2 text-xs font-semibold text-amber-700">Action required</p>
+              </div>
+              <div className="rounded-xl border border-indigo-200 bg-background p-4 shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-indigo-700">
+                  Active Services
+                </p>
+                <p className="mt-2 text-2xl font-black text-foreground">42</p>
+                <p className="mt-2 text-xs font-semibold text-indigo-700">100% Uptime</p>
+              </div>
+            </div>
+
             <form
               onSubmit={handleLogSearch}
-              className="flex gap-2 mb-4"
+              className="mb-4 flex flex-col gap-3 rounded-xl border border-border/70 bg-muted/20 p-4"
             >
-              <Input
-                placeholder="Search logs..."
-                value={logSearchInput}
-                onChange={e =>
-                  setLogSearchInput(e.target.value)
-                }
-              />
-              <Button type="submit" variant="secondary">
-                <Search className="h-4 w-4 mr-1" />
-                Search
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Filters:
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-primary">
+                  Severity: Critical
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-primary">
+                  Source: Database
+                </span>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  ref={logSearchInputRef}
+                  id="logs-search-input"
+                  placeholder="Search system logs..."
+                  value={logSearchInput}
+                  onChange={e => setLogSearchInput(e.target.value)}
+                  className="h-10 bg-background"
+                />
+                <Button type="submit" className="h-10 px-4">
+                  <Search className="mr-1 h-4 w-4" />
+                  Search
+                </Button>
+              </div>
             </form>
 
             {isLoadingLogs ? (
               <LoadingSkeleton count={6} className="md:grid-cols-1" />
             ) : logs?.data.length ? (
               <>
-                <div
-                  ref={logsContainerRef}
-                  className="rounded-md border max-h-[420px] overflow-y-auto"
-                >
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Time</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>Details</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {logs.data.map(log => (
-                        <TableRow key={log.id}>
-                          <TableCell>
-                            {log.created_at
-                              ? format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss')
-                              : '—'}
-                          </TableCell>
-                          <TableCell>
-                            {log.profiles?.name || log.profiles?.email || '—'}
-                          </TableCell>
-                          <TableCell>
-                            {log.action}
-                          </TableCell>
-                          <TableCell className="space-y-1">
-                            {(() => {
-                              const logDetails =
-                                (log.details as Record<string, unknown>) ?? null;
-                              const { title, description } = mapLogToText(
-                                log.action,
-                                logDetails
-                              );
-
-                              return (
-                                <>
-                                  <div className="font-medium">{title}</div>
-                                  {description && (
-                                    <div className="text-sm text-muted-foreground whitespace-pre-line">
-                                      {description}
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Track security, system, and user activity events across your
+                      global infrastructure in real-time.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" className="h-9 gap-2 px-3">
+                      <Download className="h-4 w-4" />
+                      Export CSV
+                    </Button>
+                    <Button className="h-9 gap-2 bg-primary px-3 text-white hover:bg-primary/90">
+                      <BellPlus className="h-4 w-4" />
+                      Create Alert Rule
+                    </Button>
+                  </div>
                 </div>
 
-                {totalLogPages > 1 && (
-                  <div className="mt-4 space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      Page {logPage} of {totalLogPages} • Total {logs?.count ?? 0} logs
+                <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-4">
+                  <div className="rounded-xl border border-border/60 bg-background p-4 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="rounded-md bg-violet-50 p-2 text-violet-700 dark:bg-violet-900/30">
+                        <Activity className="h-4 w-4" />
+                      </div>
+                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                        +12%
+                      </span>
                     </div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Total Events (24h)
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-foreground">1,284,092</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background p-4 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="rounded-md bg-red-50 p-2 text-red-600 dark:bg-red-900/30">
+                        <AlertOctagon className="h-4 w-4" />
+                      </div>
+                      <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700">
+                        +2 critical
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Critical Events
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-red-600">14</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background p-4 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="rounded-md bg-amber-50 p-2 text-amber-600 dark:bg-amber-900/30">
+                        <UserX className="h-4 w-4" />
+                      </div>
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">
+                        High activity
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Failed Logins
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-amber-600">182</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background p-4 shadow-sm">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="rounded-md bg-blue-50 p-2 text-blue-600 dark:bg-blue-900/30">
+                        <Gauge className="h-4 w-4" />
+                      </div>
+                      <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">
+                        Optimized
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Avg Latency
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-blue-600">42ms</p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
+                  <form
+                    onSubmit={handleLogSearch}
+                    className="border-b border-border/60 bg-muted/30 p-4"
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      <div className="relative min-w-[280px] flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          ref={logSearchInputRef}
+                          id="logs-search-input"
+                          placeholder="Search message, user, IP, or request ID..."
+                          value={logSearchInput}
+                          onChange={e => setLogSearchInput(e.target.value)}
+                          className="h-10 border-slate-200 bg-white pl-10"
+                        />
+                      </div>
+                      <Select value={logTimeFilter} onValueChange={setLogTimeFilter}>
+                        <SelectTrigger className="h-10 w-[140px] bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="24h">Last 24 Hours</SelectItem>
+                          <SelectItem value="7d">Last 7 Days</SelectItem>
+                          <SelectItem value="custom">Custom Range</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={logSeverityFilter} onValueChange={setLogSeverityFilter}>
+                        <SelectTrigger className="h-10 w-[140px] bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Severity: All</SelectItem>
+                          <SelectItem value="critical">Critical</SelectItem>
+                          <SelectItem value="warning">Warning</SelectItem>
+                          <SelectItem value="info">Info</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={logSourceFilter} onValueChange={setLogSourceFilter}>
+                        <SelectTrigger className="h-10 w-[130px] bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Source: All</SelectItem>
+                          <SelectItem value="api">API</SelectItem>
+                          <SelectItem value="auth">Auth</SelectItem>
+                          <SelectItem value="db">DB</SelectItem>
+                          <SelectItem value="scheduler">Scheduler</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={logEnvFilter} onValueChange={setLogEnvFilter}>
+                        <SelectTrigger className="h-10 w-[140px] bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="production">Env: Production</SelectItem>
+                          <SelectItem value="staging">Staging</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button type="submit" className="h-10 px-4">
+                        Search
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={handleClearLogFilters}
+                        className="h-10 px-3 text-xs font-bold uppercase tracking-[0.12em] text-primary"
+                      >
+                        Clear Filters
+                      </Button>
+                    </div>
+                  </form>
+
+                  <div ref={logsContainerRef} className="max-h-[520px] overflow-auto">
+                    <table className="w-full border-collapse text-left">
+                      <thead className="sticky top-0 z-10 bg-muted text-[11px] uppercase tracking-widest text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={isAllRowsSelected}
+                              onChange={(e) => {
+                                if (!logs?.data) return;
+                                if (e.target.checked) {
+                                  setSelectedLogRows(logs.data.map(log => log.id));
+                                  return;
+                                }
+                                setSelectedLogRows([]);
+                              }}
+                              className="rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                          </th>
+                          <th className="px-2 py-3">Timestamp</th>
+                          <th className="px-2 py-3 text-center">Severity</th>
+                          <th className="px-2 py-3">Source</th>
+                          <th className="px-2 py-3">Event Type</th>
+                          <th className="px-4 py-3">Message</th>
+                          <th className="px-2 py-3">User</th>
+                          <th className="px-2 py-3 text-right">IP Address</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {logs.data.map((log) => {
+                          const logDetails = getLogDetailsRecord(log.details);
+                          const severity = getLogSeverity(log.action, logDetails);
+                          const source = getLogSource(log.action, logDetails);
+                          const { title, description } = mapLogToText(log.action, logDetails);
+                          const message = description || title || log.action;
+
+                          return (
+                            <tr
+                              key={log.id}
+                              className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"
+                              onClick={() => setSelectedLogId(log.id)}
+                            >
+                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedLogRows.includes(log.id)}
+                                  onChange={() => toggleLogRowSelection(log.id)}
+                                  className="rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                              </td>
+                              <td className="whitespace-nowrap px-2 py-3 text-xs font-medium text-foreground">
+                                {log.created_at
+                                  ? format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss')
+                                  : '—'}
+                              </td>
+                              <td className="px-2 py-3 text-center">
+                                <span
+                                  className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                    severity === 'critical'
+                                      ? 'bg-red-100 text-red-700'
+                                      : severity === 'warning'
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {severity}
+                                </span>
+                              </td>
+                              <td className="px-2 py-3 text-xs text-muted-foreground">{source}</td>
+                              <td className="px-2 py-3 text-xs font-semibold text-foreground">
+                                {title}
+                              </td>
+                              <td className="max-w-[360px] truncate px-4 py-3 text-xs text-foreground">
+                                {message}
+                              </td>
+                              <td className="px-2 py-3 text-xs text-foreground">
+                                {log.profiles?.name || log.profiles?.email || 'system'}
+                              </td>
+                              <td className="px-2 py-3 text-right font-mono text-xs text-muted-foreground">
+                                {getLogIp(logDetails)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-border/60 bg-muted/30 px-4 py-3">
+                    <p className="text-xs text-muted-foreground">
+                      Showing <span className="font-bold text-foreground">1-{logs.data.length}</span>{' '}
+                      of {logs?.count ?? 0} logs
+                    </p>
                     <Pagination>
-                    <PaginationContent>
-                      {/* Previous */}
-                      <PaginationItem>
-                        <PaginationPrevious
-                          aria-disabled={logPage <= 1}
-                          className={
-                            logPage <= 1
-                              ? 'pointer-events-none opacity-50'
-                              : ''
-                          }
-                          onClick={() => {
-                            if (logPage <= 1) return;
-                            setLogPage(prev => prev - 1);
-                          }}
-                        />
-                      </PaginationItem>
-
-                      {/* Page numbers */}
-                      {Array.from({ length: totalLogPages }, (_, i) => (
-                        <PaginationItem key={i}>
-                          <PaginationLink
-                            isActive={logPage === i + 1}
-                            onClick={() => setLogPage(i + 1)}
-                          >
-                            {i + 1}
-                          </PaginationLink>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            aria-disabled={logPage <= 1}
+                            className={logPage <= 1 ? 'pointer-events-none opacity-50' : ''}
+                            onClick={() => {
+                              if (logPage <= 1) return;
+                              setLogPage(prev => prev - 1);
+                            }}
+                          />
                         </PaginationItem>
-                      ))}
-
-                      {/* Next */}
-                      <PaginationItem>
-                        <PaginationNext
-                          aria-disabled={logPage >= totalLogPages}
-                          className={
-                            logPage >= totalLogPages
-                              ? 'pointer-events-none opacity-50'
-                              : ''
-                          }
-                          onClick={() => {
-                            if (logPage >= totalLogPages) return;
-                            setLogPage(prev => prev + 1);
-                          }}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
+                        {Array.from({ length: Math.min(totalLogPages, 5) }, (_, i) => (
+                          <PaginationItem key={i}>
+                            <PaginationLink
+                              isActive={logPage === i + 1}
+                              onClick={() => setLogPage(i + 1)}
+                            >
+                              {i + 1}
+                            </PaginationLink>
+                          </PaginationItem>
+                        ))}
+                        <PaginationItem>
+                          <PaginationNext
+                            aria-disabled={logPage >= totalLogPages}
+                            className={logPage >= totalLogPages ? 'pointer-events-none opacity-50' : ''}
+                            onClick={() => {
+                              if (logPage >= totalLogPages) return;
+                              setLogPage(prev => prev + 1);
+                            }}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
                     </Pagination>
+                  </div>
+                </div>
+
+                {selectedLog && (
+                  <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm">
+                    <div className="flex h-full w-full max-w-[520px] flex-col bg-white shadow-2xl dark:bg-slate-950">
+                      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex items-center gap-3">
+                          <span className="rounded-lg bg-red-100 p-2 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                            <AlertOctagon className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <h3 className="font-bold text-slate-900 dark:text-slate-100">Event Details</h3>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                              ID: {selectedLog.id}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="rounded-full p-2 transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
+                          onClick={() => setSelectedLogId(null)}
+                        >
+                          <X className="h-4 w-4 text-slate-700 dark:text-slate-300" />
+                        </button>
+                      </div>
+
+                      <div className="flex-1 space-y-8 overflow-y-auto p-6">
+                        {(() => {
+                          const details = getLogDetailsRecord(selectedLog.details);
+                          const mapped = mapLogToText(selectedLog.action, details);
+                          const payloadJson = JSON.stringify(details, null, 2);
+                          return (
+                            <>
+                              <div>
+                                <h4 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                  Message
+                                </h4>
+                                <p className="text-sm font-medium leading-relaxed text-slate-900 dark:text-slate-100">
+                                  {mapped.description || mapped.title || selectedLog.action}
+                                </p>
+                              </div>
+                              <div>
+                                <h4 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                  JSON Payload
+                                </h4>
+                                <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 font-mono text-xs leading-relaxed text-blue-300">
+{payloadJson}
+                                </pre>
+                              </div>
+                              <div>
+                                <h4 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                  Metadata
+                                </h4>
+                                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                                  <div>
+                                    <p className="text-[10px] font-medium text-slate-500">Trace ID</p>
+                                    <p className="text-xs font-mono text-slate-900 dark:text-slate-200">
+                                      {(details.trace_id as string) || '—'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-medium text-slate-500">Hostname</p>
+                                    <p className="text-xs font-mono text-slate-900 dark:text-slate-200">
+                                      {(details.hostname as string) || '—'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-medium text-slate-500">Region</p>
+                                    <p className="text-xs text-slate-900 dark:text-slate-200">
+                                      {(details.region as string) || '—'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-medium text-slate-500">User Agent</p>
+                                    <p className="truncate text-xs text-slate-900 dark:text-slate-200">
+                                      {(details.user_agent as string) || '—'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      <div className="space-y-3 border-t border-slate-200 bg-slate-50/70 p-6 dark:border-slate-800 dark:bg-slate-900/70">
+                        <Button className="h-11 w-full bg-red-600 text-white hover:bg-red-700">
+                          Acknowledge & Resolve
+                        </Button>
+                        <div className="flex gap-3">
+                          <Button variant="outline" className="h-10 flex-1 gap-2">
+                            <Share2 className="h-4 w-4" />
+                            Share Logs
+                          </Button>
+                          <Button variant="outline" className="h-10 flex-1 gap-2">
+                            <Eye className="h-4 w-4" />
+                            View Actor History
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
             ) : (
-              <EmptyState
-                title="No Logs"
-                message="No system activity recorded"
-              />
+              <div className="rounded-2xl border border-border/70 bg-background p-8 text-center shadow-[0px_20px_50px_rgba(31,0,95,0.04)] sm:p-12">
+                <div className="relative mx-auto mb-8 flex h-28 w-28 items-center justify-center rounded-full bg-primary/5">
+                  <div className="absolute inset-0 scale-110 rounded-full bg-primary/10 blur-2xl" />
+                  <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg dark:bg-slate-900">
+                    <Search className="h-8 w-8 text-primary/40" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-black tracking-tight text-foreground">No logs found</h3>
+                <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+                  We couldn't find any log entries matching your current filters for
+                  <strong> "CRITICAL" </strong>
+                  severity from
+                  <strong> "DATABASE" </strong>
+                  sources. Try broadening your search parameters.
+                </p>
+                <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                  <Button
+                    type="button"
+                    onClick={handleClearLogFilters}
+                    className="h-11 min-w-[170px] px-6 text-xs font-bold uppercase tracking-[0.12em]"
+                  >
+                    Clear all filters
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => logSearchInputRef.current?.focus()}
+                    className="h-11 min-w-[170px] px-6 text-xs font-bold uppercase tracking-[0.12em]"
+                  >
+                    Modify search
+                  </Button>
+                </div>
+                <div className="mx-auto mt-10 grid w-full max-w-2xl grid-cols-1 gap-4 border-t border-border/70 pt-6 sm:grid-cols-3 sm:gap-8">
+                  <div className="text-center">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                      Last Log
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      3 minutes ago
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                      Queue State
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      Idle (0 in buffer)
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                      System Health
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-emerald-600">Optimal</p>
+                  </div>
+                </div>
+              </div>
             )}
           </SettingsSection>
         </TabsContent>
@@ -2211,7 +3203,7 @@ export const SettingsAndLogs: React.FC = () => {
               <div className="flex flex-col gap-1">
                 <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
                   <span>Users &amp; Roles</span>
-                  <span className="text-slate-400">/</span>
+                  <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
                   <span className="text-slate-500 dark:text-slate-400">Manage Role</span>
                 </div>
                 <div className="flex items-start justify-between">
@@ -2267,7 +3259,7 @@ export const SettingsAndLogs: React.FC = () => {
                   variant="outline"
                   className="h-10 gap-2 border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Copy className="h-4 w-4" />
                   Duplicate Role
                 </Button>
               </div>
@@ -2369,11 +3361,13 @@ export const SettingsAndLogs: React.FC = () => {
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <Input
                       placeholder="Search users..."
+                      value={managedRoleUserSearch}
+                      onChange={(e) => setManagedRoleUserSearch(e.target.value)}
                       className="h-10 border-slate-200 bg-white pl-10 text-sm dark:border-slate-700 dark:bg-slate-900"
                     />
                   </div>
                   <div className="space-y-3">
-                    {managedRoleUsers.slice(0, 5).map((user, index) => {
+                    {filteredManagedRoleUsers.slice(0, 5).map((user, index) => {
                       const initials = (user.full_name ?? user.name ?? user.email ?? 'U')
                         .split(' ')
                         .filter(Boolean)
@@ -2404,14 +3398,19 @@ export const SettingsAndLogs: React.FC = () => {
                               {(user.department ?? 'IT Team')} • {user.email}
                             </p>
                           </div>
-                          <span className="text-lg text-slate-300 transition-colors group-hover:text-slate-500">⋮</span>
+                          <MoreVertical className="h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500" />
                         </div>
                       );
                     })}
+                    {filteredManagedRoleUsers.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-200 bg-white/80 px-4 py-6 text-center text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-400">
+                        No users match this role search.
+                      </div>
+                    ) : null}
                   </div>
                   <button type="button" className="mt-4 flex items-center gap-1 text-sm font-bold text-primary hover:underline">
-                    <span>View all {managedRoleUsers.length} users</span>
-                    <span>→</span>
+                    <span>View all {filteredManagedRoleUsers.length} users</span>
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 </section>
 
@@ -2473,6 +3472,591 @@ export const SettingsAndLogs: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={createCustomRoleOpen}
+        onOpenChange={(open) => {
+          setCreateCustomRoleOpen(open);
+          if (!open) resetCustomRoleModal();
+        }}
+      >
+        <DialogContent className="max-h-[95vh] max-w-[960px] overflow-hidden border-slate-200 bg-[#f9f9fb] p-0 shadow-[0_20px_50px_rgba(31,0,95,0.08)] dark:border-slate-800 dark:bg-[#161220]">
+          <DialogTitle className="sr-only">Create Custom Role</DialogTitle>
+          <DialogDescription className="sr-only">
+            Define a new operational role and configure its governance model.
+          </DialogDescription>
+
+          <div className="flex max-h-[95vh] flex-col overflow-hidden">
+            <div className="border-b border-slate-200/70 bg-white/85 px-12 py-8 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/85">
+              <div className="flex flex-col gap-2">
+                <nav className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  <span>Users &amp; Roles</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                  <span className="font-semibold text-primary">Create Custom Role</span>
+                </nav>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100">
+                      Create Custom Role
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      Define a new operational role and configure its governance model.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCreateCustomRoleOpen(false)}
+                    className="rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-12 pb-24">
+              <div className="mb-8 mt-8 flex items-center justify-between rounded-xl bg-slate-100 p-6 dark:bg-slate-900/70">
+                <div className="flex items-center gap-5">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <ShieldCheck className="h-7 w-7" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-black text-slate-900 dark:text-slate-100">
+                        New Role Architecture
+                      </span>
+                      <span className="rounded-full bg-slate-200/80 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                        Draft
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Configure baseline permissions and user assignments below.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-slate-200/60 dark:hover:bg-slate-800"
+                >
+                  <Copy className="h-4 w-4" />
+                  Duplicate Existing Role
+                </button>
+              </div>
+
+              <div className="grid grid-cols-12 gap-10">
+                <div className="col-span-8 flex flex-col gap-10">
+                  <section>
+                    <h3 className="mb-6 flex items-center gap-2 text-lg font-black text-slate-900 dark:text-slate-100">
+                      <span className="h-6 w-1.5 rounded-full bg-primary" />
+                      Role Details
+                    </h3>
+                    <div className="space-y-6 rounded-xl bg-slate-100/70 p-8 dark:bg-slate-900/70">
+                      <div className="grid grid-cols-1 gap-6">
+                        <div className="flex flex-col gap-2">
+                          <Label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Role Name
+                          </Label>
+                          <Input
+                            value={customRoleName}
+                            onChange={(e) => setCustomRoleName(e.target.value)}
+                            placeholder="e.g. Regional Security Lead"
+                            className="h-12 rounded-t-lg border-0 border-b-2 border-transparent bg-white px-4 text-sm shadow-sm focus:border-primary focus-visible:ring-0 dark:bg-slate-950"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Description
+                          </Label>
+                          <textarea
+                            rows={3}
+                            value={customRoleDescription}
+                            onChange={(e) => setCustomRoleDescription(e.target.value)}
+                            placeholder="Describe the responsibilities and scope of this role..."
+                            className="w-full rounded-t-lg border-0 border-b-2 border-transparent bg-white px-4 py-3 text-sm shadow-sm transition-all focus:border-primary focus:outline-none dark:bg-slate-950"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="flex flex-col gap-2">
+                          <Label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Category
+                          </Label>
+                          <Select value={customRoleCategory} onValueChange={setCustomRoleCategory}>
+                            <SelectTrigger className="h-12 rounded-t-lg border-0 border-b-2 border-transparent bg-white px-4 text-sm shadow-sm focus:ring-0 dark:bg-slate-950">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Operations">Operations</SelectItem>
+                              <SelectItem value="Security">Security</SelectItem>
+                              <SelectItem value="Executive">Executive</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Scope
+                          </Label>
+                          <Select value={customRoleScope} onValueChange={setCustomRoleScope}>
+                            <SelectTrigger className="h-12 rounded-t-lg border-0 border-b-2 border-transparent bg-white px-4 text-sm shadow-sm focus:ring-0 dark:bg-slate-950">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Global Tenant">Global Tenant</SelectItem>
+                              <SelectItem value="Regional Branch">Regional Branch</SelectItem>
+                              <SelectItem value="Departmental">Departmental</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            Immediate Activation
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Role will be deployable upon saving.
+                          </span>
+                        </div>
+                        <Switch
+                          checked={customRoleImmediateActivation}
+                          onCheckedChange={setCustomRoleImmediateActivation}
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="mb-6 flex items-center gap-2 text-lg font-black text-slate-900 dark:text-slate-100">
+                      <span className="h-6 w-1.5 rounded-full bg-primary" />
+                      Governance Rules
+                    </h3>
+                    <div className="overflow-hidden rounded-xl bg-slate-100/70 dark:bg-slate-900/70">
+                      <div className="divide-y divide-slate-200/50 dark:divide-slate-800">
+                        {[
+                          ['peerApprovalRequired', 'Peer Approval Required', 'Changes require secondary confirmation.', ShieldCheck],
+                          ['ticketAssociation', 'Ticket Association', 'Force incident linking for all actions.', Bot],
+                          ['assetInventoryAccess', 'Asset Inventory Access', 'Grant visibility to hardware/software stocks.', Users2],
+                          ['billingManagement', 'Billing Management', 'Allow modifications to subscription terms.', Globe2],
+                          ['securityPolicyOverride', 'Security Policy Override', 'Highest privilege tier for firewall control.', AlertTriangle],
+                        ].map(([key, title, helper, Icon]) => {
+                          const LucideIcon = Icon as typeof ShieldCheck;
+                          return (
+                            <div
+                              key={key}
+                              className="flex items-center justify-between p-5 transition-colors hover:bg-slate-200/40 dark:hover:bg-slate-800/60"
+                            >
+                              <div className="flex items-center gap-4">
+                                <LucideIcon className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                    {title}
+                                  </p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    {helper}
+                                  </p>
+                                </div>
+                              </div>
+                              <Switch
+                                checked={customRoleGovernance[key as keyof typeof customRoleGovernance]}
+                                onCheckedChange={(checked) =>
+                                  setCustomRoleGovernance((current) => ({
+                                    ...current,
+                                    [key]: checked,
+                                  }))
+                                }
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <div className="col-span-4 flex flex-col gap-10">
+                  <section>
+                    <h3 className="mb-4 text-sm font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Permission Presets
+                    </h3>
+                    <div className="space-y-3">
+                      {customRolePresetCards.map((preset) => (
+                        <button
+                          key={preset.key}
+                          type="button"
+                          onClick={() => handleSelectCustomRolePreset(preset.key)}
+                          className={`w-full rounded-xl border p-4 text-left transition-all ${
+                            customRolePreset === preset.key
+                              ? 'border-primary/20 bg-white shadow-sm dark:bg-slate-900'
+                              : 'border-transparent bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-900/70 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="mb-2 flex items-center justify-between">
+                            <span
+                              className={`text-sm font-bold ${
+                                customRolePreset === preset.key ? 'text-primary' : 'text-slate-900 dark:text-slate-100'
+                              }`}
+                            >
+                              {preset.title}
+                            </span>
+                            {customRolePreset === preset.key ? (
+                              <CheckCircle2 className="h-4.5 w-4.5 text-primary" />
+                            ) : null}
+                          </div>
+                          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                            {preset.description}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="flex-1">
+                    <h3 className="mb-4 text-sm font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Assigned Users Preview
+                    </h3>
+                    <div className="flex h-full min-h-[300px] flex-col rounded-xl bg-slate-100 p-5 dark:bg-slate-900/70">
+                      <div className="relative mb-4">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          value={customRoleUserSearch}
+                          onChange={(e) => setCustomRoleUserSearch(e.target.value)}
+                          placeholder="Search users..."
+                          className="h-10 border-0 bg-white pl-9 text-xs shadow-sm focus-visible:ring-1 focus-visible:ring-primary dark:bg-slate-950"
+                        />
+                      </div>
+                      <div className="flex-1 space-y-4">
+                        {customRolePreviewUsers.slice(0, 2).map((user, index) => {
+                          const initials = (user.full_name ?? user.name ?? user.email ?? 'U')
+                            .split(' ')
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((part) => part[0]?.toUpperCase())
+                            .join('');
+                          const palette = [
+                            'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+                            'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+                          ][index % 2];
+
+                          return (
+                            <div key={user.id} className="flex items-center gap-3 p-1">
+                              <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${palette}`}>
+                                {initials || 'U'}
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                  {user.full_name ?? user.name ?? 'Unknown User'}
+                                </p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                  {user.department ?? 'Team Member'}
+                                </p>
+                              </div>
+                              <button type="button" className="ml-auto text-slate-400 transition-colors hover:text-rose-500">
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300/60 p-4 text-center dark:border-slate-700">
+                          <Plus className="mb-1 h-4.5 w-4.5 text-slate-400" />
+                          <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                            Assign more users to this role
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section>
+                    <div className="rounded-xl border border-primary/10 bg-primary/5 p-6 dark:bg-primary/20">
+                      <h3 className="mb-4 text-sm font-black uppercase tracking-wider text-primary">
+                        Role Summary
+                      </h3>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-500 dark:text-slate-400">Modules Accessible</span>
+                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                            {customRoleEnabledModules} / 5
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-500 dark:text-slate-400">Estimated Users</span>
+                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                            {Math.max(customRolePreviewUsers.length, 2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-500 dark:text-slate-400">Risk Level</span>
+                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                            {customRoleRiskLevel}
+                          </span>
+                        </div>
+                        <div className="border-t border-primary/10 pt-4">
+                          <div className="flex gap-3">
+                            <Info className="h-5 w-5 text-primary" />
+                            <p className="text-xs italic leading-relaxed text-slate-600 dark:text-slate-400">
+                              Custom roles let you stage governance changes before moving into granular permission editing.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-200/70 bg-white/90 px-12 py-6 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/90">
+              <button
+                type="button"
+                onClick={() => setCreateCustomRoleOpen(false)}
+                className="rounded-lg px-6 py-2.5 text-sm font-semibold text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <div className="flex items-center gap-4">
+                <span className="text-xs italic text-slate-500 dark:text-slate-400">
+                  All changes are saved to draft
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSaveCustomRoleAndContinue}
+                  className="rounded-lg bg-gradient-to-br from-[#25006d] to-[#3b1e8a] px-8 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-lg transition-opacity hover:opacity-90"
+                >
+                  Save &amp; Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editPermissionsOpen}
+        onOpenChange={(open) => {
+          if (!open) handleCloseEditPermissions();
+        }}
+      >
+        <DialogContent className="max-h-[95vh] max-w-[960px] overflow-hidden border-slate-200 bg-[#f9f9fb] p-0 shadow-[0_20px_50px_rgba(31,0,95,0.08)] dark:border-slate-800 dark:bg-[#161220]">
+          <DialogTitle className="sr-only">Edit Permissions</DialogTitle>
+          <DialogDescription className="sr-only">
+            Configure granular module-level access for the new custom role.
+          </DialogDescription>
+
+          <div className="flex max-h-[95vh] flex-col overflow-hidden">
+            <div className="bg-[#f9f9fb] px-12 pb-6 pt-10 dark:bg-[#161220]">
+              <nav className="mb-4 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                <span>Users &amp; Roles</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span>Create Custom Role</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span className="font-bold text-primary">Edit Permissions</span>
+              </nav>
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100">
+                    Edit Permissions
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Configure granular module-level access for the new custom role.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseEditPermissions}
+                  className="rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-12 py-4">
+              <div className="grid grid-cols-12 gap-10">
+                <div className="col-span-8 space-y-12 pb-24">
+                  <div className="rounded-xl border border-slate-200/70 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        value={permissionSearch}
+                        onChange={(e) => setPermissionSearch(e.target.value)}
+                        placeholder="Search permissions..."
+                        className="h-11 border-0 bg-slate-100 pl-10 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-primary dark:bg-slate-950"
+                      />
+                    </div>
+                  </div>
+
+                  {filteredEditPermissionSections.map((section) => {
+                    const SectionIcon = section.icon;
+
+                    return (
+                      <section key={section.key}>
+                        <div className="mb-6 flex items-center gap-3">
+                          <SectionIcon className="h-5 w-5 text-[#3b1e8a]" />
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                            {section.title}
+                          </h3>
+                        </div>
+                        <div className="space-y-4">
+                          {section.rows.map((row) => {
+                            const selectedLevel = rolePermissionLevels[row.id] ?? 'none';
+
+                            return (
+                              <div
+                                key={row.id}
+                                className={`flex items-center justify-between rounded-lg px-4 py-3 transition-colors ${
+                                  row.highRisk
+                                    ? 'bg-orange-50 hover:bg-orange-100/80 dark:bg-orange-950/20 dark:hover:bg-orange-950/30'
+                                    : 'hover:bg-slate-100 dark:hover:bg-slate-900/70'
+                                }`}
+                              >
+                                <div className="pr-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                      {row.label}
+                                    </span>
+                                    {row.highRisk ? (
+                                      <AlertTriangle
+                                        className="h-4 w-4 text-orange-700 dark:text-orange-400"
+                                        aria-hidden="true"
+                                      />
+                                    ) : null}
+                                  </div>
+                                  {row.helper ? (
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                      {row.helper}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <div className="flex rounded-full bg-slate-200/70 p-1 dark:bg-slate-800">
+                                  {([
+                                    ['full', 'Full Access'],
+                                    ['conditional', 'Conditional'],
+                                    ['none', 'No Access'],
+                                  ] as const).map(([level, label]) => {
+                                    const isActive = selectedLevel === level;
+                                    const isDangerNone = row.highRisk && level === 'none' && isActive;
+
+                                    return (
+                                      <button
+                                        key={level}
+                                        type="button"
+                                        onClick={() => handlePermissionLevelChange(row.id, level)}
+                                        className={`rounded-full px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-all ${
+                                          isActive
+                                            ? isDangerNone
+                                              ? 'bg-white text-orange-900 shadow-sm dark:bg-slate-950 dark:text-orange-300'
+                                              : 'bg-white text-primary shadow-sm dark:bg-slate-950 dark:text-primary'
+                                            : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                                        }`}
+                                      >
+                                        {label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    );
+                  })}
+
+                  {filteredEditPermissionSections.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 px-6 py-10 text-center dark:border-slate-700 dark:bg-slate-900/70">
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        No permissions match this search.
+                      </p>
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Try a broader keyword like ticket, asset, or security.
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="col-span-4">
+                  <div className="sticky top-0 rounded-xl border border-slate-200/60 bg-slate-100 p-6 dark:border-slate-800 dark:bg-slate-900/70">
+                    <h4 className="mb-6 text-sm font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                      Role Summary
+                    </h4>
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 w-2 rounded-full bg-primary" />
+                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            Full Access
+                          </span>
+                        </div>
+                        <span className="text-lg font-black text-slate-900 dark:text-slate-100">
+                          {String(permissionCounts.full).padStart(2, '0')}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 w-2 rounded-full bg-[#a68efc]" />
+                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            Conditional
+                          </span>
+                        </div>
+                        <span className="text-lg font-black text-slate-900 dark:text-slate-100">
+                          {String(permissionCounts.conditional).padStart(2, '0')}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            No Access
+                          </span>
+                        </div>
+                        <span className="text-lg font-black text-slate-900 dark:text-slate-100">
+                          {String(permissionCounts.none).padStart(2, '0')}
+                        </span>
+                      </div>
+
+                      <div className="mt-6 border-t border-slate-200/70 pt-6 dark:border-slate-800">
+                        <div className="flex items-start gap-3 rounded-lg bg-slate-200/40 p-3 dark:bg-slate-800/70">
+                          <Info className="mt-0.5 h-4.5 w-4.5 text-slate-500 dark:text-slate-400" />
+                          <p className="text-xs italic leading-relaxed text-slate-500 dark:text-slate-400">
+                            Changes are logged in the audit trail for compliance monitoring.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="relative mt-4 overflow-hidden rounded-lg">
+                        <div className="aspect-video bg-[radial-gradient(circle_at_top_left,_rgba(166,142,252,0.85),_rgba(37,0,109,0.95)_55%,_rgba(14,9,27,1)_100%)]" />
+                        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),transparent_45%,rgba(255,255,255,0.02))]" />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#25006d]/70 to-transparent p-3">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-white/85">
+                            Enterprise Security
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-200/60 bg-white/80 px-12 py-8 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/80">
+              <button
+                type="button"
+                onClick={handleBackToCreateCustomRole}
+                className="rounded-md px-8 py-3 text-sm font-bold uppercase tracking-wider text-slate-500 transition-all hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyPermissionChanges}
+                className="rounded-md bg-gradient-to-br from-[#25006d] to-[#3b1e8a] px-10 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-lg shadow-primary/20 transition-all hover:opacity-90"
+              >
+                Apply Changes
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
@@ -2484,17 +4068,17 @@ export const SettingsAndLogs: React.FC = () => {
             <AlertDialogTitle>Delete category</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently remove "{deleteTarget?.name}".
-              Existing tickets may lose their category.
+              Existing assets assigned to this category may need to be reclassified.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteCategory.isPending}>
+            <AlertDialogCancel disabled={deleteAssetCategory.isPending}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteCategory}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteCategory.isPending}
+              disabled={deleteAssetCategory.isPending}
             >
               Delete
             </AlertDialogAction>

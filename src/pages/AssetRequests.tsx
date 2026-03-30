@@ -38,14 +38,17 @@ import { useAssets } from '@/hooks/useAssets';
 import { useInStockUnits, useStockItems } from '@/hooks/useStockControl';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
 import {
+  AssetRequestItem,
   useActiveAssetLoans,
   useApproveAssetRequest,
   useAssetRequests,
   useCancelAssetRequest,
+  useCreateAssetBorrowRequestWithStock,
   useCreateAssetIssueRequestWithStock,
   useCreateAssetRequest,
   useRejectAssetRequest,
   useReturnAssetLoan,
+  useReturnStockBorrowRequest,
 } from '@/hooks/useAssetRequests';
 
 const REQUEST_STATUS_CLASS: Record<string, string> = {
@@ -151,6 +154,16 @@ const getLoanIcon = (assetName: string | null | undefined) => {
   return Laptop;
 };
 
+type ActiveLoanCardItem = {
+  id: string;
+  dueAt: string | null;
+  borrowerName: string;
+  title: string;
+  code: string;
+  returnKind: 'asset' | 'stock';
+  returnId: string;
+};
+
 export function AssetRequestsPage() {
   const [searchParams] = useSearchParams();
   const highlightedRequestId = searchParams.get('requestId');
@@ -163,16 +176,19 @@ export function AssetRequestsPage() {
   const { data: activeLoans = [], isLoading: loansLoading } = useActiveAssetLoans();
 
   const createRequest = useCreateAssetRequest();
+  const createBorrowWithStock = useCreateAssetBorrowRequestWithStock();
   const createIssueWithStock = useCreateAssetIssueRequestWithStock();
   const approveRequest = useApproveAssetRequest();
   const rejectRequest = useRejectAssetRequest();
   const cancelRequest = useCancelAssetRequest();
   const returnLoan = useReturnAssetLoan();
+  const returnStockBorrow = useReturnStockBorrowRequest();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'loans'>('pending');
   const [requestView, setRequestView] = useState<'all' | 'borrow' | 'issue'>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [requestType, setRequestType] = useState<'borrow' | 'issue'>('borrow');
+  const [borrowSource, setBorrowSource] = useState<'asset' | 'stock'>('asset');
   const [assetId, setAssetId] = useState('');
   const [stockItemId, setStockItemId] = useState('');
   const [stockUnitIds, setStockUnitIds] = useState<string[]>([]);
@@ -189,7 +205,8 @@ export function AssetRequestsPage() {
     [stockItemId, stockItems]
   );
   const { data: issueUnits = [] } = useInStockUnits(
-    requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized'
+    (requestType === 'issue' || (requestType === 'borrow' && borrowSource === 'stock')) &&
+      selectedStockItem?.tracking_mode === 'serialized'
       ? selectedStockItem.id
       : undefined
   );
@@ -209,7 +226,56 @@ export function AssetRequestsPage() {
     [visibleRequests]
   );
 
-  const tableRequests = activeTab === 'pending' ? pendingRequests : visibleRequests;
+  const activeLoanRequests = useMemo(
+    () =>
+      visibleRequests.filter(
+        (request) =>
+          request.request_type === 'borrow' &&
+          ((request.asset_id !== null && request.status === 'approved') ||
+            (request.stock_item_id !== null &&
+              request.status === 'fulfilled' &&
+              request.returned_at === null))
+      ),
+    [visibleRequests]
+  );
+
+  const activeLoanCards = useMemo<ActiveLoanCardItem[]>(() => {
+    const assetLoanCards: ActiveLoanCardItem[] = activeLoans.map((loan) => ({
+      id: loan.id,
+      dueAt: loan.due_at,
+      borrowerName: loan.borrower?.name || loan.borrower?.email || loan.borrower_id,
+      title: loan.asset?.name ?? loan.asset_id,
+      code: loan.asset?.asset_code ?? `#${loan.id.slice(0, 8)}`,
+      returnKind: 'asset',
+      returnId: loan.id,
+    }));
+
+    const stockLoanCards: ActiveLoanCardItem[] = activeLoanRequests
+      .filter((request) => request.stock_item_id !== null)
+      .map((request) => {
+        const display = getRequestDisplay(request);
+        const borrowerName =
+          request.requester?.name || request.requester?.email || request.requested_by;
+
+        return {
+          id: request.id,
+          dueAt: request.due_at,
+          borrowerName,
+          title: display.title,
+          code: display.subtitle,
+          returnKind: 'stock',
+          returnId: request.id,
+        };
+      });
+
+    return [...assetLoanCards, ...stockLoanCards].sort((a, b) => {
+      const aTime = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const bTime = b.dueAt ? new Date(b.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    });
+  }, [activeLoanRequests, activeLoans]);
+
+  const tableRequests = activeTab === 'pending' ? pendingRequests : activeLoanRequests;
   const serializedSelectedCount =
     requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized'
       ? stockUnitIds.length
@@ -217,18 +283,26 @@ export function AssetRequestsPage() {
   const parsedQuantity = Number(quantity) || 1;
   const summaryDateLabel = dateValue ? format(new Date(dateValue), 'MMM d, yyyy') : '-- / -- / --';
   const summaryTypeLabel = requestType === 'borrow' ? 'Borrow Request' : 'Issue Request';
-  const summaryItemLabel = requestType === 'borrow'
-    ? selectedAsset
-      ? `${selectedAsset.name} (${selectedAsset.asset_code})`
-      : 'No item selected'
-    : selectedStockItem
-      ? `${selectedStockItem.name}${
-          serializedSelectedCount > 0 ? ` / ${serializedSelectedCount} serialized units` : ''
-        }`
-      : 'No item selected';
+  const summaryItemLabel =
+    requestType === 'borrow'
+      ? borrowSource === 'asset'
+        ? selectedAsset
+          ? `${selectedAsset.name} (${selectedAsset.asset_code})`
+          : 'No item selected'
+        : selectedStockItem
+          ? `${selectedStockItem.name}${
+              serializedSelectedCount > 0 ? ` / ${serializedSelectedCount} serialized units` : ''
+            }`
+          : 'No item selected'
+      : selectedStockItem
+        ? `${selectedStockItem.name}${
+            serializedSelectedCount > 0 ? ` / ${serializedSelectedCount} serialized units` : ''
+          }`
+        : 'No item selected';
 
   const resetCreateForm = () => {
     setRequestType('borrow');
+    setBorrowSource('asset');
     setAssetId('');
     setStockItemId('');
     setStockUnitIds([]);
@@ -281,19 +355,33 @@ export function AssetRequestsPage() {
     }
   };
 
+  const handleReturnStockBorrow = async (requestId: string) => {
+    try {
+      await returnStockBorrow.mutateAsync({ requestId });
+      notifySuccess('Stock borrow returned');
+    } catch (err) {
+      notifyError('Return failed', err instanceof Error ? err.message : 'Unknown error');
+    }
+  };
+
   const handleCreateRequest = async () => {
     if (!Number.isFinite(parsedQuantity) || parsedQuantity < 1) {
       notifyError('Invalid quantity', 'Quantity must be at least 1');
       return;
     }
 
-    if (requestType === 'borrow' && !assetId) {
+    if (requestType === 'borrow' && borrowSource === 'asset' && !assetId) {
       notifyError('Asset required', 'Please select an asset for borrow request');
       return;
     }
 
-    if (requestType === 'issue' && !stockItemId) {
-      notifyError('Stock item required', 'Please select a stock item for issue request');
+    if ((requestType === 'issue' || (requestType === 'borrow' && borrowSource === 'stock')) && !stockItemId) {
+      notifyError(
+        'Stock item required',
+        requestType === 'borrow'
+          ? 'Please select a stock item for borrow request'
+          : 'Please select a stock item for issue request'
+      );
       return;
     }
 
@@ -331,13 +419,39 @@ export function AssetRequestsPage() {
           });
         }
       } else {
-        await createRequest.mutateAsync({
-          assetId,
-          requestType: 'borrow',
-          quantity: parsedQuantity,
-          dueAt: dateValue || null,
-          reason: reason.trim() || undefined,
-        });
+        if (borrowSource === 'stock') {
+          if (selectedStockItem?.tracking_mode === 'serialized') {
+            if (stockUnitIds.length === 0) {
+              notifyError('Serialized unit required', 'Please select at least one serialized unit');
+              return;
+            }
+            for (const stockUnitId of stockUnitIds) {
+              await createBorrowWithStock.mutateAsync({
+                stockItemId,
+                stockUnitId,
+                quantity: 1,
+                dueAt: dateValue || null,
+                reason: reason.trim() || undefined,
+              });
+            }
+          } else {
+            await createBorrowWithStock.mutateAsync({
+              stockItemId,
+              stockUnitId: null,
+              quantity: parsedQuantity,
+              dueAt: dateValue || null,
+              reason: reason.trim() || undefined,
+            });
+          }
+        } else {
+          await createRequest.mutateAsync({
+            assetId,
+            requestType: 'borrow',
+            quantity: parsedQuantity,
+            dueAt: dateValue || null,
+            reason: reason.trim() || undefined,
+          });
+        }
       }
 
       notifySuccess('Request created');
@@ -348,7 +462,8 @@ export function AssetRequestsPage() {
     }
   };
 
-  const createPending = createRequest.isPending || createIssueWithStock.isPending;
+  const createPending =
+    createRequest.isPending || createBorrowWithStock.isPending || createIssueWithStock.isPending;
 
   return (
     <div className="space-y-6 bg-[#f6f6f8] p-4 text-slate-900 dark:bg-[#161220] dark:text-slate-100 md:p-8">
@@ -587,19 +702,15 @@ export function AssetRequestsPage() {
           </button>
         </div>
 
-        {loansLoading ? (
+        {loansLoading || requestsLoading ? (
           <LoadingSkeleton className="h-48" />
-        ) : activeLoans.length === 0 ? (
-          <EmptyState title="No active loans" message="All borrowed assets are already returned." />
+        ) : activeLoanCards.length === 0 ? (
+          <EmptyState title="No active loans" message="No borrowed asset or stock item is currently active." />
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {activeLoans.slice(0, 3).map((loan, index) => {
-              const badge = getLoanBadge(loan.due_at);
-              const borrowerName =
-                loan.borrower?.name || loan.borrower?.email || loan.borrower_id;
-              const assetName = loan.asset?.name ?? loan.asset_id;
-              const assetCode = loan.asset?.asset_code ?? `#${loan.id.slice(0, 8)}`;
-              const LoanIcon = getLoanIcon(assetName);
+            {activeLoanCards.slice(0, 3).map((loan, index) => {
+              const badge = getLoanBadge(loan.dueAt);
+              const LoanIcon = getLoanIcon(loan.title);
 
               return (
                 <div
@@ -632,11 +743,11 @@ export function AssetRequestsPage() {
                           <LoanIcon className="h-6 w-6" />
                         </div>
                         <div className="flex-1">
-                          <h4 className="truncate text-sm font-bold">{assetName}</h4>
+                          <h4 className="truncate text-sm font-bold">{loan.title}</h4>
                           <p className="mb-2 text-[10px] text-slate-500">
                             Loaned to{' '}
                             <span className="font-semibold text-slate-700 dark:text-slate-300">
-                              {borrowerName}
+                              {loan.borrowerName}
                             </span>
                           </p>
                           <div className="mb-3 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800">
@@ -647,17 +758,29 @@ export function AssetRequestsPage() {
                           </div>
                           <div className="mt-4 flex items-center justify-between">
                             <span className="text-[10px] font-bold text-slate-400">
-                              {assetCode}
+                              {loan.code}
                             </span>
-                            <button
-                              type="button"
-                              className="flex items-center gap-1 text-[10px] font-black uppercase text-primary transition-all hover:gap-2"
-                              disabled={returnLoan.isPending}
-                              onClick={() => void handleReturn(loan.id)}
-                            >
-                              Mark Returned
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            </button>
+                            {loan.returnKind === 'asset' ? (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 text-[10px] font-black uppercase text-primary transition-all hover:gap-2"
+                                disabled={returnLoan.isPending}
+                                onClick={() => void handleReturn(loan.returnId)}
+                              >
+                                Mark Returned
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 text-[10px] font-black uppercase text-primary transition-all hover:gap-2"
+                                disabled={returnStockBorrow.isPending}
+                                onClick={() => void handleReturnStockBorrow(loan.returnId)}
+                              >
+                                Return Stock
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -701,6 +824,7 @@ export function AssetRequestsPage() {
                     type="button"
                     onClick={() => {
                       setRequestType('borrow');
+                      setBorrowSource('asset');
                       setStockItemId('');
                       setStockUnitIds([]);
                     }}
@@ -741,27 +865,144 @@ export function AssetRequestsPage() {
                     </div>
 
                     {requestType === 'borrow' ? (
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Asset
-                        </Label>
-                        <Select value={assetId || '__none__'} onValueChange={(value) => setAssetId(value === '__none__' ? '' : value)}>
-                          <SelectTrigger className="h-11 border-slate-200 bg-slate-50 text-sm shadow-none dark:border-slate-700 dark:bg-slate-800/50">
-                            <div className="flex items-center gap-2">
-                              <Search className="h-4 w-4 text-slate-400" />
-                              <SelectValue placeholder={assetsLoading ? 'Loading inventory...' : 'Search inventory...'} />
+                      <>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            Borrow From
+                          </Label>
+                          <div className="flex h-11 w-full max-w-xs items-center rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBorrowSource('asset');
+                                setStockItemId('');
+                                setStockUnitIds([]);
+                              }}
+                              className={`h-full grow rounded-lg px-3 text-sm font-semibold transition-all ${
+                                borrowSource === 'asset'
+                                  ? 'bg-white text-primary shadow-sm dark:bg-slate-700'
+                                  : 'text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              Asset
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBorrowSource('stock');
+                                setAssetId('');
+                              }}
+                              className={`h-full grow rounded-lg px-3 text-sm font-semibold transition-all ${
+                                borrowSource === 'stock'
+                                  ? 'bg-white text-primary shadow-sm dark:bg-slate-700'
+                                  : 'text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              Stock
+                            </button>
+                          </div>
+                        </div>
+
+                        {borrowSource === 'asset' ? (
+                          <div className="flex flex-col gap-1.5">
+                            <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                              Asset
+                            </Label>
+                            <Select value={assetId || '__none__'} onValueChange={(value) => setAssetId(value === '__none__' ? '' : value)}>
+                              <SelectTrigger className="h-11 border-slate-200 bg-slate-50 text-sm shadow-none dark:border-slate-700 dark:bg-slate-800/50">
+                                <div className="flex items-center gap-2">
+                                  <Search className="h-4 w-4 text-slate-400" />
+                                  <SelectValue placeholder={assetsLoading ? 'Loading inventory...' : 'Search inventory...'} />
+                                </div>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Select asset</SelectItem>
+                                {assets.map((asset) => (
+                                  <SelectItem key={asset.id} value={asset.id}>
+                                    {asset.name} ({asset.asset_code})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex flex-col gap-1.5">
+                              <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                Stock Item
+                              </Label>
+                              <Select value={stockItemId || '__none__'} onValueChange={(value) => {
+                                setStockItemId(value === '__none__' ? '' : value);
+                                setStockUnitIds([]);
+                              }}>
+                                <SelectTrigger className="h-11 border-slate-200 bg-slate-50 text-sm shadow-none dark:border-slate-700 dark:bg-slate-800/50">
+                                  <div className="flex items-center gap-2">
+                                    <Search className="h-4 w-4 text-slate-400" />
+                                    <SelectValue placeholder={stockItemsLoading ? 'Loading inventory...' : 'Search inventory...'} />
+                                  </div>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Select stock item</SelectItem>
+                                  {stockItems.map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>
+                                      {item.sku} - {item.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">Select asset</SelectItem>
-                            {assets.map((asset) => (
-                              <SelectItem key={asset.id} value={asset.id}>
-                                {asset.name} ({asset.asset_code})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+
+                            {selectedStockItem?.tracking_mode === 'serialized' && (
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  Stock Units / Serial
+                                </Label>
+                                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                      onClick={() => setStockUnitIds(issueUnits.map((unit) => unit.id))}
+                                    >
+                                      Select all
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                      onClick={() => setStockUnitIds([])}
+                                    >
+                                      Clear
+                                    </button>
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                                      {serializedSelectedCount} selected
+                                    </span>
+                                  </div>
+                                  <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                                    {issueUnits.map((unit) => {
+                                      const isSelected = stockUnitIds.includes(unit.id);
+                                      return (
+                                        <button
+                                          key={unit.id}
+                                          type="button"
+                                          className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
+                                            isSelected
+                                              ? 'border-primary bg-primary/10 text-primary'
+                                              : 'border-slate-200 bg-white text-slate-700 hover:border-primary/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                                          }`}
+                                          onClick={() => toggleStockUnitSelection(unit.id)}
+                                        >
+                                          <span>{unit.serial_no}</span>
+                                          <span className="text-xs uppercase">{unit.status}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
                     ) : (
                       <>
                         <div className="flex flex-col gap-1.5">
@@ -850,7 +1091,11 @@ export function AssetRequestsPage() {
                         type="number"
                         value={quantity}
                         onChange={(e) => setQuantity(e.target.value)}
-                        disabled={requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized'}
+                        disabled={
+                          (requestType === 'issue' ||
+                            (requestType === 'borrow' && borrowSource === 'stock')) &&
+                          selectedStockItem?.tracking_mode === 'serialized'
+                        }
                       />
                     </div>
                   </section>
@@ -933,8 +1178,16 @@ export function AssetRequestsPage() {
                           <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
                             {(requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized'
                               ? serializedSelectedCount
+                              : requestType === 'borrow' &&
+                                  borrowSource === 'stock' &&
+                                  selectedStockItem?.tracking_mode === 'serialized'
+                              ? serializedSelectedCount
                               : parsedQuantity)} unit
                             {(requestType === 'issue' && selectedStockItem?.tracking_mode === 'serialized'
+                              ? serializedSelectedCount
+                              : requestType === 'borrow' &&
+                                  borrowSource === 'stock' &&
+                                  selectedStockItem?.tracking_mode === 'serialized'
                               ? serializedSelectedCount
                               : parsedQuantity) > 1
                               ? 's'
@@ -969,7 +1222,9 @@ export function AssetRequestsPage() {
                       <AlertCircle className="mt-0.5 h-4 w-4 text-primary" />
                       <p className="text-[11px] leading-tight text-primary/80">
                         {requestType === 'borrow'
-                          ? 'Borrow requests require manager approval and must be returned by the due date.'
+                          ? borrowSource === 'stock'
+                            ? 'Stock borrow requests will deduct inventory on approval and keep the due date on the request record for follow-up.'
+                            : 'Borrow requests require manager approval and must be returned by the due date.'
                           : 'Issue requests allocate stock permanently or until separately returned.'}
                       </p>
                     </div>

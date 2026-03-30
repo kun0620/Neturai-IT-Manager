@@ -12,6 +12,7 @@ import {
   PackageOpen,
   Plus,
   QrCode,
+  RotateCcw,
   Search,
   SlidersHorizontal,
   Warehouse,
@@ -55,6 +56,7 @@ import {
   useReceiveSerializedStock,
   useReceiveStock,
   useRecentStockMovements,
+  useReverseStockMovement,
   useStockItems,
   useUpdateStockItem,
 } from '@/hooks/useStockControl';
@@ -77,6 +79,27 @@ const MOVEMENT_STYLE_MAP: Record<
 };
 
 const formatMovementDate = (value: string) => format(new Date(value), 'MMM d, h:mm a');
+
+const NON_REVERSIBLE_REFERENCE_TYPES = new Set(['asset_request', 'asset_request_return']);
+
+const isMovementReversible = (movement: StockMovementRow, item?: StockItemView) => {
+  if (movement.reversed_at) return false;
+  if (movement.reference_type && NON_REVERSIBLE_REFERENCE_TYPES.has(movement.reference_type)) {
+    return false;
+  }
+  if (!item) return false;
+
+  if (item.tracking_mode === 'serialized') {
+    return (
+      (movement.movement_type === 'issue' || movement.movement_type === 'receive') &&
+      movement.stock_unit_id !== null
+    );
+  }
+
+  return ['receive', 'issue', 'adjust_increase', 'adjust_decrease'].includes(
+    movement.movement_type
+  );
+};
 
 const getStatus = (item: StockItemView) => {
   if (!item.is_active) {
@@ -279,6 +302,7 @@ export default function StockControlPage() {
   const createStockItem = useCreateStockItem();
   const updateStockItem = useUpdateStockItem();
   const deleteStockItem = useDeleteStockItem();
+  const reverseStockMovement = useReverseStockMovement();
   const receiveStock = useReceiveStock();
   const receiveSerializedStock = useReceiveSerializedStock();
   const issueStockBulk = useIssueStockBulk();
@@ -291,6 +315,7 @@ export default function StockControlPage() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [isOperationOpen, setIsOperationOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<StockItemView | null>(null);
+  const [reverseMovement, setReverseMovement] = useState<StockMovementRow | null>(null);
 
   const [newSku, setNewSku] = useState('');
   const [newName, setNewName] = useState('');
@@ -501,6 +526,25 @@ export default function StockControlPage() {
       setDeleteItem(null);
     } catch (err) {
       notifyError('Delete failed', err instanceof Error ? err.message : 'Unknown error');
+    }
+  };
+
+  const requestReverseMovement = (movement: StockMovementRow) => {
+    if (!canManage) return;
+    setReverseMovement(movement);
+  };
+
+  const handleReverseMovement = async () => {
+    if (!canManage || !reverseMovement) return;
+    try {
+      await reverseStockMovement.mutateAsync({
+        movementId: reverseMovement.id,
+        reason: `Manual reverse from stock movement log (${formatMovementDate(reverseMovement.created_at)})`,
+      });
+      notifySuccess('Stock movement reversed');
+      setReverseMovement(null);
+    } catch (err) {
+      notifyError('Reverse failed', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
@@ -924,12 +968,14 @@ export default function StockControlPage() {
                     <th className="px-6 py-3">Item / SKU</th>
                     <th className="px-6 py-3 text-center">Qty</th>
                     <th className="px-6 py-3">Reference</th>
+                    <th className="px-6 py-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-primary/5 text-sm">
                   {movements.slice(0, 8).map((movement) => {
                     const meta = MOVEMENT_STYLE_MAP[movement.movement_type];
                     const item = stockItems.find((stockItem) => stockItem.id === movement.stock_item_id);
+                    const reversible = isMovementReversible(movement, item);
                     const qtyText =
                       movement.movement_type === 'issue' ||
                       movement.movement_type === 'adjust_decrease' ||
@@ -952,6 +998,27 @@ export default function StockControlPage() {
                         </td>
                         <td className={`px-6 py-3 text-center font-bold ${meta.qtyClass}`}>{qtyText}</td>
                         <td className="px-6 py-3 text-xs text-slate-400">{movement.reference_id || movement.note || movement.reference_type || '-'}</td>
+                        <td className="px-6 py-3 text-right">
+                          {movement.reversed_at ? (
+                            <span className="inline-flex rounded bg-slate-200 px-2 py-1 text-[10px] font-black uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              Reversed
+                            </span>
+                          ) : reversible ? (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded border border-primary/20 px-2.5 py-1 text-[10px] font-black uppercase text-primary transition-colors hover:bg-primary/5"
+                              disabled={!canManage}
+                              onClick={() => requestReverseMovement(movement)}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Reverse
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-bold uppercase text-slate-300 dark:text-slate-600">
+                              Locked
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -2014,6 +2081,34 @@ export default function StockControlPage() {
               onClick={() => void handleDeleteItem()}
             >
               {deleteStockItem.isPending ? 'Deleting...' : 'Delete Item'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={reverseMovement != null}
+        onOpenChange={(open) => {
+          if (!open) setReverseMovement(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reverse stock movement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This keeps the original movement for audit and creates a compensating movement to undo
+              it. Movements created by asset request workflows must be reversed from their original
+              request flow instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reverseStockMovement.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleReverseMovement();
+              }}
+            >
+              {reverseStockMovement.isPending ? 'Reversing...' : 'Reverse Movement'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

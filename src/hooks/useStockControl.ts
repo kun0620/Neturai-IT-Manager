@@ -61,6 +61,9 @@ export type StockMovementRow = {
   note: string | null;
   created_by: string | null;
   created_at: string;
+  reversed_at: string | null;
+  reversed_by: string | null;
+  reversal_movement_id: string | null;
 };
 
 export type StockItemView = StockItemRow & {
@@ -387,6 +390,29 @@ export function useAdjustStockBalance() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+    },
+  });
+}
+
+export function useReverseStockMovement() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    StockMovementRow,
+    Error,
+    { movementId: string; reason?: string }
+  >({
+    mutationFn: async ({ movementId, reason }) => {
+      const { data, error } = await supabase.rpc('reverse_stock_movement', {
+        p_movement_id: movementId,
+        p_reason: reason ?? null,
+      });
+      if (error) throw new Error(error.message);
+      return data as StockMovementRow;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-units'] });
       queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
     },
   });
