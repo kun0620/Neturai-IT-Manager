@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { MainLayout } from '@/components/Layout/MainLayout';
 import { AuthProvider } from '@/context/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
-// Removed: import { TicketDetailsPage } from '@/pages/TicketDetailsPage';
+const TicketDetailsPage = lazy(() => import('@/pages/TicketDetailsPage'));
 
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'));
@@ -51,7 +51,7 @@ function App() {
                 <Route index element={<DashboardPage />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="tickets" element={<TicketsPage />} />
-                {/* Removed: <Route path="tickets/:ticketId" element={<TicketDetailsPage />} /> */}
+                <Route path="tickets/:ticketId" element={<TicketDetailsPage />} />
                 <Route path="assets" element={<AssetsWorkspacePage />} />
                 <Route path="assets/new" element={<AssetManagementPage />} />
                 <Route path="users" element={<UsersPage />} />

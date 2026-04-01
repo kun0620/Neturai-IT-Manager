@@ -10,7 +10,7 @@ interface ExportButtonProps {
 
 export function ExportButton({ onExport, isLoading }: ExportButtonProps) {
   const handleExport = (format: 'pdf' | 'csv') => {
-    notifyInfo(`Exporting data as ${format.toUpperCase()}... (Placeholder)`);
+    notifyInfo(`Exporting data as ${format.toUpperCase()}...`);
     onExport(format);
   };
 

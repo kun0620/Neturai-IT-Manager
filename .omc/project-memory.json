@@ -1,0 +1,189 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1775013268545,
+  "projectRoot": "C:\\Users\\ktmis010\\Neturai-IT-Manager\\Neturai-IT-Manager\\.claude\\worktrees\\sleepy-mcnulty",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "5.0.8",
+        "category": "build"
+      },
+      {
+        "name": "vitest",
+        "version": "2.1.8",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc && vite build",
+      "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+      "preview": "vite preview",
+      "test": "vitest run"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "feature-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "claude-glm-proxy": {
+      "path": "claude-glm-proxy",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1775013268499,
+      "keyFiles": [
+        "gemini-proxy.js",
+        "index.js",
+        "package-lock.json",
+        "package.json"
+      ]
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 1,
+      "lastAccessed": 1775013268499,
+      "keyFiles": [
+        "index.html"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1775013268522,
+      "keyFiles": [
+        "workflows.md"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1775013268522,
+      "keyFiles": [
+        "seedProfiles.ts"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 5,
+      "lastAccessed": 1775013268522,
+      "keyFiles": [
+        "App.css",
+        "App.tsx",
+        "index.css",
+        "main.tsx",
+        "vite-env.d.ts"
+      ]
+    },
+    "supabase": {
+      "path": "supabase",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1775013268523,
+      "keyFiles": []
+    },
+    "dist\\assets": {
+      "path": "dist\\assets",
+      "purpose": "Static assets",
+      "fileCount": 69,
+      "lastAccessed": 1775013268524,
+      "keyFiles": [
+        "alert-circle-BL5SOxVi.js",
+        "alert-dialog-C-sJvFhf.js",
+        "alert-triangle-DReOHE7u.js"
+      ]
+    },
+    "src\\components": {
+      "path": "src\\components",
+      "purpose": "UI components",
+      "fileCount": 11,
+      "lastAccessed": 1775013268525,
+      "keyFiles": [
+        "DashboardCard.tsx",
+        "EditAssetModal.tsx",
+        "EditTicketModal.tsx"
+      ]
+    },
+    "src\\lib": {
+      "path": "src\\lib",
+      "purpose": "Library code",
+      "fileCount": 9,
+      "lastAccessed": 1775013268525,
+      "keyFiles": [
+        "export.ts",
+        "motion.ts",
+        "notify.ts"
+      ]
+    },
+    "supabase\\migrations": {
+      "path": "supabase\\migrations",
+      "purpose": "Database migrations",
+      "fileCount": 108,
+      "lastAccessed": 1775013268526,
+      "keyFiles": [
+        "20260207_update_ticket_with_logs_rpc.sql",
+        "20260210_add_profile_fields.sql",
+        "20260211_add_dashboard_metrics_indexes.sql"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}

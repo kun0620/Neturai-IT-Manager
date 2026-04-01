@@ -6,14 +6,17 @@ import {
   CheckCircle,
   AlertTriangle,
   ChevronRight,
-  Laptop,
-  Printer,
-  Server,
   ArrowUpRight,
 } from 'lucide-react';
+import { subDays } from 'date-fns';
 import { useTickets } from '@/hooks/useTickets';
+import { useReportsData } from '@/hooks/useReportsData';
 import { ErrorState } from '@/components/common/ErrorState';
 import { KpiCardSkeleton } from '@/components/dashboard/KpiCardSkeleton';
+import { TicketsPerMonthChart } from '@/components/dashboard/TicketsPerMonthChart';
+import { AverageResolutionTimeChart } from '@/components/dashboard/AverageResolutionTimeChart';
+import { IssueCategoriesPieChart } from '@/components/dashboard/IssueCategoriesPieChart';
+import { TopRepairedAssetsTable } from '@/components/dashboard/TopRepairedAssetsTable';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { CreateTicketDialog } from '@/components/tickets/CreateTicketDialog';
@@ -35,6 +38,18 @@ const Dashboard: React.FC = () => {
   const canManageTickets = hasPermission(role, 'ticket.manage');
   const myUserId = session?.user?.id ?? null;
   const [showOnlyMyTickets, setShowOnlyMyTickets] = useState(!canManageTickets);
+
+  const reportsDateRange = useMemo(
+    () => ({ from: subDays(new Date(), 30), to: new Date() }),
+    []
+  );
+  const {
+    ticketsPerMonthData,
+    avgResolutionTimeData,
+    avgResolutionTimeKpi,
+    issueCategoriesData,
+    topRepairedAssetsData,
+  } = useReportsData(reportsDateRange);
 
   const prefetchTicketsRoute = useCallback(() => {
     void import('@/pages/Tickets');
@@ -71,42 +86,6 @@ const Dashboard: React.FC = () => {
     [dashboardMetrics?.recentTickets]
   );
 
-  const categoryDistribution = useMemo(() => {
-    const total = recentTickets.length;
-    if (!total) return [];
-
-    const idToName = new Map((categories ?? []).map((c) => [c.id, c.name]));
-    const counts = recentTickets.reduce<Record<string, number>>((acc, t) => {
-      const name = idToName.get(t.category_id ?? '') ?? 'Uncategorized';
-      acc[name] = (acc[name] ?? 0) + 1;
-      return acc;
-    }, {});
-
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([name, count], idx) => {
-        const ratio = Math.round((count / total) * 100);
-        const barClass = idx === 0
-          ? 'bg-primary'
-          : idx === 1
-            ? 'bg-blue-400'
-            : idx === 2
-              ? 'bg-amber-400'
-              : 'bg-red-400';
-        return { name, ratio, barClass };
-      });
-  }, [categories, recentTickets]);
-
-  const topRepairedLikeItems = useMemo(() => {
-    return recentTickets.slice(0, 3).map((ticket, index) => ({
-      id: ticket.id,
-      title: ticket.title,
-      subtitle: getTicketPriorityUi(ticket.priority).label,
-      repairs: Math.max(2, 8 - index * 2),
-      icon: index === 0 ? Laptop : index === 1 ? Printer : Server,
-    }));
-  }, [recentTickets]);
 
   useEffect(() => {
     if (!canManageTickets) {
@@ -418,58 +397,21 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-primary/10 bg-card p-6">
-                <h3 className="mb-5 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                  Distribution by Category
-                </h3>
-                <div className="space-y-4">
-                  {categoryDistribution.map((item) => (
-                    <div key={item.name}>
-                      <div className="mb-1.5 flex justify-between text-xs font-semibold">
-                        <span>{item.name}</span>
-                        <span>{item.ratio}%</span>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div className={`${item.barClass} h-full`} style={{ width: `${item.ratio}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                  {!categoryDistribution.length && (
-                    <p className="text-sm text-muted-foreground">No category distribution yet.</p>
-                  )}
-                </div>
-              </div>
+              <IssueCategoriesPieChart data={issueCategoriesData} />
 
-              <div className="overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm">
-                <div className="border-b border-primary/10 p-6">
-                  <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                    Top Repaired Assets
-                  </h3>
-                </div>
-                <div className="divide-y divide-primary/5">
-                  {topRepairedLikeItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <div key={item.id} className="flex items-center gap-4 p-4 transition-colors hover:bg-primary/5">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800">
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-bold">{item.title}</p>
-                          <p className="text-[10px] text-muted-foreground">{item.subtitle}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs font-bold text-red-500">{item.repairs} Repairs</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {!topRepairedLikeItems.length && (
-                    <div className="p-4 text-sm text-muted-foreground">No repaired assets yet.</div>
-                  )}
-                </div>
-              </div>
+              <TopRepairedAssetsTable data={topRepairedAssetsData} />
             </div>
+          </motion.div>
+
+          <motion.div
+            className="grid grid-cols-1 gap-8 xl:grid-cols-2"
+            {...createFadeSlideUp(0.2)}
+          >
+            <TicketsPerMonthChart data={ticketsPerMonthData} />
+            <AverageResolutionTimeChart
+              data={avgResolutionTimeData}
+              kpiValue={avgResolutionTimeKpi}
+            />
           </motion.div>
         </>
       )}
