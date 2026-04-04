@@ -8,6 +8,7 @@ type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
 const PROFILE_FIELDS: Array<keyof ProfileRow> = [
   'full_name',
+  'avatar_url',
   'department',
   'location',
   'assigned_asset_id',

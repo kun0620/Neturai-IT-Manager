@@ -1,0 +1,286 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1775270392803,
+  "projectRoot": "C:\\Users\\ktmis010\\Neturai-IT-Manager\\Neturai-IT-Manager",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "5.0.8",
+        "category": "build"
+      },
+      {
+        "name": "vitest",
+        "version": "2.1.8",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc && vite build",
+      "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+      "preview": "vite preview",
+      "test": "vitest run"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "feature-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 1,
+      "lastAccessed": 1775270392742,
+      "keyFiles": [
+        "index.html"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1775270392776,
+      "keyFiles": [
+        "workflows.md"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1775270392777,
+      "keyFiles": [
+        "seedProfiles.ts"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 5,
+      "lastAccessed": 1775270392778,
+      "keyFiles": [
+        "App.css",
+        "App.tsx",
+        "index.css",
+        "main.tsx",
+        "vite-env.d.ts"
+      ]
+    },
+    "supabase": {
+      "path": "supabase",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1775270392779,
+      "keyFiles": []
+    },
+    "dist\\assets": {
+      "path": "dist\\assets",
+      "purpose": "Static assets",
+      "fileCount": 69,
+      "lastAccessed": 1775270392780,
+      "keyFiles": [
+        "alert-circle-BL5SOxVi.js",
+        "alert-dialog-C-sJvFhf.js",
+        "alert-triangle-DReOHE7u.js"
+      ]
+    },
+    "src\\components": {
+      "path": "src\\components",
+      "purpose": "UI components",
+      "fileCount": 11,
+      "lastAccessed": 1775270392781,
+      "keyFiles": [
+        "DashboardCard.tsx",
+        "EditAssetModal.tsx",
+        "EditTicketModal.tsx"
+      ]
+    },
+    "src\\lib": {
+      "path": "src\\lib",
+      "purpose": "Library code",
+      "fileCount": 9,
+      "lastAccessed": 1775270392782,
+      "keyFiles": [
+        "export.ts",
+        "motion.ts",
+        "notify.ts"
+      ]
+    },
+    "supabase\\migrations": {
+      "path": "supabase\\migrations",
+      "purpose": "Database migrations",
+      "fileCount": 110,
+      "lastAccessed": 1775270392783,
+      "keyFiles": [
+        "20260207_update_ticket_with_logs_rpc.sql",
+        "20260210_add_profile_fields.sql",
+        "20260211_add_dashboard_metrics_indexes.sql"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src\\pages\\Profile.tsx",
+      "accessCount": 12,
+      "lastAccessed": 1775030021228,
+      "type": "file"
+    },
+    {
+      "path": "src\\types\\database.types.ts",
+      "accessCount": 5,
+      "lastAccessed": 1775028834960,
+      "type": "file"
+    },
+    {
+      "path": "src\\hooks\\useUserProfile.ts",
+      "accessCount": 3,
+      "lastAccessed": 1775028262440,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 3,
+      "lastAccessed": 1775028798214,
+      "type": "directory"
+    },
+    {
+      "path": "src\\components\\ui\\avatar.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1775028215512,
+      "type": "file"
+    },
+    {
+      "path": "supabase\\migrations",
+      "accessCount": 2,
+      "lastAccessed": 1775028839806,
+      "type": "directory"
+    },
+    {
+      "path": "supabase\\migrations\\create_profiles_table.sql",
+      "accessCount": 2,
+      "lastAccessed": 1775029110499,
+      "type": "file"
+    },
+    {
+      "path": "src\\hooks\\useCurrentProfile.ts",
+      "accessCount": 1,
+      "lastAccessed": 1775028134986,
+      "type": "file"
+    },
+    {
+      "path": "supabase\\migrations\\20260210_add_profile_fields.sql",
+      "accessCount": 1,
+      "lastAccessed": 1775028148318,
+      "type": "file"
+    },
+    {
+      "path": "supabase\\migrations\\20260211_link_profiles_assets.sql",
+      "accessCount": 1,
+      "lastAccessed": 1775028148372,
+      "type": "file"
+    },
+    {
+      "path": "src\\hooks\\useUserAssets.ts",
+      "accessCount": 1,
+      "lastAccessed": 1775028156309,
+      "type": "file"
+    },
+    {
+      "path": "src\\hooks\\useAuth.ts",
+      "accessCount": 1,
+      "lastAccessed": 1775028160390,
+      "type": "file"
+    },
+    {
+      "path": "src\\context\\AuthContext.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1775028167279,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1775028186825,
+      "type": "file"
+    },
+    {
+      "path": "supabase\\migrations\\20260401_create_avatars_storage_bucket.sql",
+      "accessCount": 1,
+      "lastAccessed": 1775028324585,
+      "type": "file"
+    },
+    {
+      "path": "src\\lib\\supabase.ts",
+      "accessCount": 1,
+      "lastAccessed": 1775028518312,
+      "type": "file"
+    },
+    {
+      "path": "src\\types",
+      "accessCount": 1,
+      "lastAccessed": 1775028791591,
+      "type": "directory"
+    },
+    {
+      "path": "supabase\\migrations\\20260401_ensure_avatar_url_column.sql",
+      "accessCount": 1,
+      "lastAccessed": 1775029128954,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

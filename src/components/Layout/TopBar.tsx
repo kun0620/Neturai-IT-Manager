@@ -43,6 +43,8 @@ import { useTicketDrawer } from '@/context/TicketDrawerContext';
 import { AnimatePresence, motion } from 'motion/react';
 import { Input } from '@/components/ui/input';
 import { useTheme } from 'next-themes';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useUserProfile } from '@/hooks/useUserProfile';
 
 
 
@@ -73,6 +75,7 @@ export function TopBar() {
     Array<{ id: string; name: string | null; email: string | null; department: string | null }>
   >([]);
   const { user } = useAuth();
+  const { data: currentProfile } = useUserProfile();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -579,6 +582,9 @@ export function TopBar() {
   };
   const isTicketsRoute = location.pathname.startsWith('/tickets');
   const isDarkMode = theme === 'dark' || (theme === 'system' && resolvedTheme === 'dark');
+  const profileDisplayName = user?.email?.split('@')[0] ?? 'User';
+  const profileEmail = user?.email ?? 'No email';
+  const profileInitials = profileDisplayName.slice(0, 2).toUpperCase();
   const toggleTheme = () => {
     setTheme(isDarkMode ? 'light' : 'dark');
   };
@@ -855,15 +861,18 @@ export function TopBar() {
                 >
                   <div className="hidden text-right sm:block">
                     <p className="max-w-[120px] truncate text-xs font-semibold leading-none">
-                      {user?.email?.split('@')[0] ?? 'User'}
+                      {profileDisplayName}
                     </p>
                     <p className="mt-1 max-w-[120px] truncate text-[10px] text-muted-foreground">
-                      {user?.email ?? 'No email'}
+                      {profileEmail}
                     </p>
                   </div>
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/60 ring-2 ring-primary/20">
-                    <User className="h-5 w-5" />
-                  </span>
+                  <Avatar className="h-9 w-9 bg-background/60 ring-2 ring-primary/20">
+                    <AvatarImage src={currentProfile?.avatar_url ?? undefined} alt={profileDisplayName} />
+                    <AvatarFallback className="bg-background/60 text-xs font-semibold text-foreground">
+                      {profileInitials}
+                    </AvatarFallback>
+                  </Avatar>
                 </button>
               </DropdownMenuTrigger>
 
@@ -874,15 +883,18 @@ export function TopBar() {
               >
                 <DropdownMenuLabel className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                    </span>
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={currentProfile?.avatar_url ?? undefined} alt={profileDisplayName} />
+                      <AvatarFallback className="text-[10px] font-semibold">
+                        {profileInitials}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold">
-                        {user?.email?.split('@')[0] ?? 'User'}
+                        {profileDisplayName}
                       </p>
                       <p className="truncate text-[10px] text-muted-foreground">
-                        {user?.email ?? 'No email'}
+                        {profileEmail}
                       </p>
                     </div>
                   </div>

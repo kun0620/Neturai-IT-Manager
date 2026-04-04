@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"profiles\" /c/Users/ktmis010/Neturai-IT-Manager/Neturai-IT-Manager/supabase/migrations/*.sql)",
+      "Bash(grep -A 30 \"CREATE TABLE.*profiles\" /c/Users/ktmis010/Neturai-IT-Manager/Neturai-IT-Manager/supabase/migrations/*.sql)",
+      "Bash(find:*)"
+    ]
+  }
+}

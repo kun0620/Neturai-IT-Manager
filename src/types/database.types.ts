@@ -298,6 +298,7 @@ export type Database = {
       profiles: {
         Row: {
           assigned_asset_id: string | null
+          avatar_url: string | null
           created_at: string | null
           device_details: string | null
           device_type: string | null
@@ -312,6 +313,7 @@ export type Database = {
         }
         Insert: {
           assigned_asset_id?: string | null
+          avatar_url?: string | null
           created_at?: string | null
           device_details?: string | null
           device_type?: string | null
@@ -326,6 +328,7 @@ export type Database = {
         }
         Update: {
           assigned_asset_id?: string | null
+          avatar_url?: string | null
           created_at?: string | null
           device_details?: string | null
           device_type?: string | null

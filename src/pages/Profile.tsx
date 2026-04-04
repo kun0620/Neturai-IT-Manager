@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import { useUserAssets } from '@/hooks/useUserAssets';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrentProfile } from '@/hooks/useCurrentProfile';
+import { useTheme } from 'next-themes';
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import { supabase } from '@/lib/supabase';
@@ -90,9 +91,13 @@ const resolveStatusBadgeClass = (status: string) => {
   return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
 };
 
+const PROFILE_LANGUAGE_KEY = 'neturai_profile_language';
+const PROFILE_TIMEZONE_KEY = 'neturai_profile_timezone';
+
 export function ProfilePage() {
   const { user } = useAuth();
   const { role } = useCurrentProfile();
+  const { theme, setTheme } = useTheme();
   const { data: profile, isLoading: profileLoading, updateProfile } = useUserProfile();
   const {
     data: assignedAssets = [],
@@ -100,11 +105,12 @@ export function ProfilePage() {
   } = useUserAssets();
   const [language, setLanguage] = useState('en-US');
   const [timezone, setTimezone] = useState('America/New_York');
-  const [themePreference, setThemePreference] = useState<'light' | 'dark' | 'system'>('light');
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [manage2FAOpen, setManage2FAOpen] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [profileDraft, setProfileDraft] = useState({
     full_name: '',
     title: '',
@@ -118,6 +124,8 @@ export function ProfilePage() {
     newPassword: '',
     confirmPassword: '',
   });
+  const themePreference: 'light' | 'dark' | 'system' =
+    theme === 'light' || theme === 'dark' ? theme : 'system';
 
   const displayName = profile?.full_name?.trim() || user?.email?.split('@')[0] || 'Neturai User';
   const roleLabel = resolveRoleLabel(role);
@@ -184,6 +192,37 @@ export function ProfilePage() {
     setEditProfileOpen(true);
   };
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      notifyError('Invalid file type', 'Please upload a JPEG, PNG, or WebP image');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      notifyError('File too large', 'Image must be under 5MB');
+      return;
+    }
+    setIsUploadingAvatar(true);
+    try {
+      const ext = file.name.split('.').pop() ?? 'jpg';
+      const path = `${user.id}/avatar_${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      await updateProfile.mutateAsync({ avatar_url: publicUrl });
+      notifySuccess('Profile photo updated');
+    } catch (err) {
+      notifyError('Upload failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
+
   const handleSaveProfile = async () => {
     try {
       await updateProfile.mutateAsync({
@@ -235,6 +274,43 @@ export function ProfilePage() {
     }
   };
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedLanguage = window.localStorage.getItem(PROFILE_LANGUAGE_KEY);
+      if (savedLanguage) {
+        setLanguage(savedLanguage);
+      }
+
+      const savedTimezone = window.localStorage.getItem(PROFILE_TIMEZONE_KEY);
+      if (savedTimezone) {
+        setTimezone(savedTimezone);
+      }
+    } catch {
+      // ignore localStorage errors
+    }
+  }, []);
+
+  const handleLanguageChange = (value: string) => {
+    setLanguage(value);
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(PROFILE_LANGUAGE_KEY, value);
+    } catch {
+      // ignore localStorage errors
+    }
+  };
+
+  const handleTimezoneChange = (value: string) => {
+    setTimezone(value);
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(PROFILE_TIMEZONE_KEY, value);
+    } catch {
+      // ignore localStorage errors
+    }
+  };
+
   if (profileLoading) {
     return (
       <div className="space-y-8 px-4 py-6 md:px-6">
@@ -262,16 +338,28 @@ export function ProfilePage() {
             <div className="absolute right-[-72px] top-[-72px] h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
             <div className="flex flex-col items-center gap-10 md:flex-row">
               <div className="relative">
-                <div className="flex h-40 w-40 items-center justify-center rounded-2xl border-4 border-white bg-gradient-to-br from-[#25006d] to-[#3b1e8a] text-4xl font-black text-white shadow-xl dark:border-[#161220]">
-                  {getInitials(displayName)}
+                <div className="flex h-40 w-40 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-gradient-to-br from-[#25006d] to-[#3b1e8a] text-4xl font-black text-white shadow-xl dark:border-[#161220]">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt={displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    getInitials(displayName)
+                  )}
                 </div>
                 <button
                   type="button"
-                  disabled
-                  className="absolute -bottom-2 -right-2 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#25006d] to-[#3b1e8a] text-white shadow-lg transition-transform disabled:cursor-not-allowed"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                  className="absolute -bottom-2 -right-2 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#25006d] to-[#3b1e8a] text-white shadow-lg transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <Camera className="h-4 w-4" />
                 </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
               </div>
 
               <div className="flex-1 space-y-4 text-center md:text-left">
@@ -526,7 +614,7 @@ export function ProfilePage() {
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Interface Language
                   </label>
-                  <Select value={language} onValueChange={setLanguage}>
+                  <Select value={language} onValueChange={handleLanguageChange}>
                     <SelectTrigger className="h-11 border-0 bg-slate-100 text-sm font-medium dark:bg-slate-900">
                       <SelectValue />
                     </SelectTrigger>
@@ -542,7 +630,7 @@ export function ProfilePage() {
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Timezone
                   </label>
-                  <Select value={timezone} onValueChange={setTimezone}>
+                  <Select value={timezone} onValueChange={handleTimezoneChange}>
                     <SelectTrigger className="h-11 border-0 bg-slate-100 text-sm font-medium dark:bg-slate-900">
                       <SelectValue />
                     </SelectTrigger>
@@ -561,7 +649,7 @@ export function ProfilePage() {
                   <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
                     <button
                       type="button"
-                      onClick={() => setThemePreference('light')}
+                      onClick={() => setTheme('light')}
                       className={`flex-1 rounded-lg py-2 ${
                         themePreference === 'light'
                           ? 'bg-white text-primary shadow-sm dark:bg-slate-950'
@@ -575,7 +663,7 @@ export function ProfilePage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setThemePreference('dark')}
+                      onClick={() => setTheme('dark')}
                       className={`flex-1 rounded-lg py-2 ${
                         themePreference === 'dark'
                           ? 'bg-white text-primary shadow-sm dark:bg-slate-950'
@@ -589,7 +677,7 @@ export function ProfilePage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setThemePreference('system')}
+                      onClick={() => setTheme('system')}
                       className={`flex-1 rounded-lg py-2 ${
                         themePreference === 'system'
                           ? 'bg-white text-primary shadow-sm dark:bg-slate-950'
@@ -663,15 +751,24 @@ export function ProfilePage() {
                 <div className="col-span-12 flex flex-col items-center text-center lg:col-span-4">
                   <div className="relative group">
                     <div className="mb-6 flex h-40 w-40 items-center justify-center overflow-hidden rounded-2xl bg-slate-200 text-4xl font-black text-primary ring-4 ring-primary/20 dark:bg-slate-800">
-                      {getInitials(profileDraft.full_name || displayName)}
+                      {profile?.avatar_url ? (
+                        <img src={profile.avatar_url} alt={profileDraft.full_name || displayName} className="h-full w-full object-cover" />
+                      ) : (
+                        getInitials(profileDraft.full_name || displayName)
+                      )}
                     </div>
                     <button
                       type="button"
-                      className="absolute -bottom-2 -right-2 rounded-xl bg-gradient-to-br from-[#25006d] to-[#3b1e8a] p-3 text-white shadow-lg transition-transform group-hover:scale-110"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={isUploadingAvatar}
+                      className="absolute -bottom-2 -right-2 rounded-xl bg-gradient-to-br from-[#25006d] to-[#3b1e8a] p-3 text-white shadow-lg transition-transform group-hover:scale-110 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      <Camera className="h-5 w-5" />
+                      {isUploadingAvatar ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
                     </button>
                   </div>
+                  {isUploadingAvatar && (
+                    <p className="mt-2 text-xs text-primary">Uploading...</p>
+                  )}
                   <h4 className="font-bold text-slate-900 dark:text-slate-100">{profileDraft.full_name || displayName}</h4>
                   <p className="text-sm text-slate-500 dark:text-slate-400">{profileDraft.title || roleLabel}</p>
                   <p className="mt-4 px-4 text-xs leading-relaxed text-slate-400 dark:text-slate-500">
